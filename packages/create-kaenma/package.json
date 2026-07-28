@@ -1,0 +1,24 @@
+{
+  "name": "create-kaenma",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "create-kaenma": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "execa": "^9.6.0",
+    "picocolors": "^1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17"
+  }
+}
+

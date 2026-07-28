@@ -1,0 +1,84 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "kaenma",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": {
+    "directory": "../admin/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/f/*", "/p/*", "/t/*", "/u/*", "/preference/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kaenma",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../../packages/db/migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "ASSETS_BUCKET",
+      "bucket_name": "kaenma-assets"
+    }
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "CAMPAIGN_QUEUE", "queue": "kaenma-campaign" },
+      { "binding": "DELIVERY_QUEUE", "queue": "kaenma-delivery" }
+    ],
+    "consumers": [
+      {
+        "queue": "kaenma-campaign",
+        "max_batch_size": 50,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "kaenma-dead-letter"
+      },
+      {
+        "queue": "kaenma-delivery",
+        "max_batch_size": 50,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "kaenma-dead-letter"
+      },
+      {
+        "queue": "kaenma-dead-letter",
+        "max_batch_size": 50,
+        "max_batch_timeout": 10
+      }
+    ]
+  },
+  "send_email": [
+    {
+      "name": "EMAIL"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *", "17 3 * * *"]
+  },
+  "vars": {
+    "APP_NAME": "Kaenma",
+    "APP_URL": "http://localhost:8787",
+    "ENVIRONMENT": "development",
+    "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com",
+    "TRANSACTIONAL_FROM_NAME": "Kaenma",
+    "REPLY_DOMAIN": "reply.example.com",
+    "RAW_EVENT_RETENTION_DAYS": "90"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.05
+    }
+  }
+}
+

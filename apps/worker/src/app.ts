@@ -1,0 +1,1906 @@
+import { compileSegmentFilter, validateCampaign } from "@kaenma/core";
+import { PostmarkEmailAdapter } from "@kaenma/channels";
+import {
+  WorkspaceRepository,
+  uuidv7,
+  writeAuditLog,
+} from "@kaenma/db";
+import { renderContent } from "@kaenma/email-renderer";
+import {
+  campaignDefinitionSchema,
+  contactCreateSchema,
+  contactUpdateSchema,
+  contentDocumentSchema,
+  messagePurposeSchema,
+  segmentFilterSchema,
+  workspaceRoleSchema,
+  type CampaignDefinition,
+} from "@kaenma/shared";
+import { createOpenApiDocument } from "@kaenma/shared/openapi";
+import { Hono } from "hono";
+import { z } from "zod";
+import { createAuth } from "./auth";
+import {
+  createSignedToken,
+  decryptCredentials,
+  encryptCredentials,
+  sha256Hex,
+  verifySignedToken,
+} from "./crypto";
+import type { AppEnvironment } from "./env";
+import {
+  apiError,
+  requestContext,
+  requireRole,
+  requireWorkspace,
+} from "./middleware";
+
+const app = new Hono<AppEnvironment>();
+
+app.use("*", requestContext);
+app.on(["GET", "POST"], "/api/auth/*", (context) =>
+  createAuth(context.env).handler(context.req.raw),
+);
+
+app.get("/api/health", async (context) => {
+  try {
+    const result = await context.env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM d1_migrations",
+    ).first<{ count: number }>();
+    return context.json({
+      data: {
+        status: "ok",
+        service: context.env.APP_NAME,
+        environment: context.env.ENVIRONMENT,
+        migrations: result?.count ?? 0,
+      },
+    });
+  } catch (error) {
+    return apiError(
+      context,
+      503,
+      "database_unavailable",
+      "D1へ接続できません",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+});
+
+app.get("/api/openapi.json", (context) =>
+  context.json(createOpenApiDocument(context.env.APP_URL)),
+);
+
+app.post("/api/webhooks/postmark/:workspaceId", async (context) => {
+  const workspaceId = context.req.param("workspaceId");
+  const config = await context.env.DB.prepare(
+    `SELECT encrypted_credentials FROM provider_configs
+     WHERE workspace_id = ? AND provider = 'postmark' AND enabled = 1
+     ORDER BY updated_at DESC LIMIT 1`,
+  )
+    .bind(workspaceId)
+    .first<{ encrypted_credentials: string }>();
+  const credentials = config
+    ? await decryptCredentials<{ serverToken: string; webhookSecret: string }>(
+        context.env.CREDENTIAL_ENCRYPTION_KEY,
+        config.encrypted_credentials,
+      )
+    : null;
+  const webhookSecret = credentials?.webhookSecret ?? context.env.POSTMARK_WEBHOOK_SECRET;
+  const serverToken = credentials?.serverToken ?? context.env.POSTMARK_SERVER_TOKEN;
+  if (!webhookSecret || !serverToken) {
+    return apiError(context, 404, "postmark_not_configured", "Postmark設定がありません");
+  }
+  const rawBody = await context.req.text();
+  const adapter = new PostmarkEmailAdapter({ serverToken, webhookSecret });
+  const verification = await adapter.verifyWebhook(context.req.raw, rawBody);
+  if (!verification.valid) {
+    return apiError(context, 401, "invalid_webhook_signature", "Webhook署名が無効です");
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(rawBody);
+  } catch {
+    return apiError(context, 400, "invalid_json", "JSONが不正です");
+  }
+  const events = adapter.normalizeEvents(body, workspaceId);
+  for (const event of events) {
+    const status =
+      event.type === "delivered"
+        ? "delivered"
+        : event.type === "failed" || event.type === "bounced"
+          ? "failed"
+          : null;
+    const statements: D1PreparedStatement[] = [
+      context.env.DB.prepare(
+        `INSERT OR IGNORE INTO delivery_events
+         (id, workspace_id, delivery_id, provider, provider_event_id,
+          provider_message_id, type, occurred_at, metadata, created_at)
+         SELECT ?, ?, d.id, 'postmark', ?, ?, ?, ?, ?, ?
+         FROM deliveries d WHERE d.workspace_id = ? AND d.id = ?`,
+      ).bind(
+        uuidv7(),
+        workspaceId,
+        event.id,
+        event.providerMessageId ?? null,
+        event.type,
+        event.occurredAt,
+        JSON.stringify(event.metadata),
+        new Date().toISOString(),
+        workspaceId,
+        event.deliveryId,
+      ),
+    ];
+    if (status) {
+      statements.push(
+        context.env.DB.prepare(
+          `UPDATE deliveries SET status = ?, updated_at = ?
+           WHERE workspace_id = ? AND id = ?`,
+        ).bind(status, new Date().toISOString(), workspaceId, event.deliveryId),
+      );
+    }
+    if (["bounced", "complained", "unsubscribed"].includes(event.type)) {
+      statements.push(
+        context.env.DB.prepare(
+          `INSERT OR IGNORE INTO suppressions
+           (id, workspace_id, contact_id, email, reason, provider, created_at)
+           SELECT ?, d.workspace_id, d.contact_id, d.recipient, ?, 'postmark', ?
+           FROM deliveries d WHERE d.workspace_id = ? AND d.id = ?`,
+        ).bind(
+          uuidv7(),
+          event.type === "bounced"
+            ? "bounce"
+            : event.type === "complained"
+              ? "complaint"
+              : "global_unsubscribe",
+          event.occurredAt,
+          workspaceId,
+          event.deliveryId,
+        ),
+      );
+    }
+    await context.env.DB.batch(statements);
+  }
+  return context.json({ data: { accepted: events.length } }, 202);
+});
+
+app.route("/api/v1", createApi());
+registerPublicRoutes(app);
+
+app.notFound((context) => apiError(context, 404, "not_found", "リソースが見つかりません"));
+app.onError((error, context) => {
+  console.error("Unhandled request error", {
+    requestId: context.get("requestId"),
+    error: error.message,
+    stack: error.stack,
+  });
+  return apiError(context, 500, "internal_error", "処理中にエラーが発生しました");
+});
+
+export { app };
+
+function createApi(): Hono<AppEnvironment> {
+  const api = new Hono<AppEnvironment>();
+  api.use("*", requireWorkspace);
+
+  api.get("/workspace", async (context) => {
+    const workspace = context.get("workspace");
+    const organization = await context.env.DB.prepare(
+      "SELECT id, name, slug, logo, timezone, created_at FROM organization WHERE id = ?",
+    )
+      .bind(workspace.workspaceId)
+      .first();
+    return context.json({ data: { ...organization, role: workspace.role } });
+  });
+
+  api.get("/contacts", async (context) => {
+    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const cursor = context.req.query("cursor");
+    const query = context.req.query("q");
+    const limit = numberQuery(context.req.query("limit"));
+    const page = await repository.listContacts({
+      ...(cursor ? { cursor } : {}),
+      ...(query ? { query } : {}),
+      ...(limit === undefined ? {} : { limit }),
+    });
+    return context.json({
+      data: page.items,
+      meta: {
+        ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
+        requestId: context.get("requestId"),
+      },
+    });
+  });
+
+  api.get("/contacts/:id", async (context) => {
+    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const contact = await repository.getContact(context.req.param("id"));
+    return contact
+      ? context.json({ data: contact })
+      : apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
+  });
+
+  api.get("/contacts/:id/timeline", async (context) => {
+    const workspace = context.get("workspace");
+    const exists = await context.env.DB.prepare(
+      "SELECT id FROM contacts WHERE workspace_id = ? AND id = ?",
+    )
+      .bind(workspace.workspaceId, context.req.param("id"))
+      .first();
+    if (!exists) return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
+    const result = await context.env.DB.prepare(
+      `SELECT id, type, resource_type, resource_id, properties, occurred_at
+       FROM contact_events WHERE workspace_id = ? AND contact_id = ?
+       ORDER BY occurred_at DESC, id DESC LIMIT 200`,
+    )
+      .bind(workspace.workspaceId, context.req.param("id"))
+      .all();
+    return context.json({
+      data: result.results.map(parseJsonColumns(["properties"])),
+    });
+  });
+
+  api.post("/contacts", requireRole("marketer"), async (context) => {
+    const parsed = contactCreateSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    try {
+      const contact = await repository.createContact(parsed.data);
+      context.executionCtx.waitUntil(
+        writeAuditLog(context.env.DB, context.get("workspace"), {
+          action: "contact.create",
+          resourceType: "contact",
+          resourceId: contact.id,
+        }),
+      );
+      return context.json({ data: contact }, 201);
+    } catch (error) {
+      return apiError(
+        context,
+        409,
+        "contact_conflict",
+        "同じメールアドレスまたは外部IDの連絡先が既に存在します",
+        error instanceof Error ? error.message : undefined,
+      );
+    }
+  });
+
+  api.patch("/contacts/:id", requireRole("marketer"), async (context) => {
+    const parsed = contactUpdateSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const contact = await repository.updateContact(context.req.param("id"), parsed.data);
+    if (!contact) return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
+    return context.json({ data: contact });
+  });
+
+  api.delete("/contacts/:id", requireRole("admin"), async (context) => {
+    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const archived = await repository.archiveContact(context.req.param("id"));
+    return archived
+      ? context.json({ data: { archived: true } })
+      : apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
+  });
+
+  registerSegmentRoutes(api);
+  registerTemplateRoutes(api);
+  registerCampaignRoutes(api);
+  registerBroadcastRoutes(api);
+  registerFormRoutes(api);
+  registerAssetRoutes(api);
+  registerContentAndIntegrationRoutes(api);
+  registerOperationsRoutes(api);
+  return api;
+}
+
+function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
+  api.get("/projects", async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT p.id, p.name, p.description, p.color, p.created_at, p.updated_at,
+              COUNT(pi.resource_id) AS item_count
+       FROM projects p LEFT JOIN project_items pi
+         ON pi.workspace_id = p.workspace_id AND pi.project_id = p.id
+       WHERE p.workspace_id = ? GROUP BY p.id ORDER BY p.updated_at DESC`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/projects", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191),
+        description: z.string().max(2_000).default(""),
+        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#7c3aed"),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO projects
+       (id, workspace_id, name, description, color, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        context.get("workspace").workspaceId,
+        parsed.data.name,
+        parsed.data.description,
+        parsed.data.color,
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { id } }, 201);
+  });
+
+  api.post("/projects/:id/items", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({
+        resourceType: z.enum(["campaign", "email", "form", "page", "segment"]),
+        resourceId: z.string().min(1),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const result = await context.env.DB.prepare(
+      `INSERT OR IGNORE INTO project_items
+       (workspace_id, project_id, resource_type, resource_id, created_at)
+       SELECT ?, p.id, ?, ?, ? FROM projects p
+       WHERE p.workspace_id = ? AND p.id = ?`,
+    )
+      .bind(
+        context.get("workspace").workspaceId,
+        parsed.data.resourceType,
+        parsed.data.resourceId,
+        new Date().toISOString(),
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { added: true } }, 201)
+      : apiError(context, 404, "project_not_found", "Projectが見つかりません");
+  });
+
+  api.get("/pages", async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, slug, status, current_version_id, created_at, updated_at
+       FROM landing_pages WHERE workspace_id = ? ORDER BY updated_at DESC`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/pages", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191),
+        slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+        status: z.enum(["draft", "published"]).default("draft"),
+        content: contentDocumentSchema,
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspace = context.get("workspace");
+    const id = uuidv7();
+    const versionId = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.batch([
+      context.env.DB.prepare(
+        `INSERT INTO landing_pages
+         (id, workspace_id, name, slug, status, current_version_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        id,
+        workspace.workspaceId,
+        parsed.data.name,
+        parsed.data.slug,
+        parsed.data.status,
+        versionId,
+        now,
+        now,
+      ),
+      context.env.DB.prepare(
+        `INSERT INTO landing_page_versions
+         (id, workspace_id, page_id, version, content_document, published_at, created_at)
+         VALUES (?, ?, ?, 1, ?, ?, ?)`,
+      ).bind(
+        versionId,
+        workspace.workspaceId,
+        id,
+        JSON.stringify(parsed.data.content),
+        parsed.data.status === "published" ? now : null,
+        now,
+      ),
+    ]);
+    return context.json({ data: { id, versionId } }, 201);
+  });
+
+  api.get("/subscription-topics", async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, slug, description, is_default, created_at, updated_at
+       FROM subscription_topics WHERE workspace_id = ? ORDER BY name`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/subscription-topics", requireRole("admin"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191),
+        slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+        description: z.string().max(2_000).default(""),
+        isDefault: z.boolean().default(false),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO subscription_topics
+       (id, workspace_id, name, slug, description, is_default, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        context.get("workspace").workspaceId,
+        parsed.data.name,
+        parsed.data.slug,
+        parsed.data.description,
+        parsed.data.isDefault ? 1 : 0,
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { id } }, 201);
+  });
+
+  api.get("/webhook-endpoints", requireRole("admin"), async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, url, event_types, enabled, created_at, updated_at
+       FROM webhook_endpoints WHERE workspace_id = ? ORDER BY updated_at DESC`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({
+      data: result.results.map(parseJsonColumns(["event_types"])),
+    });
+  });
+
+  api.post("/webhook-endpoints", requireRole("admin"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191),
+        url: z.url().startsWith("https://"),
+        eventTypes: z.array(z.string().max(120)).max(100).default([]),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const secret = randomString(40);
+    const encryptedSecret = await encryptCredentials(
+      context.env.CREDENTIAL_ENCRYPTION_KEY,
+      { secret },
+    );
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO webhook_endpoints
+       (id, workspace_id, name, url, encrypted_secret, event_types, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        context.get("workspace").workspaceId,
+        parsed.data.name,
+        parsed.data.url,
+        encryptedSecret,
+        JSON.stringify(parsed.data.eventTypes),
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { id, signingSecret: secret } }, 201);
+  });
+
+  api.get("/analytics/campaigns/:id", requireRole("analyst"), async (context) => {
+    const workspaceId = context.get("workspace").workspaceId;
+    const [enrollments, deliveries] = await context.env.DB.batch([
+      context.env.DB.prepare(
+        `SELECT status, COUNT(*) AS count FROM campaign_enrollments
+         WHERE workspace_id = ? AND campaign_id = ? GROUP BY status`,
+      ).bind(workspaceId, context.req.param("id")),
+      context.env.DB.prepare(
+        `SELECT d.status, COUNT(*) AS count FROM deliveries d
+         JOIN campaign_enrollments ce
+           ON ce.id = d.enrollment_id AND ce.workspace_id = d.workspace_id
+         WHERE d.workspace_id = ? AND ce.campaign_id = ? GROUP BY d.status`,
+      ).bind(workspaceId, context.req.param("id")),
+    ]);
+    return context.json({
+      data: {
+        enrollments: enrollments?.results ?? [],
+        deliveries: deliveries?.results ?? [],
+      },
+    });
+  });
+}
+
+function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
+  api.get("/broadcasts", async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, segment_id, template_version_id, topic_id, status,
+              scheduled_at, started_at, completed_at, created_at, updated_at
+       FROM broadcasts WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 200`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/broadcasts", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191),
+        segmentId: z.string().min(1),
+        templateVersionId: z.string().min(1),
+        topicId: z.string().optional(),
+        scheduledAt: z.iso.datetime().optional(),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspace = context.get("workspace");
+    const valid = await context.env.DB.prepare(
+      `SELECT s.id
+       FROM segments s JOIN email_template_versions ev
+         ON ev.id = ? AND ev.workspace_id = s.workspace_id
+       JOIN email_templates et
+         ON et.id = ev.template_id AND et.workspace_id = ev.workspace_id
+       WHERE s.workspace_id = ? AND s.id = ? AND et.purpose = 'marketing'`,
+    )
+      .bind(parsed.data.templateVersionId, workspace.workspaceId, parsed.data.segmentId)
+      .first();
+    if (!valid) {
+      return apiError(
+        context,
+        422,
+        "invalid_broadcast_resources",
+        "SegmentまたはMarketingテンプレートが見つかりません",
+      );
+    }
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO broadcasts
+       (id, workspace_id, name, segment_id, template_version_id, topic_id,
+        status, scheduled_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        workspace.workspaceId,
+        parsed.data.name,
+        parsed.data.segmentId,
+        parsed.data.templateVersionId,
+        parsed.data.topicId ?? null,
+        parsed.data.scheduledAt ? "scheduled" : "draft",
+        parsed.data.scheduledAt ?? null,
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { id } }, 201);
+  });
+
+  api.post("/broadcasts/:id/start", requireRole("marketer"), async (context) => {
+    const workspace = context.get("workspace");
+    const now = new Date().toISOString();
+    const result = await context.env.DB.prepare(
+      `UPDATE broadcasts SET status = 'sending', started_at = COALESCE(started_at, ?),
+       updated_at = ? WHERE workspace_id = ? AND id = ?
+       AND status IN ('draft', 'scheduled')`,
+    )
+      .bind(now, now, workspace.workspaceId, context.req.param("id"))
+      .run();
+    if (result.meta.changes !== 1) {
+      return apiError(
+        context,
+        409,
+        "broadcast_not_startable",
+        "Broadcastは既に開始済みか存在しません",
+      );
+    }
+    await context.env.CAMPAIGN_QUEUE.send({
+      kind: "broadcast_batch",
+      broadcastId: context.req.param("id"),
+    });
+    return context.json({ data: { started: true } }, 202);
+  });
+}
+
+function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
+  api.get("/segments", async (context) => {
+    const workspace = context.get("workspace");
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, slug, kind, filter_ast, member_count, evaluated_at, created_at, updated_at
+       FROM segments WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
+    )
+      .bind(workspace.workspaceId)
+      .all();
+    return context.json({ data: result.results.map(parseJsonColumns(["filter_ast"])) });
+  });
+
+  api.post("/segments", requireRole("marketer"), async (context) => {
+    const schema = z.object({
+      name: z.string().trim().min(1).max(191),
+      slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+      kind: z.enum(["static", "dynamic"]),
+      filter: segmentFilterSchema.optional(),
+    });
+    const parsed = schema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    if (parsed.data.kind === "dynamic" && !parsed.data.filter) {
+      return apiError(context, 422, "filter_required", "動的セグメントには条件が必要です");
+    }
+    const workspace = context.get("workspace");
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO segments
+       (id, workspace_id, name, slug, kind, filter_ast, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        workspace.workspaceId,
+        parsed.data.name,
+        parsed.data.slug,
+        parsed.data.kind,
+        parsed.data.filter ? JSON.stringify(parsed.data.filter) : null,
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { id, ...parsed.data, createdAt: now, updatedAt: now } }, 201);
+  });
+
+  api.post("/segments/preview", requireRole("analyst"), async (context) => {
+    const parsed = segmentFilterSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspace = context.get("workspace");
+    const compiled = compileSegmentFilter(workspace.workspaceId, parsed.data);
+    const result = await context.env.DB.prepare(`${compiled.sql} ORDER BY c.id DESC LIMIT ?`)
+      .bind(...compiled.params, 100)
+      .all();
+    return context.json({
+      data: result.results,
+      meta: { capped: result.results.length === 100, requestId: context.get("requestId") },
+    });
+  });
+}
+
+function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
+  api.get("/email-templates", async (context) => {
+    const workspace = context.get("workspace");
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, purpose, status, current_version_id, created_at, updated_at
+       FROM email_templates WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
+    )
+      .bind(workspace.workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/email-templates", requireRole("marketer"), async (context) => {
+    const schema = z.object({
+      name: z.string().trim().min(1).max(191),
+      purpose: messagePurposeSchema,
+      subject: z.string().min(1).max(998),
+      previewText: z.string().max(500).default(""),
+      content: contentDocumentSchema,
+    });
+    const parsed = schema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspace = context.get("workspace");
+    const id = uuidv7();
+    const versionId = uuidv7();
+    const now = new Date().toISOString();
+    const rendered = renderContent(parsed.data.content, {
+      contact: {},
+      workspace: {},
+    });
+    await context.env.DB.batch([
+      context.env.DB.prepare(
+        `INSERT INTO email_templates
+         (id, workspace_id, name, purpose, status, current_version_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
+      ).bind(
+        id,
+        workspace.workspaceId,
+        parsed.data.name,
+        parsed.data.purpose,
+        versionId,
+        now,
+        now,
+      ),
+      context.env.DB.prepare(
+        `INSERT INTO email_template_versions
+         (id, workspace_id, template_id, version, subject, preview_text,
+          content_document, html, text, created_at)
+         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        versionId,
+        workspace.workspaceId,
+        id,
+        parsed.data.subject,
+        parsed.data.previewText,
+        JSON.stringify(parsed.data.content),
+        rendered.html,
+        rendered.text,
+        now,
+      ),
+    ]);
+    return context.json({ data: { id, versionId } }, 201);
+  });
+}
+
+function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
+  api.get("/campaigns", async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, description, status, draft_version_id, published_version_id,
+              created_at, updated_at
+       FROM campaigns WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/campaigns", requireRole("marketer"), async (context) => {
+    const parsed = campaignDefinitionSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspace = context.get("workspace");
+    const id = uuidv7();
+    const versionId = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.batch([
+      context.env.DB.prepare(
+        `INSERT INTO campaigns
+         (id, workspace_id, name, description, status, draft_version_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
+      ).bind(
+        id,
+        workspace.workspaceId,
+        parsed.data.name,
+        parsed.data.description,
+        versionId,
+        now,
+        now,
+      ),
+      context.env.DB.prepare(
+        `INSERT INTO campaign_versions
+         (id, workspace_id, campaign_id, version, status, timezone, graph, created_at)
+         VALUES (?, ?, ?, 1, 'draft', ?, ?, ?)`,
+      ).bind(
+        versionId,
+        workspace.workspaceId,
+        id,
+        parsed.data.timezone,
+        JSON.stringify(parsed.data),
+        now,
+      ),
+    ]);
+    return context.json({ data: { id, draftVersionId: versionId } }, 201);
+  });
+
+  api.get("/campaigns/:id/draft", async (context) => {
+    const row = await context.env.DB.prepare(
+      `SELECT cv.id, cv.version, cv.graph
+       FROM campaigns c
+       JOIN campaign_versions cv ON cv.id = c.draft_version_id
+        AND cv.workspace_id = c.workspace_id
+       WHERE c.workspace_id = ? AND c.id = ?`,
+    )
+      .bind(context.get("workspace").workspaceId, context.req.param("id"))
+      .first<{ id: string; version: number; graph: string }>();
+    return row
+      ? context.json({ data: { ...row, graph: JSON.parse(row.graph) as unknown } })
+      : apiError(context, 404, "campaign_not_found", "キャンペーンが見つかりません");
+  });
+
+  api.put("/campaigns/:id/draft", requireRole("marketer"), async (context) => {
+    const parsed = campaignDefinitionSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const result = await context.env.DB.prepare(
+      `UPDATE campaign_versions SET timezone = ?, graph = ?
+       WHERE workspace_id = ? AND id = (
+         SELECT draft_version_id FROM campaigns WHERE workspace_id = ? AND id = ?
+       ) AND status = 'draft'`,
+    )
+      .bind(
+        parsed.data.timezone,
+        JSON.stringify(parsed.data),
+        context.get("workspace").workspaceId,
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    if (result.meta.changes === 0) {
+      return apiError(context, 404, "campaign_not_found", "編集可能な下書きが見つかりません");
+    }
+    await context.env.DB.prepare(
+      "UPDATE campaigns SET name = ?, description = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
+    )
+      .bind(
+        parsed.data.name,
+        parsed.data.description,
+        new Date().toISOString(),
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return context.json({ data: { updated: true } });
+  });
+
+  api.post("/campaigns/:id/publish", requireRole("marketer"), async (context) => {
+    const workspace = context.get("workspace");
+    const row = await context.env.DB.prepare(
+      `SELECT c.draft_version_id, cv.version, cv.graph
+       FROM campaigns c JOIN campaign_versions cv
+         ON cv.id = c.draft_version_id AND cv.workspace_id = c.workspace_id
+       WHERE c.workspace_id = ? AND c.id = ? AND cv.status = 'draft'`,
+    )
+      .bind(workspace.workspaceId, context.req.param("id"))
+      .first<{ draft_version_id: string; version: number; graph: string }>();
+    if (!row) return apiError(context, 404, "campaign_not_found", "下書きが見つかりません");
+    const parsed = campaignDefinitionSchema.safeParse(JSON.parse(row.graph));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const validation = validateCampaign(parsed.data);
+    if (validation.length > 0) {
+      return apiError(context, 422, "invalid_campaign_graph", "公開できないグラフです", validation);
+    }
+    const nextDraftId = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.batch([
+      context.env.DB.prepare(
+        `UPDATE campaign_versions SET status = 'published', published_at = ?
+         WHERE workspace_id = ? AND id = ? AND status = 'draft'`,
+      ).bind(now, workspace.workspaceId, row.draft_version_id),
+      context.env.DB.prepare(
+        `INSERT INTO campaign_versions
+         (id, workspace_id, campaign_id, version, status, timezone, graph, created_at)
+         VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
+      ).bind(
+        nextDraftId,
+        workspace.workspaceId,
+        context.req.param("id"),
+        row.version + 1,
+        parsed.data.timezone,
+        row.graph,
+        now,
+      ),
+      context.env.DB.prepare(
+        `UPDATE campaigns SET status = 'active', published_version_id = ?,
+         draft_version_id = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`,
+      ).bind(
+        row.draft_version_id,
+        nextDraftId,
+        now,
+        workspace.workspaceId,
+        context.req.param("id"),
+      ),
+    ]);
+    return context.json({
+      data: { publishedVersionId: row.draft_version_id, draftVersionId: nextDraftId },
+    });
+  });
+
+  api.post("/campaigns/:id/enroll", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({ contactId: z.string().min(1), sourceEventId: z.string().optional() })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspace = context.get("workspace");
+    const campaign = await context.env.DB.prepare(
+      `SELECT c.published_version_id, cv.graph
+       FROM campaigns c JOIN campaign_versions cv
+         ON cv.id = c.published_version_id AND cv.workspace_id = c.workspace_id
+       WHERE c.workspace_id = ? AND c.id = ? AND c.status = 'active'`,
+    )
+      .bind(workspace.workspaceId, context.req.param("id"))
+      .first<{ published_version_id: string; graph: string }>();
+    if (!campaign) {
+      return apiError(context, 404, "campaign_not_active", "公開中のキャンペーンがありません");
+    }
+    const graph = JSON.parse(campaign.graph) as CampaignDefinition;
+    const source = graph.nodes.find((node) => node.type === "source");
+    if (!source) return apiError(context, 422, "source_missing", "Sourceノードがありません");
+    const enrollmentId = uuidv7();
+    const jobId = uuidv7();
+    const sourceEventId =
+      parsed.data.sourceEventId ?? context.req.header("idempotency-key") ?? uuidv7();
+    const now = new Date().toISOString();
+    try {
+      await context.env.DB.batch([
+        context.env.DB.prepare(
+          `INSERT INTO campaign_enrollments
+           (id, workspace_id, campaign_id, campaign_version_id, contact_id,
+            source_event_id, status, current_node_id, entered_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+        ).bind(
+          enrollmentId,
+          workspace.workspaceId,
+          context.req.param("id"),
+          campaign.published_version_id,
+          parsed.data.contactId,
+          sourceEventId,
+          source.id,
+          now,
+          now,
+        ),
+        context.env.DB.prepare(
+          `INSERT INTO campaign_jobs
+           (id, workspace_id, enrollment_id, campaign_version_id, node_id,
+            recipient_id, idempotency_key, status, due_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+        ).bind(
+          jobId,
+          workspace.workspaceId,
+          enrollmentId,
+          campaign.published_version_id,
+          source.id,
+          parsed.data.contactId,
+          `${enrollmentId}:${source.id}:${parsed.data.contactId}`,
+          now,
+          now,
+          now,
+        ),
+      ]);
+    } catch (error) {
+      return apiError(
+        context,
+        409,
+        "already_enrolled",
+        "このイベントでは既に参加済みです",
+        error instanceof Error ? error.message : undefined,
+      );
+    }
+    return context.json({ data: { enrollmentId, jobId } }, 202);
+  });
+}
+
+function registerFormRoutes(api: Hono<AppEnvironment>): void {
+  api.get("/forms", async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, slug, status, version, definition, allowed_domains,
+              turnstile_enabled, success_message, created_at, updated_at
+       FROM forms WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({
+      data: result.results.map(parseJsonColumns(["definition", "allowed_domains"])),
+    });
+  });
+
+  api.post("/forms", requireRole("marketer"), async (context) => {
+    const schema = z.object({
+      name: z.string().trim().min(1).max(191),
+      slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+      status: z.enum(["draft", "published"]).default("draft"),
+      definition: z.record(z.string(), z.unknown()),
+      allowedDomains: z.array(z.string()).default([]),
+      turnstileEnabled: z.boolean().default(true),
+      successMessage: z.string().max(500).default("ありがとうございます。"),
+    });
+    const parsed = schema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO forms
+       (id, workspace_id, name, slug, status, definition, allowed_domains,
+        turnstile_enabled, success_message, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        context.get("workspace").workspaceId,
+        parsed.data.name,
+        parsed.data.slug,
+        parsed.data.status,
+        JSON.stringify(parsed.data.definition),
+        JSON.stringify(parsed.data.allowedDomains),
+        parsed.data.turnstileEnabled ? 1 : 0,
+        parsed.data.successMessage,
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { id } }, 201);
+  });
+}
+
+function registerAssetRoutes(api: Hono<AppEnvironment>): void {
+  api.post("/assets", requireRole("marketer"), async (context) => {
+    const contentLength = Number(context.req.header("content-length") ?? 0);
+    if (contentLength > 25 * 1024 * 1024) {
+      return apiError(context, 422, "asset_too_large", "Assetは25MB以下にしてください");
+    }
+    const name = context.req.query("name")?.slice(0, 191);
+    if (!name) return apiError(context, 422, "name_required", "nameが必要です");
+    const workspace = context.get("workspace");
+    const id = uuidv7();
+    const key = `${workspace.workspaceId}/assets/${id}/${sanitizeFilename(name)}`;
+    const body = await context.req.arrayBuffer();
+    const checksum = await sha256HexFromBytes(body);
+    const contentType = context.req.header("content-type") ?? "application/octet-stream";
+    await context.env.ASSETS_BUCKET.put(key, body, {
+      httpMetadata: { contentType },
+      customMetadata: { workspaceId: workspace.workspaceId, assetId: id },
+      sha256: checksum,
+    });
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO assets
+       (id, workspace_id, name, r2_key, content_type, size, checksum, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        workspace.workspaceId,
+        name,
+        key,
+        contentType,
+        body.byteLength,
+        checksum,
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { id, name, contentType, size: body.byteLength } }, 201);
+  });
+
+  api.get("/assets/:id", async (context) => {
+    const workspace = context.get("workspace");
+    const row = await context.env.DB.prepare(
+      "SELECT r2_key, content_type, name FROM assets WHERE workspace_id = ? AND id = ?",
+    )
+      .bind(workspace.workspaceId, context.req.param("id"))
+      .first<{ r2_key: string; content_type: string; name: string }>();
+    if (!row) return apiError(context, 404, "asset_not_found", "Assetが見つかりません");
+    const object = await context.env.ASSETS_BUCKET.get(row.r2_key);
+    if (!object) return apiError(context, 404, "asset_object_missing", "R2オブジェクトがありません");
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": row.content_type,
+        "Content-Disposition": `inline; filename="${sanitizeFilename(row.name)}"`,
+        ETag: object.httpEtag,
+        "Cache-Control": "private, max-age=300",
+      },
+    });
+  });
+}
+
+function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
+  api.post("/contacts/import", requireRole("marketer"), async (context) => {
+    const contentLength = Number(context.req.header("content-length") ?? 0);
+    if (contentLength > 25 * 1024 * 1024) {
+      return apiError(context, 422, "csv_too_large", "CSVは25MB以下にしてください");
+    }
+    const text = await context.req.text();
+    if (new TextEncoder().encode(text).byteLength > 25 * 1024 * 1024) {
+      return apiError(context, 422, "csv_too_large", "CSVは25MB以下にしてください");
+    }
+    const rows = parseCsv(text);
+    const header = rows.shift()?.map((value) => value.trim().toLowerCase());
+    if (!header?.includes("email") && !header?.includes("external_id")) {
+      return apiError(
+        context,
+        422,
+        "csv_identifier_missing",
+        "CSVにはemailまたはexternal_id列が必要です",
+      );
+    }
+    const workspace = context.get("workspace");
+    const jobId = uuidv7();
+    const baseKey = `${workspace.workspaceId}/imports/${jobId}`;
+    const partSize = 100;
+    const parts: string[] = [];
+    for (let offset = 0; offset < rows.length; offset += partSize) {
+      const part = rows.slice(offset, offset + partSize).map((values) => {
+        const record: Record<string, string> = {};
+        for (const [index, name] of header.entries()) {
+          if (name) record[name] = values[index] ?? "";
+        }
+        return JSON.stringify(record);
+      });
+      parts.push(part.join("\n"));
+    }
+    for (let offset = 0; offset < parts.length; offset += 20) {
+      await Promise.all(
+        parts.slice(offset, offset + 20).map((part, relativeIndex) => {
+          const index = offset + relativeIndex;
+          return context.env.ASSETS_BUCKET.put(`${baseKey}/part-${index}.ndjson`, part, {
+            httpMetadata: { contentType: "application/x-ndjson" },
+          });
+        }),
+      );
+    }
+    await context.env.ASSETS_BUCKET.put(
+      `${baseKey}/manifest.json`,
+      JSON.stringify({ header, parts: parts.length, rows: rows.length }),
+      { httpMetadata: { contentType: "application/json" } },
+    );
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO import_jobs
+       (id, workspace_id, kind, r2_key, status, cursor, created_at, updated_at)
+       VALUES (?, ?, 'contact_import', ?, 'pending', ?, ?, ?)`,
+    )
+      .bind(
+        jobId,
+        workspace.workspaceId,
+        baseKey,
+        JSON.stringify({ totalParts: parts.length }),
+        now,
+        now,
+      )
+      .run();
+    if (parts.length > 0) {
+      await context.env.CAMPAIGN_QUEUE.send({
+        kind: "contact_import",
+        importJobId: jobId,
+        part: 0,
+        totalParts: parts.length,
+      });
+    } else {
+      await context.env.DB.prepare(
+        "UPDATE import_jobs SET status = 'completed', updated_at = ? WHERE id = ?",
+      )
+        .bind(now, jobId)
+        .run();
+    }
+    return context.json({ data: { jobId, rows: rows.length, parts: parts.length } }, 202);
+  });
+
+  api.post("/contacts/export", requireRole("analyst"), async (context) => {
+    const workspace = context.get("workspace");
+    const jobId = uuidv7();
+    const key = `${workspace.workspaceId}/exports/contacts-${jobId}.csv`;
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO import_jobs
+       (id, workspace_id, kind, r2_key, status, cursor, created_at, updated_at)
+       VALUES (?, ?, 'contact_export', ?, 'pending', ?, ?, ?)`,
+    )
+      .bind(
+        jobId,
+        workspace.workspaceId,
+        key,
+        JSON.stringify({
+          partNumber: 0,
+          lastId: "",
+        }),
+        now,
+        now,
+      )
+      .run();
+    await context.env.CAMPAIGN_QUEUE.send({ kind: "contact_export", exportJobId: jobId });
+    return context.json({ data: { jobId } }, 202);
+  });
+
+  api.get("/data-jobs/:id", requireRole("analyst"), async (context) => {
+    const row = await context.env.DB.prepare(
+      `SELECT id, kind, status, processed, succeeded, failed, r2_key,
+              error_manifest_key, created_at, updated_at
+       FROM import_jobs WHERE workspace_id = ? AND id = ?`,
+    )
+      .bind(context.get("workspace").workspaceId, context.req.param("id"))
+      .first();
+    return row
+      ? context.json({ data: row })
+      : apiError(context, 404, "data_job_not_found", "データJobが見つかりません");
+  });
+
+  api.get("/data-jobs/:id/download", requireRole("analyst"), async (context) => {
+    const row = await context.env.DB.prepare(
+      `SELECT r2_key, status FROM import_jobs
+       WHERE workspace_id = ? AND id = ? AND kind = 'contact_export'`,
+    )
+      .bind(context.get("workspace").workspaceId, context.req.param("id"))
+      .first<{ r2_key: string; status: string }>();
+    if (!row || row.status !== "completed") {
+      return apiError(context, 404, "export_not_ready", "Exportはまだ完了していません");
+    }
+    const object = await context.env.ASSETS_BUCKET.get(row.r2_key);
+    if (!object) return apiError(context, 404, "export_missing", "Exportファイルがありません");
+    return new Response(object.body, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="kaenma-contacts-${context.req.param("id")}.csv"`,
+      },
+    });
+  });
+
+  api.get("/dashboard", async (context) => {
+    const workspaceId = context.get("workspace").workspaceId;
+    const batch = await context.env.DB.batch([
+      context.env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM contacts WHERE workspace_id = ? AND status = 'active'",
+      ).bind(workspaceId),
+      context.env.DB.prepare(
+        "SELECT COUNT(*) AS count FROM campaigns WHERE workspace_id = ? AND status = 'active'",
+      ).bind(workspaceId),
+      context.env.DB.prepare(
+        `SELECT COUNT(*) AS sent,
+          SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
+          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+         FROM deliveries WHERE workspace_id = ? AND created_at >= datetime('now', '-30 day')`,
+      ).bind(workspaceId),
+      context.env.DB.prepare(
+        `SELECT type, occurred_at, contact_id, properties FROM contact_events
+         WHERE workspace_id = ? ORDER BY occurred_at DESC LIMIT 20`,
+      ).bind(workspaceId),
+    ]);
+    const contacts = batch[0];
+    const campaigns = batch[1];
+    const deliveries = batch[2];
+    const recent = batch[3];
+    return context.json({
+      data: {
+        contacts: contacts?.results[0] ?? { count: 0 },
+        campaigns: campaigns?.results[0] ?? { count: 0 },
+        deliveries: deliveries?.results[0] ?? { sent: 0, delivered: 0, failed: 0 },
+        recentEvents: (recent?.results ?? []).map(parseJsonColumns(["properties"])),
+      },
+    });
+  });
+
+  api.post("/api-keys", requireRole("admin"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191),
+        role: workspaceRoleSchema.default("viewer"),
+        expiresAt: z.iso.datetime().optional(),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const actor = context.get("workspace");
+    const prefix = randomString(12);
+    const secret = randomString(40);
+    const token = `kaenma_${prefix}_${secret}`;
+    const id = uuidv7();
+    await context.env.DB.prepare(
+      `INSERT INTO api_keys
+       (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, expires_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        actor.workspaceId,
+        actor.userId,
+        parsed.data.name,
+        prefix,
+        await sha256Hex(token),
+        parsed.data.role,
+        parsed.data.expiresAt ?? null,
+        new Date().toISOString(),
+      )
+      .run();
+    return context.json({ data: { id, token, prefix } }, 201);
+  });
+
+  api.post("/providers/postmark", requireRole("admin"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191).default("default"),
+        serverToken: z.string().min(10),
+        webhookSecret: z.string().min(16),
+        messageStream: z.string().min(1).default("broadcasts"),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspace = context.get("workspace");
+    const encrypted = await encryptCredentials(
+      context.env.CREDENTIAL_ENCRYPTION_KEY,
+      {
+        serverToken: parsed.data.serverToken,
+        webhookSecret: parsed.data.webhookSecret,
+      },
+    );
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO provider_configs
+       (id, workspace_id, provider, name, encrypted_credentials, settings, created_at, updated_at)
+       VALUES (?, ?, 'postmark', ?, ?, ?, ?, ?)
+       ON CONFLICT(workspace_id, provider, name) DO UPDATE SET
+         encrypted_credentials = excluded.encrypted_credentials,
+         settings = excluded.settings,
+         enabled = 1,
+         updated_at = excluded.updated_at`,
+    )
+      .bind(
+        uuidv7(),
+        workspace.workspaceId,
+        parsed.data.name,
+        encrypted,
+        JSON.stringify({ messageStream: parsed.data.messageStream }),
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { configured: true } });
+  });
+
+  api.get("/dead-letters", requireRole("admin"), async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT id, source_queue, error, attempts, status, created_at, replayed_at
+       FROM dead_letters WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 100`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/dead-letters/:id/replay", requireRole("admin"), async (context) => {
+    const row = await context.env.DB.prepare(
+      `SELECT id, source_queue, message_body FROM dead_letters
+       WHERE workspace_id = ? AND id = ? AND status = 'pending'`,
+    )
+      .bind(context.get("workspace").workspaceId, context.req.param("id"))
+      .first<{ id: string; source_queue: string; message_body: string }>();
+    if (!row) return apiError(context, 404, "dead_letter_not_found", "DLQ項目が見つかりません");
+    const body: unknown = JSON.parse(row.message_body);
+    if (row.source_queue === "kaenma-campaign") {
+      await context.env.CAMPAIGN_QUEUE.send(body);
+    } else {
+      await context.env.DELIVERY_QUEUE.send(body);
+    }
+    await context.env.DB.prepare(
+      "UPDATE dead_letters SET status = 'replayed', replayed_at = ? WHERE id = ? AND status = 'pending'",
+    )
+      .bind(new Date().toISOString(), row.id)
+      .run();
+    return context.json({ data: { replayed: true } });
+  });
+}
+
+function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
+  publicApp.get("/p/:workspaceSlug/:pageSlug", async (context) => {
+    const page = await context.env.DB.prepare(
+      `SELECT lpv.content_document, o.name AS workspace_name
+       FROM landing_pages lp
+       JOIN organization o ON o.id = lp.workspace_id
+       JOIN landing_page_versions lpv
+         ON lpv.id = lp.current_version_id AND lpv.workspace_id = lp.workspace_id
+       WHERE o.slug = ? AND lp.slug = ? AND lp.status = 'published'`,
+    )
+      .bind(context.req.param("workspaceSlug"), context.req.param("pageSlug"))
+      .first<{ content_document: string; workspace_name: string }>();
+    if (!page) return apiError(context, 404, "page_not_found", "ページが見つかりません");
+    const document = contentDocumentSchema.safeParse(JSON.parse(page.content_document));
+    if (!document.success) {
+      return apiError(context, 500, "page_render_failed", "ページ定義が不正です");
+    }
+    const rendered = renderContent(document.data, {
+      contact: {},
+      workspace: { name: page.workspace_name },
+    });
+    return context.html(rendered.html);
+  });
+
+  publicApp.post("/f/:workspaceSlug/:formSlug", async (context) => {
+    const form = await context.env.DB.prepare(
+      `SELECT f.id, f.workspace_id, f.allowed_domains, f.turnstile_enabled, f.success_message
+       FROM forms f JOIN organization o ON o.id = f.workspace_id
+       WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
+    )
+      .bind(context.req.param("workspaceSlug"), context.req.param("formSlug"))
+      .first<{
+        id: string;
+        workspace_id: string;
+        allowed_domains: string;
+        turnstile_enabled: number;
+        success_message: string;
+      }>();
+    if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    const allowedDomains = JSON.parse(form.allowed_domains) as string[];
+    const origin = context.req.header("origin");
+    if (origin && allowedDomains.length > 0 && !originAllowed(origin, allowedDomains)) {
+      return apiError(context, 403, "form_origin_denied", "このドメインからは送信できません");
+    }
+    const body = await safeJson(context);
+    if (!isRecord(body)) return apiError(context, 422, "invalid_payload", "入力が不正です");
+    if (body["_website"]) return context.json({ data: { accepted: true } }, 202);
+    if (
+      form.turnstile_enabled === 1 &&
+      context.env.TURNSTILE_SECRET &&
+      !(await verifyTurnstile(
+        context.env.TURNSTILE_SECRET,
+        String(body["turnstileToken"] ?? ""),
+        context.req.header("cf-connecting-ip"),
+      ))
+    ) {
+      return apiError(context, 422, "turnstile_failed", "Turnstile検証に失敗しました");
+    }
+    const idempotencyKey =
+      context.req.header("idempotency-key") ?? String(body["idempotencyKey"] ?? "");
+    if (idempotencyKey.length < 8 || idempotencyKey.length > 191) {
+      return apiError(context, 422, "idempotency_key_required", "Idempotency-Keyが必要です");
+    }
+    const email =
+      typeof body["email"] === "string" ? body["email"].trim().toLowerCase() : null;
+    const now = new Date().toISOString();
+    let contactId: string | null = null;
+    if (email && z.email().safeParse(email).success) {
+      const existing = await context.env.DB.prepare(
+        "SELECT id FROM contacts WHERE workspace_id = ? AND email = ?",
+      )
+        .bind(form.workspace_id, email)
+        .first<{ id: string }>();
+      contactId = existing?.id ?? uuidv7();
+      if (existing) {
+        await context.env.DB.prepare(
+          `UPDATE contacts SET first_name = COALESCE(?, first_name),
+           last_name = COALESCE(?, last_name), updated_at = ?
+           WHERE workspace_id = ? AND id = ?`,
+        )
+          .bind(
+            stringOrNull(body["firstName"]),
+            stringOrNull(body["lastName"]),
+            now,
+            form.workspace_id,
+            contactId,
+          )
+          .run();
+      } else {
+        await context.env.DB.prepare(
+          `INSERT INTO contacts
+           (id, workspace_id, email, first_name, last_name, stage, score, status,
+            custom_fields, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 'lead', 0, 'active', '{}', ?, ?)`,
+        )
+          .bind(
+            contactId,
+            form.workspace_id,
+            email,
+            stringOrNull(body["firstName"]),
+            stringOrNull(body["lastName"]),
+            now,
+            now,
+          )
+          .run();
+      }
+    }
+    try {
+      await context.env.DB.batch([
+        context.env.DB.prepare(
+          `INSERT INTO form_submissions
+           (id, workspace_id, form_id, contact_id, idempotency_key, payload, ip_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          uuidv7(),
+          form.workspace_id,
+          form.id,
+          contactId,
+          idempotencyKey,
+          JSON.stringify(redactFormPayload(body)),
+          await hashIp(context.req.header("cf-connecting-ip")),
+          now,
+        ),
+        context.env.DB.prepare(
+          `INSERT INTO contact_events
+           (id, workspace_id, contact_id, type, resource_type, resource_id,
+            properties, occurred_at, created_at)
+           VALUES (?, ?, ?, 'form_submitted', 'form', ?, ?, ?, ?)`,
+        ).bind(
+          uuidv7(),
+          form.workspace_id,
+          contactId,
+          form.id,
+          JSON.stringify({ formId: form.id }),
+          now,
+          now,
+        ),
+      ]);
+    } catch {
+      return context.json({ data: { accepted: true, duplicate: true } }, 202);
+    }
+    return context.json({ data: { accepted: true, message: form.success_message } }, 202);
+  });
+
+  publicApp.post("/api/public/track/:workspaceSlug", async (context) => {
+    const workspace = await context.env.DB.prepare(
+      "SELECT id FROM organization WHERE slug = ?",
+    )
+      .bind(context.req.param("workspaceSlug"))
+      .first<{ id: string }>();
+    if (!workspace) return apiError(context, 404, "workspace_not_found", "Workspaceがありません");
+    const parsed = z
+      .object({
+        consent: z.literal(true),
+        visitorId: z.string().uuid().optional(),
+        type: z.enum(["page_viewed", "custom_event"]),
+        resourceId: z.string().max(500).optional(),
+        properties: z.record(z.string(), z.unknown()).default({}),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) {
+      return context.json({ data: { accepted: false, identityIssued: false } }, 202);
+    }
+    const visitorId = parsed.data.visitorId ?? crypto.randomUUID();
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO contact_events
+       (id, workspace_id, visitor_id, type, resource_type, resource_id,
+        properties, occurred_at, created_at)
+       VALUES (?, ?, ?, ?, 'page', ?, ?, ?, ?)`,
+    )
+      .bind(
+        uuidv7(),
+        workspace.id,
+        visitorId,
+        parsed.data.type,
+        parsed.data.resourceId ?? null,
+        JSON.stringify(parsed.data.properties),
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { accepted: true, visitorId, identityIssued: true } }, 202);
+  });
+
+  publicApp.get("/t/:token", async (context) => {
+    const payload = await verifySignedToken(
+      context.env.TRACKING_SIGNING_SECRET,
+      context.req.param("token"),
+      "tracking",
+    );
+    if (payload) {
+      context.executionCtx.waitUntil(
+        context.env.DB.prepare(
+          `INSERT INTO contact_events
+           (id, workspace_id, contact_id, type, resource_type, resource_id,
+            properties, occurred_at, created_at)
+           VALUES (?, ?, ?, 'email_opened', 'delivery', ?, '{}', ?, ?)`,
+        )
+          .bind(
+            uuidv7(),
+            payload.workspaceId,
+            payload.contactId ?? null,
+            payload.resourceId,
+            new Date().toISOString(),
+            new Date().toISOString(),
+          )
+          .run()
+          .then(() => undefined),
+      );
+    }
+    return new Response(transparentGif, {
+      headers: {
+        "Content-Type": "image/gif",
+        "Cache-Control": "no-store, private",
+      },
+    });
+  });
+
+  publicApp.get("/u/:token", async (context) => {
+    const payload = await verifySignedToken(
+      context.env.TRACKING_SIGNING_SECRET,
+      context.req.param("token"),
+      "unsubscribe",
+    );
+    if (!payload?.contactId) {
+      return apiError(context, 400, "invalid_unsubscribe_token", "解除リンクが無効です");
+    }
+    const now = new Date().toISOString();
+    await context.env.DB.batch([
+      context.env.DB.prepare(
+        `INSERT OR IGNORE INTO suppressions
+         (id, workspace_id, contact_id, reason, created_at)
+         VALUES (?, ?, ?, 'global_unsubscribe', ?)`,
+      ).bind(uuidv7(), payload.workspaceId, payload.contactId, now),
+      context.env.DB.prepare(
+        `INSERT INTO consent_events
+         (id, workspace_id, contact_id, action, source, created_at)
+         VALUES (?, ?, ?, 'unsubscribed', 'one_click', ?)`,
+      ).bind(uuidv7(), payload.workspaceId, payload.contactId, now),
+    ]);
+    return context.html(
+      '<!doctype html><html lang="ja"><meta charset="utf-8"><title>配信停止</title><body><main><h1>配信を停止しました</h1><p>設定はすぐに反映されます。</p></main></body></html>',
+    );
+  });
+
+  publicApp.post("/u/:token", async (context) => {
+    return context.redirect(`/u/${encodeURIComponent(context.req.param("token"))}`, 303);
+  });
+
+  publicApp.get("/preference/:token", async (context) => {
+    const payload = await verifySignedToken(
+      context.env.TRACKING_SIGNING_SECRET,
+      context.req.param("token"),
+      "unsubscribe",
+    );
+    if (!payload?.contactId) {
+      return apiError(context, 400, "invalid_preference_token", "設定リンクが無効です");
+    }
+    const topics = await context.env.DB.prepare(
+      `SELECT st.id, st.name, st.description,
+              COALESCE(cs.status, 'unsubscribed') AS status
+       FROM subscription_topics st
+       LEFT JOIN contact_subscriptions cs
+         ON cs.workspace_id = st.workspace_id AND cs.topic_id = st.id AND cs.contact_id = ?
+       WHERE st.workspace_id = ? ORDER BY st.name`,
+    )
+      .bind(payload.contactId, payload.workspaceId)
+      .all<{ id: string; name: string; description: string; status: string }>();
+    const globalSuppression = await context.env.DB.prepare(
+      `SELECT id FROM suppressions
+       WHERE workspace_id = ? AND contact_id = ? AND reason = 'global_unsubscribe' LIMIT 1`,
+    )
+      .bind(payload.workspaceId, payload.contactId)
+      .first();
+    const rows = topics.results
+      .map(
+        (topic) => `<label style="display:block;padding:16px 0;border-bottom:1px solid #e2e8f0">
+          <input type="checkbox" name="topic" value="${escapeHtml(topic.id)}" ${topic.status === "subscribed" ? "checked" : ""}>
+          <strong>${escapeHtml(topic.name)}</strong>
+          <span style="display:block;margin-left:24px;color:#64748b">${escapeHtml(topic.description)}</span>
+        </label>`,
+      )
+      .join("");
+    return context.html(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>配信設定</title></head>
+      <body style="margin:0;background:#f5f7fb;font-family:system-ui;color:#172033"><main style="max-width:640px;margin:48px auto;background:white;padding:32px;border-radius:16px">
+      <h1>配信設定</h1><p style="color:#64748b">受け取りたいトピックを選択してください。</p>
+      <form method="post">${rows}
+      <label style="display:block;padding:20px 0"><input type="checkbox" name="globalStop" ${globalSuppression ? "checked" : ""}> すべてのマーケティングメールを停止</label>
+      <button style="border:0;border-radius:10px;background:#6d4aff;color:white;padding:12px 20px;font-weight:700">設定を保存</button>
+      </form></main></body></html>`);
+  });
+
+  publicApp.post("/preference/:token", async (context) => {
+    const payload = await verifySignedToken(
+      context.env.TRACKING_SIGNING_SECRET,
+      context.req.param("token"),
+      "unsubscribe",
+    );
+    if (!payload?.contactId) {
+      return apiError(context, 400, "invalid_preference_token", "設定リンクが無効です");
+    }
+    const form = await context.req.formData();
+    const selected = new Set(
+      form.getAll("topic").filter((value): value is string => typeof value === "string"),
+    );
+    const topics = await context.env.DB.prepare(
+      "SELECT id FROM subscription_topics WHERE workspace_id = ?",
+    )
+      .bind(payload.workspaceId)
+      .all<{ id: string }>();
+    const now = new Date().toISOString();
+    const statements = topics.results.map((topic) =>
+      context.env.DB.prepare(
+        `INSERT INTO contact_subscriptions
+         (workspace_id, contact_id, topic_id, status, source, updated_at)
+         VALUES (?, ?, ?, ?, 'preference_center', ?)
+         ON CONFLICT(workspace_id, contact_id, topic_id)
+         DO UPDATE SET status = excluded.status, source = excluded.source,
+           updated_at = excluded.updated_at`,
+      ).bind(
+        payload.workspaceId,
+        payload.contactId,
+        topic.id,
+        selected.has(topic.id) ? "subscribed" : "unsubscribed",
+        now,
+      ),
+    );
+    if (form.get("globalStop")) {
+      statements.push(
+        context.env.DB.prepare(
+          `INSERT OR IGNORE INTO suppressions
+           (id, workspace_id, contact_id, reason, created_at)
+           VALUES (?, ?, ?, 'global_unsubscribe', ?)`,
+        ).bind(uuidv7(), payload.workspaceId, payload.contactId, now),
+      );
+    } else {
+      statements.push(
+        context.env.DB.prepare(
+          `DELETE FROM suppressions
+           WHERE workspace_id = ? AND contact_id = ? AND reason = 'global_unsubscribe'`,
+        ).bind(payload.workspaceId, payload.contactId),
+      );
+    }
+    statements.push(
+      context.env.DB.prepare(
+        `INSERT INTO consent_events
+         (id, workspace_id, contact_id, action, source, proof, created_at)
+         VALUES (?, ?, ?, ?, 'preference_center', ?, ?)`,
+      ).bind(
+        uuidv7(),
+        payload.workspaceId,
+        payload.contactId,
+        form.get("globalStop") ? "unsubscribed" : "granted",
+        JSON.stringify({ topics: [...selected] }),
+        now,
+      ),
+    );
+    await context.env.DB.batch(statements);
+    return context.html(
+      '<!doctype html><html lang="ja"><meta charset="utf-8"><body><main><h1>設定を保存しました</h1><p>変更は次回の送信判定から反映されます。</p></main></body></html>',
+    );
+  });
+}
+
+export async function buildReplyAddress(
+  env: AppEnvironment["Bindings"],
+  workspaceId: string,
+  deliveryId: string,
+  contactId: string,
+): Promise<string> {
+  const token = await createSignedToken(env.TRACKING_SIGNING_SECRET, {
+    workspaceId,
+    resourceId: deliveryId,
+    contactId,
+    expiresAt: Date.now() + 90 * 24 * 60 * 60 * 1000,
+    purpose: "reply",
+  });
+  return `r+${token}@${env.REPLY_DOMAIN}`;
+}
+
+async function safeJson(context: { req: { json: () => Promise<unknown> } }): Promise<unknown> {
+  try {
+    return await context.req.json();
+  } catch {
+    return null;
+  }
+}
+
+function validationError(
+  context: Parameters<typeof apiError>[0],
+  error: z.ZodError,
+): Response {
+  return apiError(context, 422, "validation_error", "入力内容を確認してください", error.issues);
+}
+
+function numberQuery(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) ? parsed : undefined;
+}
+
+function parseJsonColumns(keys: string[]) {
+  return (row: unknown): Record<string, unknown> => {
+    if (!isRecord(row)) return {};
+    const result = { ...row };
+    for (const key of keys) {
+      if (typeof result[key] === "string") {
+        try {
+          result[key] = JSON.parse(result[key]);
+        } catch {
+          result[key] = null;
+        }
+      }
+    }
+    return result;
+  };
+}
+
+function sanitizeFilename(value: string): string {
+  return value.replaceAll(/[^A-Za-z0-9._-]/g, "_").slice(0, 191);
+}
+
+async function sha256HexFromBytes(value: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", value);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function randomString(length: number): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-";
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+function originAllowed(origin: string, allowedDomains: string[]): boolean {
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+    return allowedDomains.some((domain) => {
+      const allowed = domain.toLowerCase();
+      return hostname === allowed || hostname.endsWith(`.${allowed}`);
+    });
+  } catch {
+    return false;
+  }
+}
+
+async function verifyTurnstile(
+  secret: string,
+  token: string,
+  remoteIp?: string,
+): Promise<boolean> {
+  if (!token) return false;
+  const body = new FormData();
+  body.set("secret", secret);
+  body.set("response", token);
+  if (remoteIp) body.set("remoteip", remoteIp);
+  const response = await fetch(
+    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    { method: "POST", body },
+  );
+  if (!response.ok) return false;
+  const result = (await response.json()) as { success?: boolean };
+  return result.success === true;
+}
+
+function redactFormPayload(value: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...value };
+  delete result["turnstileToken"];
+  delete result["_website"];
+  return result;
+}
+
+async function hashIp(value?: string): Promise<string | null> {
+  return value ? sha256Hex(value) : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, 191) : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseCsv(value: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index] ?? "";
+    if (quoted) {
+      if (character === '"' && value[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        field += character;
+      }
+    } else if (character === '"') {
+      quoted = true;
+    } else if (character === ",") {
+      row.push(field);
+      field = "";
+    } else if (character === "\n") {
+      row.push(field.replace(/\r$/, ""));
+      if (row.some((item) => item.length > 0)) rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += character;
+    }
+  }
+  row.push(field.replace(/\r$/, ""));
+  if (row.some((item) => item.length > 0)) rows.push(row);
+  return rows;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+const transparentGif = Uint8Array.from([
+  71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 0, 0, 0, 255, 255, 255, 33,
+  249, 4, 1, 0, 0, 0, 0, 44, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 68, 1, 0,
+  59,
+]);

@@ -1,0 +1,37 @@
+{
+  "name": "@kaenma/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @kaenma/admin build && wrangler dev",
+    "build": "pnpm --filter @kaenma/admin build && wrangler deploy --dry-run --outdir dist",
+    "deploy": "pnpm --filter @kaenma/admin build && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "cf:types": "wrangler types --env-interface CloudflareBindings",
+    "db:migrate:local": "wrangler d1 migrations apply kaenma --local",
+    "db:migrate:remote": "wrangler d1 migrations apply kaenma --remote"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.6.25",
+    "@hono/zod-validator": "^0.7.6",
+    "@kaenma/channels": "workspace:*",
+    "@kaenma/core": "workspace:*",
+    "@kaenma/db": "workspace:*",
+    "@kaenma/email-renderer": "workspace:*",
+    "@kaenma/shared": "workspace:*",
+    "better-auth": "^1.6.25",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.32",
+    "postal-mime": "^2.7.5",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/workers-types": "^5.20260728.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17",
+    "wrangler": "^4.114.0"
+  }
+}
