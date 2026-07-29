@@ -1,5 +1,8 @@
-import type { Contact, SegmentFilter } from "@kaenma/shared";
-import { api } from "@/api";
+import type { ContactListInput } from "@kaenma/api-contract";
+import type { SegmentFilter } from "@kaenma/shared";
+import { rpc } from "@/rpc";
+import { orpcQuery } from "@/lib/orpc";
+import { queryOptions } from "@tanstack/react-query";
 
 export interface TagOption {
   id: string;
@@ -43,27 +46,15 @@ export interface ContactOptions {
   stages: Array<{ stage: string; contact_count: number }>;
 }
 
-export interface ContactSummary extends Contact {
-  tags: TagOption[];
-  lists: ListOption[];
-  accounts: Array<
-    AccountOption & {
-      title: string | null;
-      is_primary: boolean;
-    }
-  >;
-}
-
-export interface ContactListResult {
-  contacts: ContactSummary[];
-  total: number;
-}
-
-export interface ContactsPageData extends ContactListResult {
-  options: ContactOptions;
-}
+export const contactOptionsQueryKey = ["contacts", "options"] as const;
 
 export type ContactStatus = "active" | "archived" | "anonymous" | "all";
+export type ContactSort =
+  | "updatedAt"
+  | "createdAt"
+  | "score"
+  | "name"
+  | "email";
 
 export interface ContactSearch {
   q: string;
@@ -75,7 +66,7 @@ export interface ContactSearch {
   segmentId: string;
   scoreMin: string;
   scoreMax: string;
-  sort: string;
+  sort: ContactSort;
   direction: "asc" | "desc";
 }
 
@@ -99,7 +90,7 @@ const contactStatuses = new Set<ContactStatus>([
   "anonymous",
   "all",
 ]);
-const contactSorts = new Set([
+const contactSorts = new Set<ContactSort>([
   "updatedAt",
   "createdAt",
   "score",
@@ -116,8 +107,9 @@ export function parseContactSearch(
       ? (search.status as ContactStatus)
       : contactSearchDefaults.status;
   const sort =
-    typeof search.sort === "string" && contactSorts.has(search.sort)
-      ? search.sort
+    typeof search.sort === "string" &&
+    contactSorts.has(search.sort as ContactSort)
+      ? (search.sort as ContactSort)
       : contactSearchDefaults.sort;
   const direction = search.direction === "asc" ? "asc" : "desc";
   const stringValue = (key: keyof ContactSearch): string =>
@@ -138,61 +130,53 @@ export function parseContactSearch(
   };
 }
 
-export function buildContactSearchParams(
+export function buildContactSearchInput(
   search: ContactSearch,
-): URLSearchParams {
-  const params = new URLSearchParams({
-    limit: "100",
+): ContactListInput {
+  const query = search.q.trim();
+  const scoreMin = optionalNumber(search.scoreMin);
+  const scoreMax = optionalNumber(search.scoreMax);
+
+  return {
+    limit: 100,
     status: search.status,
     sort: search.sort,
     direction: search.direction,
+    ...(query ? { query } : {}),
+    ...(search.stage ? { stage: search.stage } : {}),
+    ...(search.tagId ? { tagId: search.tagId } : {}),
+    ...(search.listId ? { listId: search.listId } : {}),
+    ...(search.accountId ? { accountId: search.accountId } : {}),
+    ...(search.segmentId ? { segmentId: search.segmentId } : {}),
+    ...(scoreMin === undefined ? {} : { scoreMin }),
+    ...(scoreMax === undefined ? {} : { scoreMax }),
+  };
+}
+
+export function contactsQueryOptions(search: ContactSearch) {
+  return orpcQuery.contacts.list.queryOptions({
+    input: buildContactSearchInput(search),
   });
-  const optionalParams = [
-    ["q", search.q.trim()],
-    ["stage", search.stage],
-    ["tagId", search.tagId],
-    ["listId", search.listId],
-    ["accountId", search.accountId],
-    ["segmentId", search.segmentId],
-    ["scoreMin", search.scoreMin],
-    ["scoreMax", search.scoreMax],
-  ] as const;
-  for (const [key, value] of optionalParams) {
-    if (value) params.set(key, value);
-  }
-  return params;
+}
+
+export function contactOptionsQueryOptions() {
+  return queryOptions({
+    queryKey: contactOptionsQueryKey,
+    queryFn: ({ signal }) => loadContactOptions(signal),
+  });
 }
 
 export async function loadContactOptions(
   signal?: AbortSignal,
 ): Promise<ContactOptions> {
-  const response = await api<ContactOptions>("/contact-options", {
+  const response = await rpc<ContactOptions>("/contact-options", {
     signal: signal ?? null,
   });
   return response.data;
 }
 
-export async function loadContacts(
-  params: URLSearchParams,
-  signal?: AbortSignal,
-): Promise<ContactListResult> {
-  const response = await api<ContactSummary[]>(
-    `/contacts?${params.toString()}`,
-    { signal: signal ?? null },
-  );
-  return {
-    contacts: response.data,
-    total: response.meta?.total ?? response.data.length,
-  };
-}
-
-export async function loadContactsPage(
-  search: ContactSearch = contactSearchDefaults,
-  signal?: AbortSignal,
-): Promise<ContactsPageData> {
-  const [contacts, options] = await Promise.all([
-    loadContacts(buildContactSearchParams(search), signal),
-    loadContactOptions(signal),
-  ]);
-  return { ...contacts, options };
+function optionalNumber(value: string): number | undefined {
+  if (!value.trim()) return undefined;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
 }

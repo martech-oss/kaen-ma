@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import { RouteError, RoutePending } from "@/components/route-status";
 import {
   DashboardPage,
@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/dashboard")({
   loader: async ({ abortController }) => {
-    const response = await api<DashboardData>("/dashboard", {
+    const response = await rpc<DashboardData>("/dashboard", {
       signal: abortController.signal,
     });
     return response.data;

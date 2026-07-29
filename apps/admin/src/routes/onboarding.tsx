@@ -1,13 +1,13 @@
-import { ApiClientError } from "@/api";
 import { RouteError, RoutePending } from "@/components/route-status";
 import { WorkspaceSetupPage } from "@/features/auth/auth-pages";
 import { getCurrentSession } from "@/lib/auth-session";
-import { getCurrentWorkspace } from "@/lib/workspace";
+import { workspaceQueryOptions } from "@/lib/workspace";
+import { ORPCError } from "@orpc/client";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/onboarding")({
   ssr: false,
-  beforeLoad: async ({ location }) => {
+  beforeLoad: async ({ context, location }) => {
     const session = await getCurrentSession();
     if (!session) {
       throw redirect({
@@ -17,12 +17,13 @@ export const Route = createFileRoute("/onboarding")({
       });
     }
     try {
-      await getCurrentWorkspace();
+      await context.queryClient.ensureQueryData(workspaceQueryOptions());
       throw redirect({ to: "/dashboard", replace: true });
     } catch (error) {
       if (
-        error instanceof ApiClientError &&
-        error.code === "workspace_required"
+        error instanceof ORPCError &&
+        error.defined &&
+        error.code === "WORKSPACE_REQUIRED"
       ) {
         return;
       }

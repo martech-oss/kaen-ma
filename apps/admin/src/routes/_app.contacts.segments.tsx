@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import { RouteError, RoutePending } from "@/components/route-status";
 import {
   SegmentsPage,
@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/contacts/segments")({
   loader: async ({ abortController }) => {
-    const response = await api<SegmentRow[]>("/segments", {
+    const response = await rpc<SegmentRow[]>("/segments", {
       signal: abortController.signal,
     });
     return response.data;

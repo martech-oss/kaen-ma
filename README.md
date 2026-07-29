@@ -9,7 +9,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」と
 
 ## 特徴
 
-- 単一のCloudflare WorkerからREST APIとTanStack Start管理画面を配信
+- 単一のCloudflare WorkerからoRPC・REST APIとTanStack Start管理画面を配信
 - D1を業務データとキャンペーン状態機械の正本として使用
 - R2によるAsset、CSV、受信添付ファイル、イベントアーカイブの保存
 - Queuesと1分Cronによる再開可能なキャンペーン実行
@@ -54,9 +54,10 @@ flowchart LR
 
 ```text
 apps/
-  admin/                 TanStack Start、Vite、Tailwind、React Flow
+  admin/                 TanStack Start/Query、Vite、Tailwind、React Flow
   worker/                Hono API、Cron、Queue、Email Routing
 packages/
+  api-contract/          管理画面とWorkerで共有するoRPC contract
   channels/              Cloudflare、Resend、Webhook adapter
   core/                  Segment、Campaign、Consent、Schedule
   create-kaenma/         Setup、doctor、backup、update CLI
@@ -261,6 +262,12 @@ email,external_id,first_name,last_name,phone,stage
 ## REST API
 
 APIのベースパスは `/api/v1` です。
+管理画面のBetter Auth以外の通信はoRPCの`/api/rpc`を使用します。
+Workspace・Contactには専用の型付きprocedureを使用し、その他の管理画面APIも
+oRPC adapterからWorker内の既存業務handlerを呼び出します。
+SDK・MCP・外部連携向けのREST APIは`/api/v1`で互換性を維持します。
+管理画面の取得・更新状態はTanStack Queryで管理し、oRPC contractからquery keyと
+query/mutation optionsを生成します。
 
 OpenAPI:
 

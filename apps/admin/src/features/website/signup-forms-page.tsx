@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import {
   AppDialog,
   EmptyState,
@@ -78,7 +78,7 @@ export function SignupFormsPage({
 
   async function archive(item: SignupFormRow): Promise<void> {
     try {
-      await api(`/forms/${item.id}/archive`, { method: "POST" });
+      await rpc(`/forms/${item.id}/archive`, { method: "POST" });
       toast.success("サインアップフォームをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -312,7 +312,7 @@ function SignupFormEditor({
     setBusy(true);
     setError("");
     try {
-      await api(item ? `/forms/${item.id}` : "/forms", {
+      await rpc(item ? `/forms/${item.id}` : "/forms", {
         method: item ? "PATCH" : "POST",
         body: JSON.stringify({
           name,

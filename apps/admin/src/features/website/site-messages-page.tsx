@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import {
   AppDialog,
   EmptyState,
@@ -63,7 +63,7 @@ export function SiteMessagesPage({
 
   async function archive(item: SiteMessageRow): Promise<void> {
     try {
-      await api(`/site-messages/${item.id}/archive`, { method: "POST" });
+      await rpc(`/site-messages/${item.id}/archive`, { method: "POST" });
       toast.success("サイトメッセージをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -263,7 +263,7 @@ function SiteMessageEditor({
     setBusy(true);
     setError("");
     try {
-      await api(item ? `/site-messages/${item.id}` : "/site-messages", {
+      await rpc(item ? `/site-messages/${item.id}` : "/site-messages", {
         method: item ? "PATCH" : "POST",
         body: JSON.stringify({
           name: formData.get("name"),

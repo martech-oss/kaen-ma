@@ -1,6 +1,7 @@
 import { compileSegmentFilter, validateCampaign } from "@kaenma/core";
 import { ResendEmailAdapter } from "@kaenma/channels";
 import {
+  createDatabase,
   WorkspaceRepository,
   uuidv7,
   writeAuditLog,
@@ -19,7 +20,6 @@ import {
   segmentFilterSchema,
   workspaceRoleSchema,
   type CampaignDefinition,
-  type Contact,
 } from "@kaenma/shared";
 import { createOpenApiDocument } from "@kaenma/shared/openapi";
 import { Hono } from "hono";
@@ -40,8 +40,15 @@ import {
   requireRole,
   requireWorkspace,
 } from "./middleware";
+import { createOrpcRequestHandler } from "./orpc/handler";
+import {
+  createContact as createContactService,
+  listContacts as listContactsService,
+} from "./services/contact-service";
+import { getWorkspace } from "./services/workspace-service";
 
 const app = new Hono<AppEnvironment>();
+const adminApi = createApi();
 
 app.use("*", requestContext);
 app.use(
@@ -56,6 +63,7 @@ app.on(["GET", "POST"], "/api/auth/*", (context) => {
   const requestOrigin = new URL(context.req.url).origin;
   return createAuth(context.env, requestOrigin).handler(context.req.raw);
 });
+app.use("/api/rpc/*", createOrpcRequestHandler(adminApi));
 
 app.get("/api/health", async (context) => {
   try {
@@ -183,7 +191,7 @@ app.post("/api/webhooks/resend/:workspaceId", async (context) => {
   return context.json({ data: { accepted: events.length } }, 202);
 });
 
-app.route("/api/v1", createApi());
+app.route("/api/v1", adminApi);
 registerPublicRoutes(app);
 
 app.notFound((context) => apiError(context, 404, "not_found", "リソースが見つかりません"));
@@ -200,20 +208,29 @@ export { app };
 
 function createApi(): Hono<AppEnvironment> {
   const api = new Hono<AppEnvironment>();
+  api.use("*", async (context, next) => {
+    if (!context.get("database")) {
+      context.set("database", createDatabase(context.env.DB));
+    }
+    if (!context.get("requestId")) {
+      context.set(
+        "requestId",
+        context.req.header("cf-ray") ?? crypto.randomUUID(),
+      );
+    }
+    await next();
+  });
   api.use("*", requireWorkspace);
 
   api.get("/workspace", async (context) => {
-    const workspace = context.get("workspace");
-    const organization = await context.get("database").prepare(
-      "SELECT id, name, slug, logo, timezone, created_at FROM organization WHERE id = ?",
-    )
-      .bind(workspace.workspaceId)
-      .first();
-    return context.json({ data: { ...organization, role: workspace.role } });
+    const workspace = await getWorkspace(
+      context.get("database"),
+      context.get("workspace"),
+    );
+    return context.json({ data: workspace });
   });
 
   api.get("/contacts", async (context) => {
-    const repository = new WorkspaceRepository(context.get("database"), context.get("workspace"));
     const cursor = context.req.query("cursor");
     const query = context.req.query("q");
     const limit = numberQuery(context.req.query("limit"));
@@ -227,32 +244,39 @@ function createApi(): Hono<AppEnvironment> {
     const listId = context.req.query("listId");
     const accountId = context.req.query("accountId");
     const segmentId = context.req.query("segmentId");
-    const page = await repository.listContacts({
-      ...(cursor ? { cursor } : {}),
-      ...(query ? { query } : {}),
-      ...(limit === undefined ? {} : { limit }),
-      ...(status && ["active", "archived", "anonymous", "all"].includes(status)
-        ? { status: status as "active" | "archived" | "anonymous" | "all" }
-        : {}),
-      ...(stage ? { stage } : {}),
-      ...(tagId ? { tagId } : {}),
-      ...(listId ? { listId } : {}),
-      ...(accountId ? { accountId } : {}),
-      ...(segmentId ? { segmentId } : {}),
-      ...(scoreMin === undefined ? {} : { scoreMin }),
-      ...(scoreMax === undefined ? {} : { scoreMax }),
-      ...(sort && ["createdAt", "updatedAt", "score", "name", "email"].includes(sort)
-        ? { sort: sort as "createdAt" | "updatedAt" | "score" | "name" | "email" }
-        : {}),
-      ...(direction === "asc" || direction === "desc" ? { direction } : {}),
-    });
-    const data = await attachContactRelations(
+    const page = await listContactsService(
       context.get("database"),
-      context.get("workspace").workspaceId,
-      page.items,
+      context.get("workspace"),
+      {
+        ...(cursor ? { cursor } : {}),
+        ...(query ? { query } : {}),
+        ...(limit === undefined ? {} : { limit }),
+        ...(status && ["active", "archived", "anonymous", "all"].includes(status)
+          ? { status: status as "active" | "archived" | "anonymous" | "all" }
+          : {}),
+        ...(stage ? { stage } : {}),
+        ...(tagId ? { tagId } : {}),
+        ...(listId ? { listId } : {}),
+        ...(accountId ? { accountId } : {}),
+        ...(segmentId ? { segmentId } : {}),
+        ...(scoreMin === undefined ? {} : { scoreMin }),
+        ...(scoreMax === undefined ? {} : { scoreMax }),
+        ...(sort &&
+        ["createdAt", "updatedAt", "score", "name", "email"].includes(sort)
+          ? {
+              sort: sort as
+                | "createdAt"
+                | "updatedAt"
+                | "score"
+                | "name"
+                | "email",
+            }
+          : {}),
+        ...(direction === "asc" || direction === "desc" ? { direction } : {}),
+      },
     );
     return context.json({
-      data,
+      data: page.items,
       meta: {
         total: page.total,
         ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
@@ -292,9 +316,12 @@ function createApi(): Hono<AppEnvironment> {
   api.post("/contacts", requireRole("marketer"), async (context) => {
     const parsed = contactCreateSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const repository = new WorkspaceRepository(context.get("database"), context.get("workspace"));
     try {
-      const contact = await repository.createContact(parsed.data);
+      const contact = await createContactService(
+        context.get("database"),
+        context.get("workspace"),
+        parsed.data,
+      );
       context.executionCtx.waitUntil(
         writeAuditLog(context.get("database"), context.get("workspace"), {
           action: "contact.create",
@@ -3574,121 +3601,6 @@ export async function buildReplyAddress(
     purpose: "reply",
   });
   return `r+${token}@${env.REPLY_DOMAIN}`;
-}
-
-async function attachContactRelations(
-  database: KaenmaDatabase,
-  workspaceId: string,
-  contacts: Contact[],
-): Promise<
-  Array<
-    Contact & {
-      tags: Array<{ id: string; name: string; slug: string; color: string }>;
-      lists: Array<{ id: string; name: string; slug: string; color: string }>;
-      accounts: Array<{
-        id: string;
-        name: string;
-        domain: string | null;
-        title: string | null;
-        is_primary: boolean;
-      }>;
-    }
-  >
-> {
-  if (contacts.length === 0) return [];
-  const ids = contacts.map((contact) => contact.id);
-  const placeholders = ids.map(() => "?").join(", ");
-  const relationResults = await database.batch([
-    database.prepare(
-      `SELECT ct.contact_id, t.id, t.name, t.slug, t.color
-       FROM contact_tags ct JOIN tags t
-         ON t.workspace_id = ct.workspace_id AND t.id = ct.tag_id
-       WHERE ct.workspace_id = ? AND ct.contact_id IN (${placeholders})
-       ORDER BY t.name`,
-    ).bind(workspaceId, ...ids),
-    database.prepare(
-      `SELECT clm.contact_id, cl.id, cl.name, cl.slug, cl.color
-       FROM contact_list_memberships clm JOIN contact_lists cl
-         ON cl.workspace_id = clm.workspace_id AND cl.id = clm.list_id
-       WHERE clm.workspace_id = ? AND clm.status = 'active'
-         AND clm.contact_id IN (${placeholders})
-       ORDER BY cl.name`,
-    ).bind(workspaceId, ...ids),
-    database.prepare(
-      `SELECT cc.contact_id, co.id, co.name, co.domain, cc.title, cc.is_primary
-       FROM company_contacts cc JOIN companies co
-         ON co.workspace_id = cc.workspace_id AND co.id = cc.company_id
-       WHERE cc.workspace_id = ? AND cc.contact_id IN (${placeholders})
-       ORDER BY cc.is_primary DESC, co.name`,
-    ).bind(workspaceId, ...ids),
-  ]);
-  const tagRows = relationResults[0]!;
-  const listRows = relationResults[1]!;
-  const accountRows = relationResults[2]!;
-  const tagsByContact = new Map<
-    string,
-    Array<{ id: string; name: string; slug: string; color: string }>
-  >();
-  const listsByContact = new Map<
-    string,
-    Array<{ id: string; name: string; slug: string; color: string }>
-  >();
-  const accountsByContact = new Map<
-    string,
-    Array<{
-      id: string;
-      name: string;
-      domain: string | null;
-      title: string | null;
-      is_primary: boolean;
-    }>
-  >();
-  for (const row of tagRows.results as Array<{
-    contact_id: string;
-    id: string;
-    name: string;
-    slug: string;
-    color: string;
-  }>) {
-    const items = tagsByContact.get(row.contact_id) ?? [];
-    items.push({ id: row.id, name: row.name, slug: row.slug, color: row.color });
-    tagsByContact.set(row.contact_id, items);
-  }
-  for (const row of listRows.results as Array<{
-    contact_id: string;
-    id: string;
-    name: string;
-    slug: string;
-    color: string;
-  }>) {
-    const items = listsByContact.get(row.contact_id) ?? [];
-    items.push({ id: row.id, name: row.name, slug: row.slug, color: row.color });
-    listsByContact.set(row.contact_id, items);
-  }
-  for (const row of accountRows.results as Array<{
-    contact_id: string;
-    id: string;
-    name: string;
-    domain: string | null;
-    title: string | null;
-    is_primary: number;
-  }>) {
-    const items = accountsByContact.get(row.contact_id) ?? [];
-    items.push({
-      id: row.id,
-      name: row.name,
-      domain: row.domain,
-      title: row.title,
-      is_primary: Boolean(row.is_primary),
-    });
-    accountsByContact.set(row.contact_id, items);
-  }
-  return contacts.map((contact) => ({
-    ...contact,
-    tags: tagsByContact.get(contact.id) ?? [],
-    lists: listsByContact.get(contact.id) ?? [],
-    accounts: accountsByContact.get(contact.id) ?? [],
-  }));
 }
 
 async function updateSegmentMemberCount(

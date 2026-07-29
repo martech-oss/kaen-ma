@@ -68,7 +68,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 
 export function AccountsPage({
   accounts,
@@ -208,7 +208,7 @@ export function AccountsPage({
         <AccountForm
           submitLabel="作成"
           onSubmit={async (values) => {
-            const response = await api<AccountSummary>("/accounts", {
+            const response = await rpc<AccountSummary>("/accounts", {
               method: "POST",
               body: JSON.stringify(values),
             });
@@ -391,7 +391,7 @@ export function AccountDetailPage({
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        void api(
+                        void rpc(
                           `/accounts/${account.id}/contacts/${contact.id}`,
                           { method: "DELETE" },
                         ).then(async () => {
@@ -437,7 +437,7 @@ export function AccountDetailPage({
           initialDomain={account.domain ?? ""}
           submitLabel="変更を保存"
           onSubmit={async (values) => {
-            await api(`/accounts/${account.id}`, {
+            await rpc(`/accounts/${account.id}`, {
               method: "PATCH",
               body: JSON.stringify({
                 name: values.name,
@@ -459,7 +459,7 @@ export function AccountDetailPage({
         <AddAccountContactForm
           contacts={contacts.filter((contact) => !assignedIds.has(contact.id))}
           onSubmit={async (values) => {
-            await api(`/accounts/${account.id}/contacts`, {
+            await rpc(`/accounts/${account.id}/contacts`, {
               method: "POST",
               body: JSON.stringify(values),
             });

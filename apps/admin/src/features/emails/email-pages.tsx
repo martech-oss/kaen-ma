@@ -57,7 +57,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import {
   Archive,
   CalendarClock,
@@ -200,7 +200,7 @@ function EmailCenterPage({
 
   async function editTemplate(template: EmailTemplateRow): Promise<void> {
     try {
-      const response = await api<EmailTemplateDetail>(
+      const response = await rpc<EmailTemplateDetail>(
         `/email-templates/${template.id}`,
       );
       setEditingTemplate(response.data);
@@ -454,7 +454,7 @@ function CampaignTable({
 }): ReactNode {
   async function start(campaign: EmailCampaignRow) {
     try {
-      await api(`/broadcasts/${campaign.id}/start`, { method: "POST" });
+      await rpc(`/broadcasts/${campaign.id}/start`, { method: "POST" });
       toast.success("メールキャンペーンの送信を開始しました");
       await onChanged();
     } catch (caught) {
@@ -466,7 +466,7 @@ function CampaignTable({
 
   async function archive(campaign: EmailCampaignRow) {
     try {
-      await api(`/broadcasts/${campaign.id}/archive`, { method: "POST" });
+      await rpc(`/broadcasts/${campaign.id}/archive`, { method: "POST" });
       toast.success("メールキャンペーンをアーカイブしました");
       await onChanged();
     } catch (caught) {
@@ -616,7 +616,7 @@ function TemplateTable({
 }): ReactNode {
   async function archive(template: EmailTemplateRow) {
     try {
-      await api(`/email-templates/${template.id}/archive`, {
+      await rpc(`/email-templates/${template.id}/archive`, {
         method: "POST",
       });
       toast.success("テンプレートをアーカイブしました");
@@ -745,7 +745,7 @@ function VariableTable({
 }): ReactNode {
   async function archive(variable: MessageVariableRow) {
     try {
-      await api(`/message-variables/${variable.id}/archive`, {
+      await rpc(`/message-variables/${variable.id}/archive`, {
         method: "POST",
       });
       toast.success("メッセージ変数をアーカイブしました");
@@ -933,7 +933,7 @@ function CampaignForm({
     const form = new FormData(event.currentTarget);
     const scheduledAt = String(form.get("scheduledAt") ?? "").trim();
     try {
-      await api(campaign ? `/broadcasts/${campaign.id}` : "/broadcasts", {
+      await rpc(campaign ? `/broadcasts/${campaign.id}` : "/broadcasts", {
         method: campaign ? "PATCH" : "POST",
         body: JSON.stringify({
           name: form.get("name"),
@@ -1071,7 +1071,7 @@ function TemplateForm({
       blocks,
     };
     try {
-      await api(
+      await rpc(
         template ? `/email-templates/${template.id}` : "/email-templates",
         {
           method: template ? "PUT" : "POST",
@@ -1209,7 +1209,7 @@ function VariableForm({
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await api(
+      await rpc(
         variable ? `/message-variables/${variable.id}` : "/message-variables",
         {
           method: variable ? "PATCH" : "POST",

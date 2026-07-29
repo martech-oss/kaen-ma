@@ -35,7 +35,7 @@ import {
 import { ListChecks, Plus, Tags } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 
 function useContactResources(initialResources: ContactResources): {
   resources: ContactResources;
@@ -343,7 +343,7 @@ function CreateListForm({
     setBusy(true);
     setError("");
     try {
-      await api("/contact-lists", {
+      await rpc("/contact-lists", {
         method: "POST",
         body: JSON.stringify({
           name: form.get("name"),
@@ -411,7 +411,7 @@ function CreateTagForm({
     setBusy(true);
     setError("");
     try {
-      await api("/tags", {
+      await rpc("/tags", {
         method: "POST",
         body: JSON.stringify({
           name: form.get("name"),

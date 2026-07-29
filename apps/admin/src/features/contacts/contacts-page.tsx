@@ -71,20 +71,25 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  buildContactSearchParams,
-  loadContactOptions,
-  loadContacts as fetchContacts,
+  contactOptionsQueryKey,
+  contactOptionsQueryOptions,
+  contactsQueryOptions,
   type AccountOption,
   type ContactOptions,
   type ContactSearch,
+  type ContactSort,
   type ContactStatus,
-  type ContactSummary,
-  type ContactsPageData,
   type ListOption,
   type SegmentOption,
   type TagOption,
 } from "@/features/contacts/contact-api";
 import { cn } from "@/lib/utils";
+import { orpcQuery } from "@/lib/orpc";
+import {
+  useMutation,
+  useQueryClient,
+  useSuspenseQuery,
+} from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
@@ -112,7 +117,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 
 interface ContactProfile {
   contact: Contact;
@@ -193,18 +198,17 @@ function ControlledSelect({
 }
 
 export function ContactsPage({
-  initialData,
   initialSearch,
 }: {
-  initialData: ContactsPageData;
   initialSearch: ContactSearch;
 }): ReactNode {
-  const [contacts, setContacts] = useState<ContactSummary[]>(
-    initialData.contacts,
-  );
-  const [options, setOptions] = useState<ContactOptions>(initialData.options);
-  const [total, setTotal] = useState(initialData.total);
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
+  const contactsQuery = useSuspenseQuery(contactsQueryOptions(initialSearch));
+  const optionsQuery = useSuspenseQuery(contactOptionsQueryOptions());
+  const contacts = contactsQuery.data.items;
+  const options = optionsQuery.data;
+  const total = contactsQuery.data.total;
+  const loading = contactsQuery.isFetching;
   const [error, setError] = useState("");
   const [query, setQuery] = useState(initialSearch.q);
   const [status, setStatus] = useState<ContactStatus>(initialSearch.status);
@@ -227,61 +231,27 @@ export function ContactsPage({
   const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
 
-  const loadOptions = useCallback(async () => {
-    setOptions(await loadContactOptions());
-  }, []);
-
-  const loadContacts = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    const params = buildContactSearchParams({
-      q: query,
-      status,
-      stage,
-      tagId,
-      listId,
-      accountId,
-      segmentId,
-      scoreMin,
-      scoreMax,
-      sort,
-      direction: direction === "asc" ? "asc" : "desc",
+  const refreshContacts = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: orpcQuery.contacts.list.key({ type: "query" }),
     });
-    try {
-      const result = await fetchContacts(params);
-      setContacts(result.contacts);
-      setTotal(result.total);
-      setSelected(new Set());
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "連絡先を読み込めませんでした",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    accountId,
-    direction,
-    listId,
-    query,
-    scoreMax,
-    scoreMin,
-    segmentId,
-    sort,
-    stage,
-    status,
-    tagId,
-  ]);
-
-  useEffect(() => {
-    setContacts(initialData.contacts);
-    setOptions(initialData.options);
-    setTotal(initialData.total);
-    setLoading(false);
     setSelected(new Set());
-  }, [initialData]);
+  }, [queryClient]);
+
+  const refreshOptions = useCallback(
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: contactOptionsQueryKey,
+      }),
+    [queryClient],
+  );
+
+  const refreshContactData = useCallback(
+    async () => {
+      await Promise.all([refreshContacts(), refreshOptions()]);
+    },
+    [refreshContacts, refreshOptions],
+  );
 
   useEffect(() => {
     setQuery(initialSearch.q);
@@ -377,7 +347,7 @@ export function ContactsPage({
     setBusy(true);
     setError("");
     try {
-      await api("/contact-actions", {
+      await rpc("/contact-actions", {
         method: "POST",
         body: JSON.stringify({
           contactIds: [...selected],
@@ -385,7 +355,7 @@ export function ContactsPage({
           ...(needsResource ? { resourceId: bulkResourceId } : {}),
         }),
       });
-      await Promise.all([loadContacts(), loadOptions()]);
+      await refreshContactData();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "一括操作に失敗しました",
@@ -399,8 +369,8 @@ export function ContactsPage({
     if (!segmentId) return;
     setBusy(true);
     try {
-      await api(`/segments/${segmentId}/refresh`, { method: "POST" });
-      await Promise.all([loadContacts(), loadOptions()]);
+      await rpc(`/segments/${segmentId}/refresh`, { method: "POST" });
+      await refreshContactData();
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -664,7 +634,7 @@ export function ContactsPage({
                 onChange={(value) => {
                   const [nextSort = "updatedAt", nextDirection = "desc"] =
                     value.split(":");
-                  setSort(nextSort);
+                  setSort(nextSort as ContactSort);
                   setDirection(nextDirection === "asc" ? "asc" : "desc");
                 }}
               >
@@ -765,9 +735,16 @@ export function ContactsPage({
           </div>
         )}
 
-        {error && (
+        {(error || contactsQuery.error || optionsQuery.error) && (
           <div className="border-b p-4">
-            <ErrorNotice>{error}</ErrorNotice>
+            <ErrorNotice>
+              {error ||
+                (contactsQuery.error instanceof Error
+                  ? contactsQuery.error.message
+                  : optionsQuery.error instanceof Error
+                    ? optionsQuery.error.message
+                    : "連絡先を読み込めませんでした")}
+            </ErrorNotice>
           </div>
         )}
         <CardContent className="px-0">
@@ -941,7 +918,7 @@ export function ContactsPage({
           options={options}
           onSaved={async () => {
             setShowCreate(false);
-            await Promise.all([loadContacts(), loadOptions()]);
+            await refreshContactData();
           }}
         />
       </AppDialog>
@@ -955,7 +932,7 @@ export function ContactsPage({
           filter={buildSegmentFilter()}
           onSaved={async () => {
             setShowSegmentSave(false);
-            await loadOptions();
+            await refreshOptions();
           }}
         />
       </AppDialog>
@@ -964,9 +941,7 @@ export function ContactsPage({
           contactId={activeContactId}
           options={options}
           onClose={() => setActiveContactId(null)}
-          onChanged={async () => {
-            await Promise.all([loadContacts(), loadOptions()]);
-          }}
+          onChanged={refreshContactData}
         />
       )}
     </Page>
@@ -980,6 +955,9 @@ function ContactCreateForm({
   options: ContactOptions;
   onSaved: () => Promise<void>;
 }): ReactNode {
+  const createContact = useMutation(
+    orpcQuery.contacts.create.mutationOptions(),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -988,38 +966,36 @@ function ContactCreateForm({
     setBusy(true);
     setError("");
     try {
-      const response = await api<Contact>("/contacts", {
-        method: "POST",
-        body: JSON.stringify({
-          email: optionalString(form.get("email")),
-          firstName: optionalString(form.get("firstName")),
-          lastName: optionalString(form.get("lastName")),
-          phone: optionalString(form.get("phone")),
-          externalId: optionalString(form.get("externalId")),
-          stage: optionalString(form.get("stage")) ?? "lead",
-        }),
+      const contact = await createContact.mutateAsync({
+        email: optionalString(form.get("email")),
+        firstName: optionalString(form.get("firstName")),
+        lastName: optionalString(form.get("lastName")),
+        phone: optionalString(form.get("phone")),
+        externalId: optionalString(form.get("externalId")),
+        stage: optionalString(form.get("stage")) ?? "lead",
+        customFields: {},
       });
       const tagId = optionalString(form.get("tagId"));
       const listId = optionalString(form.get("listId"));
       const accountId = optionalString(form.get("accountId"));
       await Promise.all([
         tagId
-          ? api(`/contacts/${response.data.id}/tags`, {
+          ? rpc(`/contacts/${contact.id}/tags`, {
               method: "POST",
               body: JSON.stringify({ tagId }),
             })
           : Promise.resolve(),
         listId
-          ? api(`/contacts/${response.data.id}/lists`, {
+          ? rpc(`/contacts/${contact.id}/lists`, {
               method: "POST",
               body: JSON.stringify({ listId }),
             })
           : Promise.resolve(),
         accountId
-          ? api(`/accounts/${accountId}/contacts`, {
+          ? rpc(`/accounts/${accountId}/contacts`, {
               method: "POST",
               body: JSON.stringify({
-                contactId: response.data.id,
+                contactId: contact.id,
                 isPrimary: true,
               }),
             })
@@ -1106,7 +1082,7 @@ function SegmentSaveForm({
     const name = String(new FormData(event.currentTarget).get("name"));
     setBusy(true);
     try {
-      await api("/segments", {
+      await rpc("/segments", {
         method: "POST",
         body: JSON.stringify({
           name,
@@ -1167,7 +1143,7 @@ function ContactDrawer({
   const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await api<ContactProfile>(
+      const response = await rpc<ContactProfile>(
         `/contacts/${contactId}/profile`,
       );
       setProfile(response.data);
@@ -1193,7 +1169,7 @@ function ContactDrawer({
   async function mutate(path: string, init: RequestInit) {
     setError("");
     try {
-      await api(path, init);
+      await rpc(path, init);
       await changed();
     } catch (caught) {
       setError(
@@ -1434,7 +1410,7 @@ function ProfileEditForm({
     setBusy(true);
     setError("");
     try {
-      await api(`/contacts/${contact.id}`, {
+      await rpc(`/contacts/${contact.id}`, {
         method: "PATCH",
         body: JSON.stringify({
           firstName: optionalString(form.get("firstName")) ?? null,
@@ -1610,7 +1586,7 @@ function AccountEditor({
     setBusy(true);
     setError("");
     try {
-      await api(`/accounts/${selectedId}/contacts`, {
+      await rpc(`/accounts/${selectedId}/contacts`, {
         method: "POST",
         body: JSON.stringify({
           contactId,
@@ -1634,7 +1610,7 @@ function AccountEditor({
     setBusy(true);
     setError("");
     try {
-      await api(`/accounts/${accountId}/contacts/${contactId}`, {
+      await rpc(`/accounts/${accountId}/contacts/${contactId}`, {
         method: "DELETE",
       });
       await onChanged();
@@ -1796,7 +1772,7 @@ function ScoreForm({
     setBusy(true);
     setError("");
     try {
-      await api(`/contacts/${contactId}/score`, {
+      await rpc(`/contacts/${contactId}/score`, {
         method: "POST",
         body: JSON.stringify({
           delta: Number(form.get("delta")),

@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 
 export interface AccountSummary {
   id: string;
@@ -50,7 +50,7 @@ export async function loadAccounts(
 ): Promise<AccountSummary[]> {
   const params = new URLSearchParams({ limit: "200" });
   if (query.trim()) params.set("q", query.trim());
-  const response = await api<AccountSummary[]>(
+  const response = await rpc<AccountSummary[]>(
     `/accounts?${params.toString()}`,
     { signal: signal ?? null },
   );
@@ -62,10 +62,10 @@ export async function loadAccountDetail(
   signal?: AbortSignal,
 ): Promise<AccountDetailData> {
   const [account, contacts] = await Promise.all([
-    api<AccountDetail>(`/accounts/${accountId}`, {
+    rpc<AccountDetail>(`/accounts/${accountId}`, {
       signal: signal ?? null,
     }),
-    api<ContactOption[]>(
+    rpc<ContactOption[]>(
       "/contacts?limit=100&status=active&sort=name&direction=asc",
       { signal: signal ?? null },
     ),

@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import {
   ErrorAlert,
   FormTextarea,
@@ -68,7 +68,7 @@ export function SiteTrackingPage({
     setBusy(true);
     setError("");
     try {
-      await api("/site-tracking", {
+      await rpc("/site-tracking", {
         method: "PUT",
         body: JSON.stringify({ enabled, allowedDomains }),
       });

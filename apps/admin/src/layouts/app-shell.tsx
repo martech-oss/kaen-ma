@@ -35,6 +35,7 @@ import {
   useNavigate,
   useRouter,
 } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   Blocks,
@@ -114,9 +115,11 @@ export function AppShell({
 }): ReactNode {
   const navigate = useNavigate();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   async function signOut(): Promise<void> {
     await authClient.signOut();
+    queryClient.clear();
     await router.invalidate({ sync: true });
     await navigate({
       to: "/login",

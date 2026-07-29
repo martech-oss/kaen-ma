@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import {
   AppDialog,
   EmptyState,
@@ -60,7 +60,7 @@ export function LandingPagesPage({
 
   async function archive(item: LandingPageRow): Promise<void> {
     try {
-      await api(`/pages/${item.id}/archive`, { method: "POST" });
+      await rpc(`/pages/${item.id}/archive`, { method: "POST" });
       toast.success("ランディングページをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -249,7 +249,7 @@ function LandingPageEditor({
     setBusy(true);
     setError("");
     try {
-      await api(item ? `/pages/${item.id}` : "/pages", {
+      await rpc(item ? `/pages/${item.id}` : "/pages", {
         method: item ? "PATCH" : "POST",
         body: JSON.stringify({
           name,

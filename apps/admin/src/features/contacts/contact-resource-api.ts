@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 
 export interface TagResource {
   id: string;
@@ -25,7 +25,7 @@ export interface ContactResources {
 export async function loadContactResources(
   signal?: AbortSignal,
 ): Promise<ContactResources> {
-  const response = await api<ContactResources>("/contact-options", {
+  const response = await rpc<ContactResources>("/contact-options", {
     signal: signal ?? null,
   });
   return response.data;

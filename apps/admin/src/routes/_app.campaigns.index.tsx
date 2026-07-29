@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import { RouteError, RoutePending } from "@/components/route-status";
 import {
   CampaignsPage,
@@ -8,7 +8,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/campaigns/")({
   loader: async ({ abortController }) => {
-    const response = await api<CampaignRow[]>("/campaigns", {
+    const response = await rpc<CampaignRow[]>("/campaigns", {
       signal: abortController.signal,
     });
     return response.data;

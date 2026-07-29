@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import type { ContentDocument } from "@kaenma/shared";
 
 export type PublishStatus = "draft" | "published";
@@ -88,7 +88,7 @@ export async function loadSignupForms(
   signal?: AbortSignal,
 ): Promise<SignupFormRow[]> {
   return (
-    await api<SignupFormRow[]>("/forms", {
+    await rpc<SignupFormRow[]>("/forms", {
       signal: signal ?? null,
     })
   ).data;
@@ -98,7 +98,7 @@ export async function loadLandingPages(
   signal?: AbortSignal,
 ): Promise<LandingPageRow[]> {
   return (
-    await api<LandingPageRow[]>("/pages", {
+    await rpc<LandingPageRow[]>("/pages", {
       signal: signal ?? null,
     })
   ).data;
@@ -108,7 +108,7 @@ export async function loadSiteMessages(
   signal?: AbortSignal,
 ): Promise<SiteMessageRow[]> {
   return (
-    await api<SiteMessageRow[]>("/site-messages", {
+    await rpc<SiteMessageRow[]>("/site-messages", {
       signal: signal ?? null,
     })
   ).data;
@@ -118,7 +118,7 @@ export async function loadSiteTracking(
   signal?: AbortSignal,
 ): Promise<SiteTrackingData> {
   return (
-    await api<SiteTrackingData>("/site-tracking", {
+    await rpc<SiteTrackingData>("/site-tracking", {
       signal: signal ?? null,
     })
   ).data;

@@ -62,19 +62,25 @@ export class WorkspaceRepository {
   }
 
   public async listContacts(input: {
-    cursor?: string;
-    limit?: number;
-    query?: string;
-    status?: "active" | "archived" | "anonymous" | "all";
-    stage?: string;
-    tagId?: string;
-    listId?: string;
-    accountId?: string;
-    segmentId?: string;
-    scoreMin?: number;
-    scoreMax?: number;
-    sort?: "createdAt" | "updatedAt" | "score" | "name" | "email";
-    direction?: "asc" | "desc";
+    cursor?: string | undefined;
+    limit?: number | undefined;
+    query?: string | undefined;
+    status?: "active" | "archived" | "anonymous" | "all" | undefined;
+    stage?: string | undefined;
+    tagId?: string | undefined;
+    listId?: string | undefined;
+    accountId?: string | undefined;
+    segmentId?: string | undefined;
+    scoreMin?: number | undefined;
+    scoreMax?: number | undefined;
+    sort?:
+      | "createdAt"
+      | "updatedAt"
+      | "score"
+      | "name"
+      | "email"
+      | undefined;
+    direction?: "asc" | "desc" | undefined;
   }): Promise<CursorPage<Contact>> {
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
     const params: Array<string | number> = [this.context.workspaceId];

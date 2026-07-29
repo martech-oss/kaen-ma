@@ -1,14 +1,7 @@
-import { api } from "@/api";
+import { orpcQuery } from "@/lib/orpc";
 
-export interface Workspace {
-  id: string;
-  name: string;
-  slug: string;
-  timezone: string;
-  role: string;
-}
+export type { Workspace } from "@kaenma/api-contract";
 
-export async function getCurrentWorkspace(): Promise<Workspace> {
-  const response = await api<Workspace>("/workspace");
-  return response.data;
+export function workspaceQueryOptions() {
+  return orpcQuery.workspace.get.queryOptions();
 }

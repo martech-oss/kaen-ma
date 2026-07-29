@@ -1,4 +1,4 @@
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import { authClient } from "@/auth-client";
 import { FormInput, PageLayout, SuccessAlert } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ export function SettingsPage({
   const [providerSaved, setProviderSaved] = useState(false);
 
   async function createKey(): Promise<void> {
-    const response = await api<{ token: string }>("/api-keys", {
+    const response = await rpc<{ token: string }>("/api-keys", {
       method: "POST",
       body: JSON.stringify({ name: "Admin generated key", role: "marketer" }),
     });
@@ -33,7 +33,7 @@ export function SettingsPage({
   async function saveResend(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    await api("/providers/resend", {
+    await rpc("/providers/resend", {
       method: "POST",
       body: JSON.stringify({
         apiKey: form.get("apiKey"),

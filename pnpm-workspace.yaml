@@ -17,3 +17,15 @@ minimumReleaseAgeExclude:
   - '@cloudflare/vite-plugin@1.48.0'
   - miniflare@4.20260722.1
   - wrangler@4.115.0
+  - '@orpc/client@1.14.13'
+  - '@orpc/contract@1.14.13'
+  - '@orpc/interop@1.14.13'
+  - '@orpc/server@1.14.13'
+  - '@orpc/shared@1.14.13'
+  - '@orpc/standard-server-aws-lambda@1.14.13'
+  - '@orpc/standard-server-fastify@1.14.13'
+  - '@orpc/standard-server-fetch@1.14.13'
+  - '@orpc/standard-server-node@1.14.13'
+  - '@orpc/standard-server-peer@1.14.13'
+  - '@orpc/standard-server@1.14.13'
+  - '@orpc/tanstack-query@1.14.13'

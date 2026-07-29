@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildContactSearchParams,
+  buildContactSearchInput,
   contactSearchDefaults,
+  contactsQueryOptions,
   parseContactSearch,
 } from "@/features/contacts/contact-api";
 
@@ -18,16 +19,40 @@ describe("contact search params", () => {
   });
 
   it("builds API params without empty optional filters", () => {
-    const params = buildContactSearchParams({
+    const input = buildContactSearchInput({
       ...contactSearchDefaults,
       q: "  jane@example.com  ",
       tagId: "tag-1",
+      scoreMin: "10",
       direction: "asc",
     });
 
-    expect(params.get("q")).toBe("jane@example.com");
-    expect(params.get("tagId")).toBe("tag-1");
-    expect(params.get("direction")).toBe("asc");
-    expect(params.has("stage")).toBe(false);
+    expect(input).toEqual({
+      limit: 100,
+      status: "active",
+      sort: "updatedAt",
+      direction: "asc",
+      query: "jane@example.com",
+      tagId: "tag-1",
+      scoreMin: 10,
+    });
+  });
+
+  it("creates stable, input-aware query keys", () => {
+    const first = contactsQueryOptions({
+      ...contactSearchDefaults,
+      q: "jane@example.com",
+    }).queryKey;
+    const same = contactsQueryOptions({
+      ...contactSearchDefaults,
+      q: "jane@example.com",
+    }).queryKey;
+    const different = contactsQueryOptions({
+      ...contactSearchDefaults,
+      q: "john@example.com",
+    }).queryKey;
+
+    expect(first).toEqual(same);
+    expect(first).not.toEqual(different);
   });
 });

@@ -1,5 +1,5 @@
 import type { ContentDocument } from "@kaenma/shared";
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 
 export interface EmailCampaignRow {
   id: string;
@@ -88,12 +88,12 @@ export async function loadEmailCampaigns(
   signal?: AbortSignal,
 ): Promise<EmailCampaignsData> {
   const [campaigns, templates, segments, topics] = await Promise.all([
-    api<EmailCampaignRow[]>("/broadcasts", { signal: signal ?? null }),
-    api<EmailTemplateRow[]>("/email-templates", {
+    rpc<EmailCampaignRow[]>("/broadcasts", { signal: signal ?? null }),
+    rpc<EmailTemplateRow[]>("/email-templates", {
       signal: signal ?? null,
     }),
-    api<SegmentOption[]>("/segments", { signal: signal ?? null }),
-    api<TopicOption[]>("/subscription-topics", {
+    rpc<SegmentOption[]>("/segments", { signal: signal ?? null }),
+    rpc<TopicOption[]>("/subscription-topics", {
       signal: signal ?? null,
     }),
   ]);
@@ -109,10 +109,10 @@ export async function loadEmailTemplates(
   signal?: AbortSignal,
 ): Promise<EmailTemplatesData> {
   const [templates, variables] = await Promise.all([
-    api<EmailTemplateRow[]>("/email-templates", {
+    rpc<EmailTemplateRow[]>("/email-templates", {
       signal: signal ?? null,
     }),
-    api<MessageVariableRow[]>("/message-variables", {
+    rpc<MessageVariableRow[]>("/message-variables", {
       signal: signal ?? null,
     }),
   ]);
@@ -122,7 +122,7 @@ export async function loadEmailTemplates(
 export async function loadEmailVariables(
   signal?: AbortSignal,
 ): Promise<EmailVariablesData> {
-  const variables = await api<MessageVariableRow[]>("/message-variables", {
+  const variables = await rpc<MessageVariableRow[]>("/message-variables", {
     signal: signal ?? null,
   });
   return { variables: variables.data };
@@ -132,10 +132,10 @@ export async function loadEmailArchive(
   signal?: AbortSignal,
 ): Promise<EmailArchiveData> {
   const [campaigns, templates] = await Promise.all([
-    api<EmailCampaignRow[]>("/broadcasts?archived=true", {
+    rpc<EmailCampaignRow[]>("/broadcasts?archived=true", {
       signal: signal ?? null,
     }),
-    api<EmailTemplateRow[]>("/email-templates?archived=true", {
+    rpc<EmailTemplateRow[]>("/email-templates?archived=true", {
       signal: signal ?? null,
     }),
   ]);

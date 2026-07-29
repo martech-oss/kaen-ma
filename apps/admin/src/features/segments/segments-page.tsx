@@ -1,6 +1,6 @@
 import type { SegmentFilter } from "@kaenma/shared";
 import { contactAttributeDefinitions } from "@kaenma/shared";
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import {
   AppDialog,
   FormInput,
@@ -96,7 +96,7 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
       value: String(form.get("value")),
     };
     setBusy(true);
-    await api("/segments", {
+    await rpc("/segments", {
       method: "POST",
       body: JSON.stringify({
         name,

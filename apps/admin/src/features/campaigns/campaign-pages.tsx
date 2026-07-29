@@ -3,7 +3,7 @@ import type {
   CampaignEdge,
   CampaignNode,
 } from "@kaenma/shared";
-import { api } from "@/api";
+import { rpc } from "@/rpc";
 import {
   PageLayout,
   ResourceCard,
@@ -61,7 +61,7 @@ export function CampaignsPage({
     const definition = createStarterCampaign(
       `New campaign ${campaigns.length + 1}`,
     );
-    const response = await api<{ id: string }>("/campaigns", {
+    const response = await rpc<{ id: string }>("/campaigns", {
       method: "POST",
       body: JSON.stringify(definition),
     });
@@ -215,12 +215,12 @@ export function CampaignBuilder({
     setSaving(true);
     setNotice("");
     try {
-      await api(`/campaigns/${id}/draft`, {
+      await rpc(`/campaigns/${id}/draft`, {
         method: "PUT",
         body: JSON.stringify(definition),
       });
       if (publish) {
-        await api(`/campaigns/${id}/publish`, { method: "POST" });
+        await rpc(`/campaigns/${id}/publish`, { method: "POST" });
         setNotice("新しい不変バージョンを公開しました");
         toast.success("キャンペーンを公開しました");
       } else {

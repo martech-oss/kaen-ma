@@ -1,7 +1,8 @@
 import { RouteError, RoutePending } from "@/components/route-status";
 import {
+  contactOptionsQueryOptions,
   contactSearchDefaults,
-  loadContactsPage,
+  contactsQueryOptions,
   parseContactSearch,
 } from "@/features/contacts/contact-api";
 import {
@@ -19,18 +20,17 @@ export const Route = createFileRoute("/_app/contacts/")({
     middlewares: [stripSearchParams(contactSearchDefaults)],
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps, abortController }) =>
-    loadContactsPage(deps, abortController.signal),
+  loader: async ({ context, deps }) => {
+    await Promise.all([
+      context.queryClient.ensureQueryData(contactsQueryOptions(deps)),
+      context.queryClient.ensureQueryData(contactOptionsQueryOptions()),
+    ]);
+  },
   pendingComponent: RoutePending,
   errorComponent: RouteError,
   component: ContactsRoute,
 });
 
 function ContactsRoute() {
-  return (
-    <ContactsPage
-      initialData={Route.useLoaderData()}
-      initialSearch={Route.useSearch()}
-    />
-  );
+  return <ContactsPage initialSearch={Route.useSearch()} />;
 }

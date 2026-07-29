@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card";
 import { authClient } from "@/auth-client";
 import { slugify } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { Blocks, UsersRound } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
@@ -25,6 +26,7 @@ export function AuthPage({
   redirectTo?: string;
 }): ReactNode {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -32,6 +34,7 @@ export function AuthPage({
   const [twoFactorPending, setTwoFactorPending] = useState(false);
 
   async function finishAuthentication(): Promise<void> {
+    queryClient.clear();
     await router.invalidate({ sync: true });
     router.history.push(redirectTo);
   }
@@ -198,6 +201,7 @@ export function AuthPage({
 
 export function WorkspaceSetupPage(): ReactNode {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -220,6 +224,7 @@ export function WorkspaceSetupPage(): ReactNode {
         organizationId: result.data.id,
       });
     }
+    queryClient.clear();
     await router.invalidate({ sync: true });
     await router.navigate({ to: "/dashboard", replace: true });
   }
