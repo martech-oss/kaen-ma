@@ -1,5 +1,5 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { authSchema } from "@kaenma/db/auth-schema";
+import { authSchema, createDatabase } from "@kaenma/db";
 import { betterAuth } from "better-auth/minimal";
 import { organization, twoFactor } from "better-auth/plugins";
 import {
@@ -7,11 +7,10 @@ import {
   memberAc,
   ownerAc,
 } from "better-auth/plugins/organization/access";
-import { drizzle } from "drizzle-orm/d1";
 import type { RuntimeEnv } from "./env";
 
 export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
-  const database = drizzle(env.DB, { schema: authSchema });
+  const database = createDatabase(env.DB).orm;
   const baseURL = resolveAuthBaseURL(env, requestOrigin);
   const requireEmailVerification = isEmailVerificationRequired(env.ENVIRONMENT);
   return betterAuth({

@@ -4,6 +4,8 @@ import {
   WorkspaceRepository,
   uuidv7,
   writeAuditLog,
+  type DrizzleRawStatement,
+  type KaenmaDatabase,
 } from "@kaenma/db";
 import { renderContent } from "@kaenma/email-renderer";
 import {
@@ -57,7 +59,7 @@ app.on(["GET", "POST"], "/api/auth/*", (context) => {
 
 app.get("/api/health", async (context) => {
   try {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       "SELECT COUNT(*) AS count FROM d1_migrations",
     ).first<{ count: number }>();
     return context.json({
@@ -85,7 +87,7 @@ app.get("/api/openapi.json", (context) =>
 
 app.post("/api/webhooks/resend/:workspaceId", async (context) => {
   const workspaceId = context.req.param("workspaceId");
-  const config = await context.env.DB.prepare(
+  const config = await context.get("database").prepare(
     `SELECT encrypted_credentials FROM provider_configs
      WHERE workspace_id = ? AND provider = 'resend' AND enabled = 1
      ORDER BY updated_at DESC LIMIT 1`,
@@ -128,8 +130,8 @@ app.post("/api/webhooks/resend/:workspaceId", async (context) => {
         : event.type === "failed" || event.type === "bounced"
           ? "failed"
           : null;
-    const statements: D1PreparedStatement[] = [
-      context.env.DB.prepare(
+    const statements: DrizzleRawStatement[] = [
+      context.get("database").prepare(
         `INSERT OR IGNORE INTO delivery_events
          (id, workspace_id, delivery_id, provider, provider_event_id,
           provider_message_id, type, occurred_at, metadata, created_at)
@@ -150,7 +152,7 @@ app.post("/api/webhooks/resend/:workspaceId", async (context) => {
     ];
     if (status) {
       statements.push(
-        context.env.DB.prepare(
+        context.get("database").prepare(
           `UPDATE deliveries SET status = ?, updated_at = ?
            WHERE workspace_id = ? AND id = ?`,
         ).bind(status, new Date().toISOString(), workspaceId, event.deliveryId),
@@ -158,7 +160,7 @@ app.post("/api/webhooks/resend/:workspaceId", async (context) => {
     }
     if (["bounced", "complained", "unsubscribed"].includes(event.type)) {
       statements.push(
-        context.env.DB.prepare(
+        context.get("database").prepare(
           `INSERT OR IGNORE INTO suppressions
            (id, workspace_id, contact_id, email, reason, provider, created_at)
            SELECT ?, d.workspace_id, d.contact_id, d.recipient, ?, 'resend', ?
@@ -176,7 +178,7 @@ app.post("/api/webhooks/resend/:workspaceId", async (context) => {
         ),
       );
     }
-    await context.env.DB.batch(statements);
+    await context.get("database").batch(statements);
   }
   return context.json({ data: { accepted: events.length } }, 202);
 });
@@ -202,7 +204,7 @@ function createApi(): Hono<AppEnvironment> {
 
   api.get("/workspace", async (context) => {
     const workspace = context.get("workspace");
-    const organization = await context.env.DB.prepare(
+    const organization = await context.get("database").prepare(
       "SELECT id, name, slug, logo, timezone, created_at FROM organization WHERE id = ?",
     )
       .bind(workspace.workspaceId)
@@ -211,7 +213,7 @@ function createApi(): Hono<AppEnvironment> {
   });
 
   api.get("/contacts", async (context) => {
-    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const repository = new WorkspaceRepository(context.get("database"), context.get("workspace"));
     const cursor = context.req.query("cursor");
     const query = context.req.query("q");
     const limit = numberQuery(context.req.query("limit"));
@@ -245,7 +247,7 @@ function createApi(): Hono<AppEnvironment> {
       ...(direction === "asc" || direction === "desc" ? { direction } : {}),
     });
     const data = await attachContactRelations(
-      context.env.DB,
+      context.get("database"),
       context.get("workspace").workspaceId,
       page.items,
     );
@@ -260,7 +262,7 @@ function createApi(): Hono<AppEnvironment> {
   });
 
   api.get("/contacts/:id", async (context) => {
-    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const repository = new WorkspaceRepository(context.get("database"), context.get("workspace"));
     const contact = await repository.getContact(context.req.param("id"));
     return contact
       ? context.json({ data: contact })
@@ -269,13 +271,13 @@ function createApi(): Hono<AppEnvironment> {
 
   api.get("/contacts/:id/timeline", async (context) => {
     const workspace = context.get("workspace");
-    const exists = await context.env.DB.prepare(
+    const exists = await context.get("database").prepare(
       "SELECT id FROM contacts WHERE workspace_id = ? AND id = ?",
     )
       .bind(workspace.workspaceId, context.req.param("id"))
       .first();
     if (!exists) return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, type, resource_type, resource_id, properties, occurred_at
        FROM contact_events WHERE workspace_id = ? AND contact_id = ?
        ORDER BY occurred_at DESC, id DESC LIMIT 200`,
@@ -290,11 +292,11 @@ function createApi(): Hono<AppEnvironment> {
   api.post("/contacts", requireRole("marketer"), async (context) => {
     const parsed = contactCreateSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const repository = new WorkspaceRepository(context.get("database"), context.get("workspace"));
     try {
       const contact = await repository.createContact(parsed.data);
       context.executionCtx.waitUntil(
-        writeAuditLog(context.env.DB, context.get("workspace"), {
+        writeAuditLog(context.get("database"), context.get("workspace"), {
           action: "contact.create",
           resourceType: "contact",
           resourceId: contact.id,
@@ -315,7 +317,7 @@ function createApi(): Hono<AppEnvironment> {
   api.patch("/contacts/:id", requireRole("marketer"), async (context) => {
     const parsed = contactUpdateSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const repository = new WorkspaceRepository(context.get("database"), context.get("workspace"));
     const existing = await repository.getContact(context.req.param("id"));
     if (!existing) {
       return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
@@ -334,7 +336,7 @@ function createApi(): Hono<AppEnvironment> {
   });
 
   api.delete("/contacts/:id", requireRole("admin"), async (context) => {
-    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const repository = new WorkspaceRepository(context.get("database"), context.get("workspace"));
     const archived = await repository.archiveContact(context.req.param("id"));
     return archived
       ? context.json({ data: { archived: true } })
@@ -358,7 +360,7 @@ function createApi(): Hono<AppEnvironment> {
 function registerAccountRoutes(api: Hono<AppEnvironment>): void {
   api.get("/accounts", async (context) => {
     const repository = new WorkspaceRepository(
-      context.env.DB,
+      context.get("database"),
       context.get("workspace"),
     );
     const query = context.req.query("q")?.trim();
@@ -373,7 +375,7 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
   api.get("/accounts/:id", async (context) => {
     const workspaceId = context.get("workspace").workspaceId;
     const repository = new WorkspaceRepository(
-      context.env.DB,
+      context.get("database"),
       context.get("workspace"),
     );
     const account = await repository.getAccount(context.req.param("id"));
@@ -385,7 +387,7 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
         "アカウントが見つかりません",
       );
     }
-    const contacts = await context.env.DB.prepare(
+    const contacts = await context.get("database").prepare(
       `SELECT c.id, c.email, c.first_name, c.last_name, c.stage, c.score,
               c.status, cc.title, cc.is_primary
        FROM company_contacts cc
@@ -412,13 +414,13 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
     const parsed = accountCreateSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const repository = new WorkspaceRepository(
-      context.env.DB,
+      context.get("database"),
       context.get("workspace"),
     );
     try {
       const account = await repository.createAccount(parsed.data);
       context.executionCtx.waitUntil(
-        writeAuditLog(context.env.DB, context.get("workspace"), {
+        writeAuditLog(context.get("database"), context.get("workspace"), {
           action: "account.create",
           resourceType: "account",
           resourceId: account.id,
@@ -440,7 +442,7 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
     const parsed = accountUpdateSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const repository = new WorkspaceRepository(
-      context.env.DB,
+      context.get("database"),
       context.get("workspace"),
     );
     try {
@@ -481,7 +483,7 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
       if (!parsed.success) return validationError(context, parsed.error);
       const workspaceId = context.get("workspace").workspaceId;
       const accountId = context.req.param("id");
-      const relationExists = await context.env.DB.prepare(
+      const relationExists = await context.get("database").prepare(
         `SELECT co.id
          FROM companies co
          JOIN contacts c ON c.workspace_id = co.workspace_id
@@ -499,7 +501,7 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
         );
       }
       const now = new Date().toISOString();
-      const assign = context.env.DB.prepare(
+      const assign = context.get("database").prepare(
         `INSERT INTO company_contacts
          (workspace_id, company_id, contact_id, title, is_primary, created_at)
          VALUES (?, ?, ?, ?, ?, ?)
@@ -514,8 +516,8 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
         now,
       );
       if (parsed.data.isPrimary) {
-        await context.env.DB.batch([
-          context.env.DB.prepare(
+        await context.get("database").batch([
+          context.get("database").prepare(
             `UPDATE company_contacts SET is_primary = 0
              WHERE workspace_id = ? AND contact_id = ?`,
           ).bind(workspaceId, parsed.data.contactId),
@@ -532,7 +534,7 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
     "/accounts/:id/contacts/:contactId",
     requireRole("marketer"),
     async (context) => {
-      const result = await context.env.DB.prepare(
+      const result = await context.get("database").prepare(
         `DELETE FROM company_contacts
          WHERE workspace_id = ? AND company_id = ? AND contact_id = ?`,
       )
@@ -557,8 +559,8 @@ function registerAccountRoutes(api: Hono<AppEnvironment>): void {
 function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
   api.get("/contact-options", async (context) => {
     const workspaceId = context.get("workspace").workspaceId;
-    const optionResults = await context.env.DB.batch([
-      context.env.DB.prepare(
+    const optionResults = await context.get("database").batch([
+      context.get("database").prepare(
         `SELECT t.id, t.name, t.slug, t.color, COUNT(ct.contact_id) AS contact_count
          FROM tags t
          LEFT JOIN contact_tags ct
@@ -566,7 +568,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
          WHERE t.workspace_id = ?
          GROUP BY t.id ORDER BY t.name`,
       ).bind(workspaceId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT cl.id, cl.name, cl.slug, cl.description, cl.color,
                 COUNT(CASE WHEN clm.status = 'active' THEN 1 END) AS contact_count
          FROM contact_lists cl
@@ -575,17 +577,17 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
          WHERE cl.workspace_id = ?
          GROUP BY cl.id ORDER BY cl.name`,
       ).bind(workspaceId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT id, name, slug, kind, filter_ast, member_count, evaluated_at
          FROM segments WHERE workspace_id = ? ORDER BY name`,
       ).bind(workspaceId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT stage, COUNT(*) AS contact_count
          FROM contacts
          WHERE workspace_id = ? AND status != 'archived'
          GROUP BY stage ORDER BY stage`,
       ).bind(workspaceId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT co.id, co.name, co.domain,
                 COUNT(CASE WHEN c.status != 'archived' THEN 1 END) AS contact_count
          FROM companies co
@@ -625,7 +627,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     const id = uuidv7();
     const slug = resourceSlug(parsed.data.name, id);
     try {
-      await context.env.DB.prepare(
+      await context.get("database").prepare(
         `INSERT INTO tags (id, workspace_id, name, slug, color, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
       )
@@ -651,7 +653,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     const slug = resourceSlug(parsed.data.name, id);
     const now = new Date().toISOString();
     try {
-      await context.env.DB.prepare(
+      await context.get("database").prepare(
         `INSERT INTO contact_lists
          (id, workspace_id, name, slug, description, color, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -676,45 +678,45 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
   api.get("/contacts/:id/profile", async (context) => {
     const workspaceId = context.get("workspace").workspaceId;
     const contactId = context.req.param("id");
-    const repository = new WorkspaceRepository(context.env.DB, context.get("workspace"));
+    const repository = new WorkspaceRepository(context.get("database"), context.get("workspace"));
     const contact = await repository.getContact(contactId);
     if (!contact) return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
-    const profileResults = await context.env.DB.batch([
-      context.env.DB.prepare(
+    const profileResults = await context.get("database").batch([
+      context.get("database").prepare(
         `SELECT t.id, t.name, t.slug, t.color
          FROM tags t JOIN contact_tags ct
            ON ct.workspace_id = t.workspace_id AND ct.tag_id = t.id
          WHERE ct.workspace_id = ? AND ct.contact_id = ?
          ORDER BY t.name`,
       ).bind(workspaceId, contactId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT cl.id, cl.name, cl.slug, cl.color, clm.status, clm.updated_at
          FROM contact_lists cl JOIN contact_list_memberships clm
            ON clm.workspace_id = cl.workspace_id AND clm.list_id = cl.id
          WHERE clm.workspace_id = ? AND clm.contact_id = ?
          ORDER BY cl.name`,
       ).bind(workspaceId, contactId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT s.id, s.name, s.kind, sm.source, sm.joined_at
          FROM segments s JOIN segment_memberships sm
            ON sm.workspace_id = s.workspace_id AND sm.segment_id = s.id
          WHERE sm.workspace_id = ? AND sm.contact_id = ?
          ORDER BY s.name`,
       ).bind(workspaceId, contactId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT co.id, co.name, co.domain, cc.title, cc.is_primary
          FROM companies co JOIN company_contacts cc
            ON cc.workspace_id = co.workspace_id AND cc.company_id = co.id
          WHERE cc.workspace_id = ? AND cc.contact_id = ?
          ORDER BY cc.is_primary DESC, co.name`,
       ).bind(workspaceId, contactId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT id, delta, total, reason, created_at
          FROM score_events
          WHERE workspace_id = ? AND contact_id = ?
          ORDER BY created_at DESC LIMIT 100`,
       ).bind(workspaceId, contactId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT id, type, resource_type, resource_id, properties, occurred_at
          FROM contact_events
          WHERE workspace_id = ? AND contact_id = ?
@@ -755,7 +757,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     const parsed = z.object({ tagId: z.string().min(1) }).safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `INSERT OR IGNORE INTO contact_tags (workspace_id, contact_id, tag_id, created_at)
        SELECT c.workspace_id, c.id, t.id, ?
        FROM contacts c JOIN tags t ON t.workspace_id = c.workspace_id
@@ -769,7 +771,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.delete("/contacts/:id/tags/:tagId", requireRole("marketer"), async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `DELETE FROM contact_tags
        WHERE workspace_id = ? AND contact_id = ? AND tag_id = ?
          AND EXISTS (
@@ -794,7 +796,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
     const now = new Date().toISOString();
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `INSERT INTO contact_list_memberships
        (workspace_id, list_id, contact_id, status, source, created_at, updated_at)
        SELECT c.workspace_id, cl.id, c.id, 'active', 'manual', ?, ?
@@ -811,7 +813,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.delete("/contacts/:id/lists/:listId", requireRole("marketer"), async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `DELETE FROM contact_list_memberships
        WHERE workspace_id = ? AND contact_id = ? AND list_id = ?
          AND EXISTS (
@@ -835,7 +837,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     const parsed = z.object({ segmentId: z.string().min(1) }).safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `INSERT OR IGNORE INTO segment_memberships
        (workspace_id, segment_id, contact_id, source, joined_at)
        SELECT c.workspace_id, s.id, c.id, 'static', ?
@@ -853,7 +855,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
         "静的セグメントへ追加できませんでした",
       );
     }
-    await updateSegmentMemberCount(context.env.DB, workspaceId, parsed.data.segmentId);
+    await updateSegmentMemberCount(context.get("database"), workspaceId, parsed.data.segmentId);
     return context.json({ data: { assigned: true } }, 201);
   });
 
@@ -862,7 +864,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     requireRole("marketer"),
     async (context) => {
       const workspaceId = context.get("workspace").workspaceId;
-      const result = await context.env.DB.prepare(
+      const result = await context.get("database").prepare(
         `DELETE FROM segment_memberships
          WHERE workspace_id = ? AND contact_id = ? AND segment_id = ? AND source = 'static'
            AND EXISTS (
@@ -875,7 +877,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
         .run();
       if (result.meta.changes > 0) {
         await updateSegmentMemberCount(
-          context.env.DB,
+          context.get("database"),
           workspaceId,
           context.req.param("segmentId"),
         );
@@ -895,7 +897,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     const workspaceId = context.get("workspace").workspaceId;
     const contactId = context.req.param("id");
     const now = new Date().toISOString();
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE contacts SET score = score + ?, updated_at = ?
        WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
     )
@@ -904,7 +906,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     if (result.meta.changes === 0) {
       return apiError(context, 409, "score_not_adjustable", "スコアを変更できませんでした");
     }
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO score_events
        (id, workspace_id, contact_id, delta, total, reason, created_at)
        SELECT ?, workspace_id, id, ?, score, ?, ?
@@ -920,7 +922,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
       )
       .run();
     const contact = await new WorkspaceRepository(
-      context.env.DB,
+      context.get("database"),
       context.get("workspace"),
     ).getContact(contactId);
     return context.json({ data: contact });
@@ -928,7 +930,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
 
   api.post("/contacts/:id/restore", requireRole("admin"), async (context) => {
     const restored = await new WorkspaceRepository(
-      context.env.DB,
+      context.get("database"),
       context.get("workspace"),
     ).restoreContact(context.req.param("id"));
     return restored
@@ -968,10 +970,10 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
     const contactIds = [...new Set(parsed.data.contactIds)];
     const placeholders = contactIds.map(() => "?").join(", ");
     const now = new Date().toISOString();
-    let statement: D1PreparedStatement;
+    let statement: DrizzleRawStatement;
     if (parsed.data.action === "archive" || parsed.data.action === "restore") {
       const archived = parsed.data.action === "archive";
-      statement = context.env.DB.prepare(
+      statement = context.get("database").prepare(
         `UPDATE contacts
          SET status = ?, archived_at = ?, updated_at = ?
          WHERE workspace_id = ? AND id IN (${placeholders})`,
@@ -983,7 +985,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
         ...contactIds,
       );
     } else if (parsed.data.action === "add_tag") {
-      statement = context.env.DB.prepare(
+      statement = context.get("database").prepare(
         `INSERT OR IGNORE INTO contact_tags (workspace_id, contact_id, tag_id, created_at)
          SELECT c.workspace_id, c.id, t.id, ?
          FROM contacts c JOIN tags t ON t.workspace_id = c.workspace_id
@@ -991,7 +993,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
            AND c.id IN (${placeholders}) AND t.id = ?`,
       ).bind(now, workspaceId, ...contactIds, parsed.data.resourceId);
     } else if (parsed.data.action === "remove_tag") {
-      statement = context.env.DB.prepare(
+      statement = context.get("database").prepare(
         `DELETE FROM contact_tags
          WHERE workspace_id = ? AND contact_id IN (${placeholders}) AND tag_id = ?
            AND EXISTS (
@@ -1001,7 +1003,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
            )`,
       ).bind(workspaceId, ...contactIds, parsed.data.resourceId);
     } else if (parsed.data.action === "add_list") {
-      statement = context.env.DB.prepare(
+      statement = context.get("database").prepare(
         `INSERT INTO contact_list_memberships
          (workspace_id, list_id, contact_id, status, source, created_at, updated_at)
          SELECT c.workspace_id, cl.id, c.id, 'active', 'bulk', ?, ?
@@ -1012,7 +1014,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
          DO UPDATE SET status = 'active', source = 'bulk', updated_at = excluded.updated_at`,
       ).bind(now, now, workspaceId, ...contactIds, parsed.data.resourceId);
     } else {
-      statement = context.env.DB.prepare(
+      statement = context.get("database").prepare(
         `DELETE FROM contact_list_memberships
          WHERE workspace_id = ? AND contact_id IN (${placeholders}) AND list_id = ?
            AND EXISTS (
@@ -1029,7 +1031,7 @@ function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
 
 function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
   api.get("/projects", async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT p.id, p.name, p.description, p.color, p.created_at, p.updated_at,
               COUNT(pi.resource_id) AS item_count
        FROM projects p LEFT JOIN project_items pi
@@ -1052,7 +1054,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
     if (!parsed.success) return validationError(context, parsed.error);
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO projects
        (id, workspace_id, name, description, color, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -1078,7 +1080,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `INSERT OR IGNORE INTO project_items
        (workspace_id, project_id, resource_type, resource_id, created_at)
        SELECT ?, p.id, ?, ?, ? FROM projects p
@@ -1099,7 +1101,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/pages", async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT lp.id, lp.name, lp.slug, lp.status, lp.current_version_id,
               lp.created_at, lp.updated_at, lpv.version, lpv.content_document
        FROM landing_pages lp
@@ -1129,8 +1131,8 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
     const id = uuidv7();
     const versionId = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.batch([
-      context.env.DB.prepare(
+    await context.get("database").batch([
+      context.get("database").prepare(
         `INSERT INTO landing_pages
          (id, workspace_id, name, slug, status, current_version_id, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1144,7 +1146,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
         now,
         now,
       ),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `INSERT INTO landing_page_versions
          (id, workspace_id, page_id, version, content_document, published_at, created_at)
          VALUES (?, ?, ?, 1, ?, ?, ?)`,
@@ -1171,7 +1173,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
-    const page = await context.env.DB.prepare(
+    const page = await context.get("database").prepare(
       `SELECT id, status,
               COALESCE((SELECT MAX(version) FROM landing_page_versions
                         WHERE workspace_id = ? AND page_id = landing_pages.id), 0) AS version
@@ -1185,8 +1187,8 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
     }
     const versionId = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.batch([
-      context.env.DB.prepare(
+    await context.get("database").batch([
+      context.get("database").prepare(
         `INSERT INTO landing_page_versions
          (id, workspace_id, page_id, version, content_document, published_at, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -1199,7 +1201,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
         parsed.data.status === "published" ? now : null,
         now,
       ),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `UPDATE landing_pages
          SET name = ?, slug = ?, status = ?, current_version_id = ?, updated_at = ?
          WHERE workspace_id = ? AND id = ?`,
@@ -1217,7 +1219,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/pages/:id/archive", requireRole("admin"), async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE landing_pages SET status = 'archived', updated_at = ?
        WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
     )
@@ -1233,7 +1235,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/subscription-topics", async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, name, slug, description, is_default, created_at, updated_at
        FROM subscription_topics WHERE workspace_id = ? ORDER BY name`,
     )
@@ -1254,7 +1256,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
     if (!parsed.success) return validationError(context, parsed.error);
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO subscription_topics
        (id, workspace_id, name, slug, description, is_default, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1274,7 +1276,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/webhook-endpoints", requireRole("admin"), async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, name, url, event_types, enabled, created_at, updated_at
        FROM webhook_endpoints WHERE workspace_id = ? ORDER BY updated_at DESC`,
     )
@@ -1301,7 +1303,7 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
     );
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO webhook_endpoints
        (id, workspace_id, name, url, encrypted_secret, event_types, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1322,12 +1324,12 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
 
   api.get("/analytics/campaigns/:id", requireRole("analyst"), async (context) => {
     const workspaceId = context.get("workspace").workspaceId;
-    const [enrollments, deliveries] = await context.env.DB.batch([
-      context.env.DB.prepare(
+    const [enrollments, deliveries] = await context.get("database").batch([
+      context.get("database").prepare(
         `SELECT status, COUNT(*) AS count FROM campaign_enrollments
          WHERE workspace_id = ? AND campaign_id = ? GROUP BY status`,
       ).bind(workspaceId, context.req.param("id")),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT d.status, COUNT(*) AS count FROM deliveries d
          JOIN campaign_enrollments ce
            ON ce.id = d.enrollment_id AND ce.workspace_id = d.workspace_id
@@ -1354,7 +1356,7 @@ const broadcastInputSchema = z.object({
 function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
   api.get("/broadcasts", async (context) => {
     const archived = context.req.query("archived") === "true";
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT b.id, b.name, b.segment_id, b.template_version_id, b.topic_id,
               b.status, b.scheduled_at, b.started_at, b.completed_at,
               b.archived_at, b.created_at, b.updated_at,
@@ -1385,7 +1387,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/broadcasts/:id", async (context) => {
-    const row = await context.env.DB.prepare(
+    const row = await context.get("database").prepare(
       `SELECT b.id, b.name, b.segment_id, b.template_version_id, b.topic_id,
               b.status, b.scheduled_at, b.started_at, b.completed_at,
               b.archived_at, b.created_at, b.updated_at,
@@ -1428,7 +1430,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
     const workspace = context.get("workspace");
     if (
       !(await hasValidBroadcastResources(
-        context.env.DB,
+        context.get("database"),
         workspace.workspaceId,
         parsed.data.segmentId,
         parsed.data.templateVersionId,
@@ -1443,7 +1445,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
     }
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO broadcasts
        (id, workspace_id, name, segment_id, template_version_id, topic_id,
         status, scheduled_at, created_at, updated_at)
@@ -1471,7 +1473,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
     const workspaceId = context.get("workspace").workspaceId;
     if (
       !(await hasValidBroadcastResources(
-        context.env.DB,
+        context.get("database"),
         workspaceId,
         parsed.data.segmentId,
         parsed.data.templateVersionId,
@@ -1485,7 +1487,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
       );
     }
     const now = new Date().toISOString();
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE broadcasts
        SET name = ?, segment_id = ?, template_version_id = ?, topic_id = ?,
            status = ?, scheduled_at = ?, updated_at = ?
@@ -1516,7 +1518,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
 
   api.post("/broadcasts/:id/start", requireRole("marketer"), async (context) => {
     const workspace = context.get("workspace");
-    const resend = await context.env.DB.prepare(
+    const resend = await context.get("database").prepare(
       `SELECT id FROM provider_configs
        WHERE workspace_id = ? AND provider = 'resend' AND enabled = 1
        LIMIT 1`,
@@ -1532,7 +1534,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
       );
     }
     const now = new Date().toISOString();
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE broadcasts SET status = 'sending', started_at = COALESCE(started_at, ?),
        updated_at = ? WHERE workspace_id = ? AND id = ?
        AND archived_at IS NULL AND status IN ('draft', 'scheduled')`,
@@ -1556,7 +1558,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
 
   api.post("/broadcasts/:id/archive", requireRole("marketer"), async (context) => {
     const now = new Date().toISOString();
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE broadcasts
        SET status = CASE WHEN status IN ('draft', 'scheduled') THEN 'cancelled' ELSE status END,
            archived_at = ?, updated_at = ?
@@ -1582,7 +1584,7 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
 }
 
 async function hasValidBroadcastResources(
-  database: D1Database,
+  database: KaenmaDatabase,
   workspaceId: string,
   segmentId: string,
   templateVersionId: string,
@@ -1605,7 +1607,7 @@ async function hasValidBroadcastResources(
 function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
   api.get("/segments", async (context) => {
     const workspace = context.get("workspace");
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, name, slug, kind, filter_ast, member_count, evaluated_at, created_at, updated_at
        FROM segments WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
     )
@@ -1629,7 +1631,7 @@ function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
     const workspace = context.get("workspace");
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO segments
        (id, workspace_id, name, slug, kind, filter_ast, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1646,14 +1648,14 @@ function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
       )
       .run();
     if (parsed.data.kind === "dynamic") {
-      await refreshSegmentMemberships(context.env.DB, workspace.workspaceId, id);
+      await refreshSegmentMemberships(context.get("database"), workspace.workspaceId, id);
     }
     return context.json({ data: { id, ...parsed.data, createdAt: now, updatedAt: now } }, 201);
   });
 
   api.post("/segments/:id/refresh", requireRole("marketer"), async (context) => {
     const refreshed = await refreshSegmentMemberships(
-      context.env.DB,
+      context.get("database"),
       context.get("workspace").workspaceId,
       context.req.param("id"),
     );
@@ -1668,7 +1670,7 @@ function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
     if (!parsed.success) return validationError(context, parsed.error);
     const workspace = context.get("workspace");
     const compiled = compileSegmentFilter(workspace.workspaceId, parsed.data);
-    const result = await context.env.DB.prepare(`${compiled.sql} ORDER BY c.id DESC LIMIT ?`)
+    const result = await context.get("database").prepare(`${compiled.sql} ORDER BY c.id DESC LIMIT ?`)
       .bind(...compiled.params, 100)
       .all();
     return context.json({
@@ -1690,7 +1692,7 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
   api.get("/email-templates", async (context) => {
     const workspace = context.get("workspace");
     const archived = context.req.query("archived") === "true";
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT et.id, et.name, et.purpose, et.status, et.current_version_id,
               et.created_at, et.updated_at, ev.version, ev.subject,
               ev.preview_text
@@ -1707,7 +1709,7 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/email-templates/:id", async (context) => {
-    const row = await context.env.DB.prepare(
+    const row = await context.get("database").prepare(
       `SELECT et.id, et.name, et.purpose, et.status, et.current_version_id,
               et.created_at, et.updated_at, ev.version, ev.subject,
               ev.preview_text, ev.content_document
@@ -1747,12 +1749,12 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
       contact: {},
       workspace: {},
       message: await readMessageVariableValues(
-        context.env.DB,
+        context.get("database"),
         workspace.workspaceId,
       ),
     });
-    await context.env.DB.batch([
-      context.env.DB.prepare(
+    await context.get("database").batch([
+      context.get("database").prepare(
         `INSERT INTO email_templates
          (id, workspace_id, name, purpose, status, current_version_id, created_at, updated_at)
          VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
@@ -1765,7 +1767,7 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
         now,
         now,
       ),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `INSERT INTO email_template_versions
          (id, workspace_id, template_id, version, subject, preview_text,
           content_document, html, text, created_at)
@@ -1789,7 +1791,7 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
     const parsed = emailTemplateInputSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
-    const template = await context.env.DB.prepare(
+    const template = await context.get("database").prepare(
       `SELECT id, status FROM email_templates
        WHERE workspace_id = ? AND id = ?`,
     )
@@ -1811,7 +1813,7 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
         "アーカイブ済みのテンプレートは編集できません",
       );
     }
-    const latest = await context.env.DB.prepare(
+    const latest = await context.get("database").prepare(
       `SELECT COALESCE(MAX(version), 0) AS version
        FROM email_template_versions WHERE workspace_id = ? AND template_id = ?`,
     )
@@ -1822,10 +1824,10 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
     const rendered = renderContent(parsed.data.content, {
       contact: {},
       workspace: {},
-      message: await readMessageVariableValues(context.env.DB, workspaceId),
+      message: await readMessageVariableValues(context.get("database"), workspaceId),
     });
-    await context.env.DB.batch([
-      context.env.DB.prepare(
+    await context.get("database").batch([
+      context.get("database").prepare(
         `INSERT INTO email_template_versions
          (id, workspace_id, template_id, version, subject, preview_text,
           content_document, html, text, created_at)
@@ -1842,7 +1844,7 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
         rendered.text,
         now,
       ),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `UPDATE email_templates
          SET name = ?, purpose = ?, status = 'draft', current_version_id = ?,
              updated_at = ?
@@ -1864,7 +1866,7 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
     requireRole("marketer"),
     async (context) => {
       const now = new Date().toISOString();
-      const result = await context.env.DB.prepare(
+      const result = await context.get("database").prepare(
         `UPDATE email_templates SET status = 'archived', updated_at = ?
          WHERE workspace_id = ? AND id = ? AND status <> 'archived'`,
       )
@@ -1904,7 +1906,7 @@ const messageVariableInputSchema = z.object({
 function registerMessageVariableRoutes(api: Hono<AppEnvironment>): void {
   api.get("/message-variables", async (context) => {
     const archived = context.req.query("archived") === "true";
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, key, name, value, description, archived_at, created_at, updated_at
        FROM message_variables
        WHERE workspace_id = ?
@@ -1922,7 +1924,7 @@ function registerMessageVariableRoutes(api: Hono<AppEnvironment>): void {
     const now = new Date().toISOString();
     try {
       const id = uuidv7();
-      await context.env.DB.prepare(
+      await context.get("database").prepare(
         `INSERT INTO message_variables
          (id, workspace_id, key, name, value, description, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -1959,7 +1961,7 @@ function registerMessageVariableRoutes(api: Hono<AppEnvironment>): void {
       );
       if (!parsed.success) return validationError(context, parsed.error);
       try {
-        const result = await context.env.DB.prepare(
+        const result = await context.get("database").prepare(
           `UPDATE message_variables
            SET key = ?, name = ?, value = ?, description = ?, updated_at = ?
            WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
@@ -1999,7 +2001,7 @@ function registerMessageVariableRoutes(api: Hono<AppEnvironment>): void {
     requireRole("marketer"),
     async (context) => {
       const now = new Date().toISOString();
-      const result = await context.env.DB.prepare(
+      const result = await context.get("database").prepare(
         `UPDATE message_variables SET archived_at = ?, updated_at = ?
          WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
       )
@@ -2023,7 +2025,7 @@ function registerMessageVariableRoutes(api: Hono<AppEnvironment>): void {
 }
 
 async function readMessageVariableValues(
-  database: D1Database,
+  database: KaenmaDatabase,
   workspaceId: string,
 ): Promise<Record<string, unknown>> {
   const result = await database
@@ -2040,7 +2042,7 @@ async function readMessageVariableValues(
 
 function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   api.get("/campaigns", async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, name, description, status, draft_version_id, published_version_id,
               created_at, updated_at
        FROM campaigns WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
@@ -2057,8 +2059,8 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     const id = uuidv7();
     const versionId = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.batch([
-      context.env.DB.prepare(
+    await context.get("database").batch([
+      context.get("database").prepare(
         `INSERT INTO campaigns
          (id, workspace_id, name, description, status, draft_version_id, created_at, updated_at)
          VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
@@ -2071,7 +2073,7 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
         now,
         now,
       ),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `INSERT INTO campaign_versions
          (id, workspace_id, campaign_id, version, status, timezone, graph, created_at)
          VALUES (?, ?, ?, 1, 'draft', ?, ?, ?)`,
@@ -2088,7 +2090,7 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/campaigns/:id/draft", async (context) => {
-    const row = await context.env.DB.prepare(
+    const row = await context.get("database").prepare(
       `SELECT cv.id, cv.version, cv.graph
        FROM campaigns c
        JOIN campaign_versions cv ON cv.id = c.draft_version_id
@@ -2105,7 +2107,7 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   api.put("/campaigns/:id/draft", requireRole("marketer"), async (context) => {
     const parsed = campaignDefinitionSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE campaign_versions SET timezone = ?, graph = ?
        WHERE workspace_id = ? AND id = (
          SELECT draft_version_id FROM campaigns WHERE workspace_id = ? AND id = ?
@@ -2122,7 +2124,7 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     if (result.meta.changes === 0) {
       return apiError(context, 404, "campaign_not_found", "編集可能な下書きが見つかりません");
     }
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       "UPDATE campaigns SET name = ?, description = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
     )
       .bind(
@@ -2138,7 +2140,7 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
 
   api.post("/campaigns/:id/publish", requireRole("marketer"), async (context) => {
     const workspace = context.get("workspace");
-    const row = await context.env.DB.prepare(
+    const row = await context.get("database").prepare(
       `SELECT c.draft_version_id, cv.version, cv.graph
        FROM campaigns c JOIN campaign_versions cv
          ON cv.id = c.draft_version_id AND cv.workspace_id = c.workspace_id
@@ -2155,12 +2157,12 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     }
     const nextDraftId = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.batch([
-      context.env.DB.prepare(
+    await context.get("database").batch([
+      context.get("database").prepare(
         `UPDATE campaign_versions SET status = 'published', published_at = ?
          WHERE workspace_id = ? AND id = ? AND status = 'draft'`,
       ).bind(now, workspace.workspaceId, row.draft_version_id),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `INSERT INTO campaign_versions
          (id, workspace_id, campaign_id, version, status, timezone, graph, created_at)
          VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
@@ -2173,7 +2175,7 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
         row.graph,
         now,
       ),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `UPDATE campaigns SET status = 'active', published_version_id = ?,
          draft_version_id = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`,
       ).bind(
@@ -2195,7 +2197,7 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspace = context.get("workspace");
-    const campaign = await context.env.DB.prepare(
+    const campaign = await context.get("database").prepare(
       `SELECT c.published_version_id, cv.graph
        FROM campaigns c JOIN campaign_versions cv
          ON cv.id = c.published_version_id AND cv.workspace_id = c.workspace_id
@@ -2215,8 +2217,8 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
       parsed.data.sourceEventId ?? context.req.header("idempotency-key") ?? uuidv7();
     const now = new Date().toISOString();
     try {
-      await context.env.DB.batch([
-        context.env.DB.prepare(
+      await context.get("database").batch([
+        context.get("database").prepare(
           `INSERT INTO campaign_enrollments
            (id, workspace_id, campaign_id, campaign_version_id, contact_id,
             source_event_id, status, current_node_id, entered_at, updated_at)
@@ -2232,7 +2234,7 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
           now,
           now,
         ),
-        context.env.DB.prepare(
+        context.get("database").prepare(
           `INSERT INTO campaign_jobs
            (id, workspace_id, enrollment_id, campaign_version_id, node_id,
             recipient_id, idempotency_key, status, due_at, created_at, updated_at)
@@ -2277,7 +2279,7 @@ function registerFormRoutes(api: Hono<AppEnvironment>): void {
     .max(50);
 
   api.get("/forms", async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT f.id, f.name, f.slug, f.status, f.version, f.definition,
               f.allowed_domains, f.turnstile_enabled, f.success_message,
               f.created_at, f.updated_at,
@@ -2309,7 +2311,7 @@ function registerFormRoutes(api: Hono<AppEnvironment>): void {
     if (!parsed.success) return validationError(context, parsed.error);
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO forms
        (id, workspace_id, name, slug, status, definition, allowed_domains,
         turnstile_enabled, success_message, created_at, updated_at)
@@ -2345,7 +2347,7 @@ function registerFormRoutes(api: Hono<AppEnvironment>): void {
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE forms
        SET name = ?, slug = ?, status = ?, version = version + 1,
            definition = ?, allowed_domains = ?, turnstile_enabled = ?,
@@ -2371,7 +2373,7 @@ function registerFormRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/forms/:id/archive", requireRole("admin"), async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE forms SET status = 'archived', updated_at = ?
        WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
     )
@@ -2403,7 +2405,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/site-messages", async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, name, status, headline, body, cta_label, cta_url,
               page_pattern, starts_at, ends_at, impression_count, click_count,
               created_at, updated_at
@@ -2421,7 +2423,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
     if (!parsed.success) return validationError(context, parsed.error);
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO site_messages
        (id, workspace_id, name, status, headline, body, cta_label, cta_url,
         page_pattern, starts_at, ends_at, created_at, updated_at)
@@ -2449,7 +2451,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
   api.patch("/site-messages/:id", requireRole("marketer"), async (context) => {
     const parsed = messageInputSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE site_messages
        SET name = ?, status = ?, headline = ?, body = ?, cta_label = ?,
            cta_url = ?, page_pattern = ?, starts_at = ?, ends_at = ?, updated_at = ?
@@ -2477,7 +2479,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
 
   api.post("/site-messages/:id/archive", requireRole("admin"), async (context) => {
     const now = new Date().toISOString();
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `UPDATE site_messages
        SET status = 'archived', archived_at = ?, updated_at = ?
        WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
@@ -2497,7 +2499,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
   api.get("/site-tracking", async (context) => {
     const workspace = context.get("workspace");
     const [settings, summary, topPages, recentEvents, organization] = await Promise.all([
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT enabled, allowed_domains, consent_mode, created_at, updated_at
          FROM site_tracking_settings WHERE workspace_id = ?`,
       )
@@ -2509,7 +2511,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
           created_at: string;
           updated_at: string;
         }>(),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT COUNT(*) AS page_views,
                 COUNT(DISTINCT visitor_id) AS unique_visitors,
                 COUNT(DISTINCT contact_id) AS identified_contacts
@@ -2523,7 +2525,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
           unique_visitors: number;
           identified_contacts: number;
         }>(),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT resource_id AS url, COUNT(*) AS views
          FROM contact_events
          WHERE workspace_id = ? AND type = 'page_viewed'
@@ -2533,7 +2535,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
       )
         .bind(workspace.workspaceId)
         .all(),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT visitor_id, contact_id, resource_id, properties, occurred_at
          FROM contact_events
          WHERE workspace_id = ? AND type = 'page_viewed'
@@ -2541,7 +2543,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
       )
         .bind(workspace.workspaceId)
         .all(),
-      context.env.DB.prepare("SELECT slug FROM organization WHERE id = ?")
+      context.get("database").prepare("SELECT slug FROM organization WHERE id = ?")
         .bind(workspace.workspaceId)
         .first<{ slug: string }>(),
     ]);
@@ -2592,7 +2594,7 @@ function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
       );
     }
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO site_tracking_settings
        (workspace_id, enabled, allowed_domains, consent_mode, created_at, updated_at)
        VALUES (?, ?, ?, 'required', ?, ?)
@@ -2633,7 +2635,7 @@ function registerAssetRoutes(api: Hono<AppEnvironment>): void {
       sha256: checksum,
     });
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO assets
        (id, workspace_id, name, r2_key, content_type, size, checksum, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -2655,7 +2657,7 @@ function registerAssetRoutes(api: Hono<AppEnvironment>): void {
 
   api.get("/assets/:id", async (context) => {
     const workspace = context.get("workspace");
-    const row = await context.env.DB.prepare(
+    const row = await context.get("database").prepare(
       "SELECT r2_key, content_type, name FROM assets WHERE workspace_id = ? AND id = ?",
     )
       .bind(workspace.workspaceId, context.req.param("id"))
@@ -2725,7 +2727,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
       { httpMetadata: { contentType: "application/json" } },
     );
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO import_jobs
        (id, workspace_id, kind, r2_key, status, cursor, created_at, updated_at)
        VALUES (?, ?, 'contact_import', ?, 'pending', ?, ?, ?)`,
@@ -2747,7 +2749,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
         totalParts: parts.length,
       });
     } else {
-      await context.env.DB.prepare(
+      await context.get("database").prepare(
         "UPDATE import_jobs SET status = 'completed', updated_at = ? WHERE id = ?",
       )
         .bind(now, jobId)
@@ -2761,7 +2763,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
     const jobId = uuidv7();
     const key = `${workspace.workspaceId}/exports/contacts-${jobId}.csv`;
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO import_jobs
        (id, workspace_id, kind, r2_key, status, cursor, created_at, updated_at)
        VALUES (?, ?, 'contact_export', ?, 'pending', ?, ?, ?)`,
@@ -2783,7 +2785,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/data-jobs/:id", requireRole("analyst"), async (context) => {
-    const row = await context.env.DB.prepare(
+    const row = await context.get("database").prepare(
       `SELECT id, kind, status, processed, succeeded, failed, r2_key,
               error_manifest_key, created_at, updated_at
        FROM import_jobs WHERE workspace_id = ? AND id = ?`,
@@ -2796,7 +2798,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/data-jobs/:id/download", requireRole("analyst"), async (context) => {
-    const row = await context.env.DB.prepare(
+    const row = await context.get("database").prepare(
       `SELECT r2_key, status FROM import_jobs
        WHERE workspace_id = ? AND id = ? AND kind = 'contact_export'`,
     )
@@ -2817,20 +2819,20 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
 
   api.get("/dashboard", async (context) => {
     const workspaceId = context.get("workspace").workspaceId;
-    const batch = await context.env.DB.batch([
-      context.env.DB.prepare(
+    const batch = await context.get("database").batch([
+      context.get("database").prepare(
         "SELECT COUNT(*) AS count FROM contacts WHERE workspace_id = ? AND status = 'active'",
       ).bind(workspaceId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         "SELECT COUNT(*) AS count FROM campaigns WHERE workspace_id = ? AND status = 'active'",
       ).bind(workspaceId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT COUNT(*) AS sent,
           SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
           SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
          FROM deliveries WHERE workspace_id = ? AND created_at >= datetime('now', '-30 day')`,
       ).bind(workspaceId),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `SELECT type, occurred_at, contact_id, properties FROM contact_events
          WHERE workspace_id = ? ORDER BY occurred_at DESC LIMIT 20`,
       ).bind(workspaceId),
@@ -2863,7 +2865,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
     const secret = randomString(40);
     const token = `kaenma_${prefix}_${secret}`;
     const id = uuidv7();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO api_keys
        (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, expires_at, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -2901,7 +2903,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
       },
     );
     const now = new Date().toISOString();
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO provider_configs
        (id, workspace_id, provider, name, encrypted_credentials, settings, created_at, updated_at)
        VALUES (?, ?, 'resend', ?, ?, ?, ?, ?)
@@ -2925,7 +2927,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/dead-letters", requireRole("admin"), async (context) => {
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, source_queue, error, attempts, status, created_at, replayed_at
        FROM dead_letters WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 100`,
     )
@@ -2935,7 +2937,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/dead-letters/:id/replay", requireRole("admin"), async (context) => {
-    const row = await context.env.DB.prepare(
+    const row = await context.get("database").prepare(
       `SELECT id, source_queue, message_body FROM dead_letters
        WHERE workspace_id = ? AND id = ? AND status = 'pending'`,
     )
@@ -2948,7 +2950,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
     } else {
       await context.env.DELIVERY_QUEUE.send(body);
     }
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       "UPDATE dead_letters SET status = 'replayed', replayed_at = ? WHERE id = ? AND status = 'pending'",
     )
       .bind(new Date().toISOString(), row.id)
@@ -2959,7 +2961,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
 
 function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/p/:workspaceSlug/:pageSlug", async (context) => {
-    const page = await context.env.DB.prepare(
+    const page = await context.get("database").prepare(
       `SELECT lpv.content_document, o.name AS workspace_name
        FROM landing_pages lp
        JOIN organization o ON o.id = lp.workspace_id
@@ -2984,7 +2986,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get(
     "/api/public/forms/:workspaceSlug/:formSlug/embed.js",
     async (context) => {
-      const form = await context.env.DB.prepare(
+      const form = await context.get("database").prepare(
         `SELECT f.name, f.definition
          FROM forms f JOIN organization o ON o.id = f.workspace_id
          WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
@@ -3021,7 +3023,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
   );
 
   publicApp.get("/f/:workspaceSlug/:formSlug", async (context) => {
-    const form = await context.env.DB.prepare(
+    const form = await context.get("database").prepare(
       `SELECT f.name, f.definition, f.allowed_domains
        FROM forms f JOIN organization o ON o.id = f.workspace_id
        WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
@@ -3054,7 +3056,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
   });
 
   publicApp.post("/f/:workspaceSlug/:formSlug", async (context) => {
-    const form = await context.env.DB.prepare(
+    const form = await context.get("database").prepare(
       `SELECT f.id, f.workspace_id, f.allowed_domains, f.turnstile_enabled, f.success_message
        FROM forms f JOIN organization o ON o.id = f.workspace_id
        WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
@@ -3103,14 +3105,14 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     const now = new Date().toISOString();
     let contactId: string | null = null;
     if (email && z.email().safeParse(email).success) {
-      const existing = await context.env.DB.prepare(
+      const existing = await context.get("database").prepare(
         "SELECT id FROM contacts WHERE workspace_id = ? AND email = ?",
       )
         .bind(form.workspace_id, email)
         .first<{ id: string }>();
       contactId = existing?.id ?? uuidv7();
       if (existing) {
-        await context.env.DB.prepare(
+        await context.get("database").prepare(
           `UPDATE contacts SET first_name = COALESCE(?, first_name),
            last_name = COALESCE(?, last_name), phone = COALESCE(?, phone),
            updated_at = ?
@@ -3126,7 +3128,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
           )
           .run();
       } else {
-        await context.env.DB.prepare(
+        await context.get("database").prepare(
           `INSERT INTO contacts
            (id, workspace_id, email, first_name, last_name, phone, stage, score,
             status, custom_fields, created_at, updated_at)
@@ -3146,8 +3148,8 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
       }
     }
     try {
-      await context.env.DB.batch([
-        context.env.DB.prepare(
+      await context.get("database").batch([
+        context.get("database").prepare(
           `INSERT INTO form_submissions
            (id, workspace_id, form_id, contact_id, idempotency_key, payload, ip_hash, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -3161,7 +3163,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
           await hashIp(context.req.header("cf-connecting-ip")),
           now,
         ),
-        context.env.DB.prepare(
+        context.get("database").prepare(
           `INSERT INTO contact_events
            (id, workspace_id, contact_id, type, resource_type, resource_id,
             properties, occurred_at, created_at)
@@ -3205,7 +3207,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
 
   publicApp.post("/api/public/track/:workspaceSlug", async (context) => {
     const workspace = await loadPublicTrackingWorkspace(
-      context.env.DB,
+      context.get("database"),
       context.req.param("workspaceSlug"),
     );
     if (!workspace) {
@@ -3231,14 +3233,14 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     const visitorId = parsed.data.visitorId ?? crypto.randomUUID();
     const now = new Date().toISOString();
     const contact = parsed.data.email
-      ? await context.env.DB.prepare(
+      ? await context.get("database").prepare(
           `SELECT id FROM contacts
            WHERE workspace_id = ? AND email = ? AND status != 'archived'`,
         )
           .bind(workspace.id, parsed.data.email.toLowerCase())
           .first<{ id: string }>()
       : null;
-    await context.env.DB.prepare(
+    await context.get("database").prepare(
       `INSERT INTO contact_events
        (id, workspace_id, contact_id, visitor_id, type, resource_type,
         resource_id, properties, occurred_at, created_at)
@@ -3271,7 +3273,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
 
   publicApp.get("/api/public/site-messages/:workspaceSlug", async (context) => {
     const workspace = await loadPublicTrackingWorkspace(
-      context.env.DB,
+      context.get("database"),
       context.req.param("workspaceSlug"),
     );
     const visitorId = context.req.query("visitorId");
@@ -3283,7 +3285,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     if (origin && !originAllowed(origin, workspace.allowedDomains)) {
       return context.json({ data: [] });
     }
-    const identity = await context.env.DB.prepare(
+    const identity = await context.get("database").prepare(
       `SELECT contact_id FROM contact_events
        WHERE workspace_id = ? AND visitor_id = ? AND contact_id IS NOT NULL
        ORDER BY occurred_at DESC LIMIT 1`,
@@ -3291,7 +3293,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
       .bind(workspace.id, visitorId)
       .first<{ contact_id: string }>();
     if (!identity) return context.json({ data: [] });
-    const result = await context.env.DB.prepare(
+    const result = await context.get("database").prepare(
       `SELECT id, headline, body, cta_label, cta_url, page_pattern
        FROM site_messages
        WHERE workspace_id = ? AND status = 'published'
@@ -3319,7 +3321,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     "/api/public/site-messages/:workspaceSlug/:messageId/events",
     async (context) => {
       const workspace = await loadPublicTrackingWorkspace(
-        context.env.DB,
+        context.get("database"),
         context.req.param("workspaceSlug"),
       );
       if (!workspace) return context.json({ data: { accepted: false } }, 202);
@@ -3334,7 +3336,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
         })
         .safeParse(await safeJson(context));
       if (!parsed.success) return context.json({ data: { accepted: false } }, 202);
-      const identity = await context.env.DB.prepare(
+      const identity = await context.get("database").prepare(
         `SELECT contact_id FROM contact_events
          WHERE workspace_id = ? AND visitor_id = ? AND contact_id IS NOT NULL
          ORDER BY occurred_at DESC LIMIT 1`,
@@ -3346,7 +3348,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
       const messageId = context.req.param("messageId");
       const counter =
         parsed.data.type === "impression" ? "impression_count" : "click_count";
-      const result = await context.env.DB.prepare(
+      const result = await context.get("database").prepare(
         `UPDATE site_messages SET ${counter} = ${counter} + 1, updated_at = updated_at
          WHERE workspace_id = ? AND id = ? AND status = 'published'`,
       )
@@ -3355,7 +3357,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
       if (result.meta.changes !== 1) {
         return context.json({ data: { accepted: false } }, 202);
       }
-      await context.env.DB.prepare(
+      await context.get("database").prepare(
         `INSERT INTO contact_events
          (id, workspace_id, contact_id, visitor_id, type, resource_type,
           resource_id, properties, occurred_at, created_at)
@@ -3386,7 +3388,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     );
     if (payload) {
       context.executionCtx.waitUntil(
-        context.env.DB.prepare(
+        context.get("database").prepare(
           `INSERT INTO contact_events
            (id, workspace_id, contact_id, type, resource_type, resource_id,
             properties, occurred_at, created_at)
@@ -3422,13 +3424,13 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
       return apiError(context, 400, "invalid_unsubscribe_token", "解除リンクが無効です");
     }
     const now = new Date().toISOString();
-    await context.env.DB.batch([
-      context.env.DB.prepare(
+    await context.get("database").batch([
+      context.get("database").prepare(
         `INSERT OR IGNORE INTO suppressions
          (id, workspace_id, contact_id, reason, created_at)
          VALUES (?, ?, ?, 'global_unsubscribe', ?)`,
       ).bind(uuidv7(), payload.workspaceId, payload.contactId, now),
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `INSERT INTO consent_events
          (id, workspace_id, contact_id, action, source, created_at)
          VALUES (?, ?, ?, 'unsubscribed', 'one_click', ?)`,
@@ -3452,7 +3454,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     if (!payload?.contactId) {
       return apiError(context, 400, "invalid_preference_token", "設定リンクが無効です");
     }
-    const topics = await context.env.DB.prepare(
+    const topics = await context.get("database").prepare(
       `SELECT st.id, st.name, st.description,
               COALESCE(cs.status, 'unsubscribed') AS status
        FROM subscription_topics st
@@ -3462,7 +3464,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     )
       .bind(payload.contactId, payload.workspaceId)
       .all<{ id: string; name: string; description: string; status: string }>();
-    const globalSuppression = await context.env.DB.prepare(
+    const globalSuppression = await context.get("database").prepare(
       `SELECT id FROM suppressions
        WHERE workspace_id = ? AND contact_id = ? AND reason = 'global_unsubscribe' LIMIT 1`,
     )
@@ -3499,14 +3501,14 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     const selected = new Set(
       form.getAll("topic").filter((value): value is string => typeof value === "string"),
     );
-    const topics = await context.env.DB.prepare(
+    const topics = await context.get("database").prepare(
       "SELECT id FROM subscription_topics WHERE workspace_id = ?",
     )
       .bind(payload.workspaceId)
       .all<{ id: string }>();
     const now = new Date().toISOString();
     const statements = topics.results.map((topic) =>
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `INSERT INTO contact_subscriptions
          (workspace_id, contact_id, topic_id, status, source, updated_at)
          VALUES (?, ?, ?, ?, 'preference_center', ?)
@@ -3523,7 +3525,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     );
     if (form.get("globalStop")) {
       statements.push(
-        context.env.DB.prepare(
+        context.get("database").prepare(
           `INSERT OR IGNORE INTO suppressions
            (id, workspace_id, contact_id, reason, created_at)
            VALUES (?, ?, ?, 'global_unsubscribe', ?)`,
@@ -3531,14 +3533,14 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
       );
     } else {
       statements.push(
-        context.env.DB.prepare(
+        context.get("database").prepare(
           `DELETE FROM suppressions
            WHERE workspace_id = ? AND contact_id = ? AND reason = 'global_unsubscribe'`,
         ).bind(payload.workspaceId, payload.contactId),
       );
     }
     statements.push(
-      context.env.DB.prepare(
+      context.get("database").prepare(
         `INSERT INTO consent_events
          (id, workspace_id, contact_id, action, source, proof, created_at)
          VALUES (?, ?, ?, ?, 'preference_center', ?, ?)`,
@@ -3551,7 +3553,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
         now,
       ),
     );
-    await context.env.DB.batch(statements);
+    await context.get("database").batch(statements);
     return context.html(
       '<!doctype html><html lang="ja"><meta charset="utf-8"><body><main><h1>設定を保存しました</h1><p>変更は次回の送信判定から反映されます。</p></main></body></html>',
     );
@@ -3575,7 +3577,7 @@ export async function buildReplyAddress(
 }
 
 async function attachContactRelations(
-  database: D1Database,
+  database: KaenmaDatabase,
   workspaceId: string,
   contacts: Contact[],
 ): Promise<
@@ -3690,7 +3692,7 @@ async function attachContactRelations(
 }
 
 async function updateSegmentMemberCount(
-  database: D1Database,
+  database: KaenmaDatabase,
   workspaceId: string,
   segmentId: string,
 ): Promise<void> {
@@ -3707,7 +3709,7 @@ async function updateSegmentMemberCount(
 }
 
 async function refreshSegmentMemberships(
-  database: D1Database,
+  database: KaenmaDatabase,
   workspaceId: string,
   segmentId: string,
 ): Promise<boolean> {
@@ -3850,7 +3852,7 @@ function isValidDomain(value: string): boolean {
 }
 
 async function loadPublicTrackingWorkspace(
-  database: D1Database,
+  database: KaenmaDatabase,
   workspaceSlug: string,
 ): Promise<{ id: string; allowedDomains: string[] } | null> {
   const row = await database.prepare(

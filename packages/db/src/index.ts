@@ -1,2 +1,3 @@
-export * from "./auth-schema";
+export * from "./client";
 export * from "./repository";
+export * from "./schema";

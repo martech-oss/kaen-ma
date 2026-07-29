@@ -1,3 +1,4 @@
+import type { KaenmaDatabase } from "@kaenma/db";
 import type { WorkspaceContext } from "@kaenma/shared";
 
 export interface RuntimeSecrets {
@@ -26,6 +27,7 @@ export interface SessionValue {
 }
 
 export interface AppVariables {
+  database: KaenmaDatabase;
   requestId: string;
   workspace: WorkspaceContext;
   session: SessionValue | null;

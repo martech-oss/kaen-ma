@@ -1,5 +1,9 @@
 import { timingSafeEqual } from "@kaenma/channels";
-import { resolveMemberContext } from "@kaenma/db";
+import {
+  createDatabase,
+  resolveMemberContext,
+  type KaenmaDatabase,
+} from "@kaenma/db";
 import type { WorkspaceRole } from "@kaenma/shared";
 import { createMiddleware } from "hono/factory";
 import { createAuth } from "./auth";
@@ -16,6 +20,7 @@ const roleRank: Record<WorkspaceRole, number> = {
 
 export const requestContext = createMiddleware<AppEnvironment>(async (context, next) => {
   const requestId = context.req.header("cf-ray") ?? crypto.randomUUID();
+  context.set("database", createDatabase(context.env.DB));
   context.set("requestId", requestId);
   await next();
   context.header("X-Request-Id", requestId);
@@ -33,12 +38,12 @@ export const requestContext = createMiddleware<AppEnvironment>(async (context, n
 export const requireWorkspace = createMiddleware<AppEnvironment>(async (context, next) => {
   const bearer = context.req.header("authorization");
   if (bearer?.startsWith("Bearer ")) {
-    const apiContext = await resolveApiKey(context.env.DB, bearer.slice(7));
+    const apiContext = await resolveApiKey(context.get("database"), bearer.slice(7));
     if (!apiContext) return apiError(context, 401, "invalid_api_key", "APIキーが無効です");
     context.set("workspace", apiContext);
     context.set("session", null);
     context.executionCtx.waitUntil(
-      context.env.DB.prepare("UPDATE api_keys SET last_used_at = ? WHERE id = ?")
+      context.get("database").prepare("UPDATE api_keys SET last_used_at = ? WHERE id = ?")
         .bind(new Date().toISOString(), apiContext.apiKeyId)
         .run()
         .then(() => undefined),
@@ -64,7 +69,7 @@ export const requireWorkspace = createMiddleware<AppEnvironment>(async (context,
     session.session.activeOrganizationId ??
     null;
   const workspace = await resolveMemberContext(
-    context.env.DB,
+    context.get("database"),
     session.user.id,
     requestedOrganizationId,
   );
@@ -114,7 +119,7 @@ export function apiError(
   );
 }
 
-async function resolveApiKey(database: D1Database, token: string) {
+async function resolveApiKey(database: KaenmaDatabase, token: string) {
   const match = token.match(/^kaenma_([A-Za-z0-9]{12})_([A-Za-z0-9-]{20,})$/);
   if (!match) return null;
   const prefix = match[1];

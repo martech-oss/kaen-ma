@@ -60,7 +60,7 @@ packages/
   channels/              Cloudflare、Resend、Webhook adapter
   core/                  Segment、Campaign、Consent、Schedule
   create-kaenma/         Setup、doctor、backup、update CLI
-  db/                    D1 migration、Better Auth schema、repository
+  db/                    Drizzle schema/client、D1 migration、repository
   email-renderer/        安全なHTML/Text renderer
   mcp-server/            Kaenma MCP server
   sdk/                   TypeScript SDK
@@ -109,6 +109,18 @@ RESEND_WEBHOOK_SECRET=任意
 ```bash
 pnpm db:migrate:local
 ```
+
+アプリケーションからのDBアクセスは`@kaenma/db`のDrizzle clientへ統一しています。
+テーブル定義は`packages/db/src/auth-schema.ts`と
+`packages/db/src/business-schema.ts`が正本です。スキーマ変更時は次のコマンドで
+Drizzle Kitの差分SQLを生成してレビューできます。
+
+```bash
+pnpm db:generate
+```
+
+既存環境とのmigration履歴互換性を維持するため、Wranglerが実際に適用する連番SQLは
+引き続き`packages/db/migrations`へ配置します。
 
 ### 4. 起動
 

@@ -1,4 +1,4 @@
-import { uuidv7 } from "@kaenma/db";
+import { createDatabase, uuidv7 } from "@kaenma/db";
 import PostalMime from "postal-mime";
 import { verifySignedToken } from "./crypto";
 import type { RuntimeEnv } from "./env";
@@ -27,7 +27,7 @@ export async function email(
     message.setReject("Reply address is invalid or expired");
     return;
   }
-  const delivery = await env.DB.prepare(
+  const delivery = await createDatabase(env.DB).prepare(
     `SELECT id FROM deliveries
      WHERE workspace_id = ? AND id = ? AND contact_id = ?`,
   )
@@ -68,8 +68,8 @@ export async function email(
     });
   }
   const eventId = uuidv7();
-  await env.DB.batch([
-    env.DB.prepare(
+  await createDatabase(env.DB).batch([
+    createDatabase(env.DB).prepare(
       `INSERT INTO inbound_emails
        (id, workspace_id, contact_id, delivery_id, message_id, sender, recipient,
         subject, text_body, html_body, attachment_manifest, received_at)
@@ -88,7 +88,7 @@ export async function email(
       JSON.stringify(attachments),
       receivedAt,
     ),
-    env.DB.prepare(
+    createDatabase(env.DB).prepare(
       `INSERT OR IGNORE INTO delivery_events
        (id, workspace_id, delivery_id, provider, provider_event_id,
         type, occurred_at, metadata, created_at)
@@ -102,7 +102,7 @@ export async function email(
       JSON.stringify({ inboundId, subject: parsed.subject ?? "" }),
       receivedAt,
     ),
-    env.DB.prepare(
+    createDatabase(env.DB).prepare(
       `INSERT INTO contact_events
        (id, workspace_id, contact_id, type, resource_type, resource_id,
         properties, occurred_at, created_at)

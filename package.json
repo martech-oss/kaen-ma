@@ -18,6 +18,7 @@
     "test": "pnpm -r --if-present test --passWithNoTests",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "cf:types": "pnpm --filter @kaenma/worker cf:types",
+    "db:generate": "pnpm --filter @kaenma/db db:generate",
     "db:migrate:local": "pnpm --filter @kaenma/worker db:migrate:local",
     "db:migrate:remote": "pnpm --filter @kaenma/worker db:migrate:remote"
   },

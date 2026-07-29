@@ -13,7 +13,13 @@ import {
   outgoingEdges,
   retryDelaySeconds,
 } from "@kaenma/core";
-import { claimDueJobs, uuidv7 } from "@kaenma/db";
+import {
+  claimDueJobs,
+  createDatabase,
+  uuidv7,
+  type DrizzleRawStatement,
+  type KaenmaDatabase,
+} from "@kaenma/db";
 import { renderContent, renderSubject } from "@kaenma/email-renderer";
 import {
   campaignDefinitionSchema,
@@ -106,7 +112,7 @@ export async function scheduled(
   }
   const now = new Date().toISOString();
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();
-  const workspaces = await env.DB.prepare(
+  const workspaces = await createDatabase(env.DB).prepare(
     `SELECT workspace_id, MIN(due_at) AS oldest
      FROM campaign_jobs
      WHERE status = 'pending' AND due_at <= ?
@@ -116,7 +122,7 @@ export async function scheduled(
     .all<{ workspace_id: string }>();
   const messages: Array<{ body: KaenmaQueueMessage }> = [];
   for (const workspace of workspaces.results) {
-    const jobs = await claimDueJobs(env.DB, now, leaseUntil, 20, workspace.workspace_id);
+    const jobs = await claimDueJobs(createDatabase(env.DB), now, leaseUntil, 20, workspace.workspace_id);
     for (const job of jobs) {
       messages.push({
         body: { kind: "campaign_job", jobId: job.id, leaseId: job.leaseId },
@@ -125,7 +131,7 @@ export async function scheduled(
   }
   if (messages.length > 0) await env.CAMPAIGN_QUEUE.sendBatch(messages);
 
-  const scheduledBroadcasts = await env.DB.prepare(
+  const scheduledBroadcasts = await createDatabase(env.DB).prepare(
     `SELECT id FROM broadcasts
      WHERE status = 'scheduled' AND scheduled_at <= ?
      ORDER BY scheduled_at ASC LIMIT 20`,
@@ -133,7 +139,7 @@ export async function scheduled(
     .bind(now)
     .all<{ id: string }>();
   for (const broadcast of scheduledBroadcasts.results) {
-    const result = await env.DB.prepare(
+    const result = await createDatabase(env.DB).prepare(
       `UPDATE broadcasts SET status = 'sending', started_at = COALESCE(started_at, ?),
        updated_at = ? WHERE id = ? AND status = 'scheduled'`,
     )
@@ -148,7 +154,7 @@ export async function scheduled(
     }
   }
 
-  const dueDeliveries = await env.DB.prepare(
+  const dueDeliveries = await createDatabase(env.DB).prepare(
     `SELECT id FROM deliveries
      WHERE status = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
      ORDER BY created_at ASC LIMIT 100`,
@@ -232,14 +238,14 @@ async function processContactImport(
   totalParts: number,
   env: RuntimeEnv,
 ): Promise<void> {
-  const job = await env.DB.prepare(
+  const job = await createDatabase(env.DB).prepare(
     `SELECT workspace_id, r2_key, status FROM import_jobs
      WHERE id = ? AND kind = 'contact_import' AND status IN ('pending', 'processing')`,
   )
     .bind(jobId)
     .first<{ workspace_id: string; r2_key: string; status: string }>();
   if (!job) return;
-  await env.DB.prepare(
+  await createDatabase(env.DB).prepare(
     "UPDATE import_jobs SET status = 'processing', updated_at = ? WHERE id = ?",
   )
     .bind(new Date().toISOString(), jobId)
@@ -249,7 +255,7 @@ async function processContactImport(
   const lines = (await object.text()).split("\n").filter(Boolean);
   let succeeded = 0;
   let failed = 0;
-  const statements: D1PreparedStatement[] = [];
+  const statements: DrizzleRawStatement[] = [];
   const now = new Date().toISOString();
   for (const line of lines) {
     try {
@@ -278,7 +284,7 @@ async function processContactImport(
         delete customFields[key];
       }
       statements.push(
-        env.DB.prepare(
+        createDatabase(env.DB).prepare(
           `INSERT OR IGNORE INTO contacts
            (id, workspace_id, email, first_name, last_name, phone, external_id,
             stage, score, status, custom_fields, created_at, updated_at)
@@ -302,9 +308,9 @@ async function processContactImport(
       failed += 1;
     }
   }
-  if (statements.length > 0) await env.DB.batch(statements);
+  if (statements.length > 0) await createDatabase(env.DB).batch(statements);
   const finished = part + 1 >= totalParts;
-  await env.DB.prepare(
+  await createDatabase(env.DB).prepare(
     `UPDATE import_jobs SET status = ?, cursor = ?, processed = processed + ?,
      succeeded = succeeded + ?, failed = failed + ?, updated_at = ? WHERE id = ?`,
   )
@@ -329,7 +335,7 @@ async function processContactImport(
 }
 
 async function processContactExport(jobId: string, env: RuntimeEnv): Promise<void> {
-  const job = await env.DB.prepare(
+  const job = await createDatabase(env.DB).prepare(
     `SELECT workspace_id, r2_key, status, cursor FROM import_jobs
      WHERE id = ? AND kind = 'contact_export' AND status IN ('pending', 'processing')`,
   )
@@ -345,7 +351,7 @@ async function processContactExport(jobId: string, env: RuntimeEnv): Promise<voi
   const lastId = typeof cursor["lastId"] === "string" ? cursor["lastId"] : "";
   const partNumber = typeof cursor["partNumber"] === "number" ? cursor["partNumber"] : 0;
   const batchSize = 1_000;
-  const contacts = await env.DB.prepare(
+  const contacts = await createDatabase(env.DB).prepare(
     `SELECT id, email, first_name, last_name, phone, external_id, stage, score,
             status, custom_fields, created_at, updated_at
      FROM contacts WHERE workspace_id = ? AND id > ?
@@ -385,7 +391,7 @@ async function processContactExport(jobId: string, env: RuntimeEnv): Promise<voi
       httpMetadata: { contentType: "text/csv; charset=utf-8" },
     });
     const last = contacts.results.at(-1);
-    await env.DB.prepare(
+    await createDatabase(env.DB).prepare(
       `UPDATE import_jobs SET status = 'processing', cursor = ?,
        processed = processed + ?, succeeded = succeeded + ?, updated_at = ? WHERE id = ?`,
     )
@@ -418,7 +424,7 @@ async function processContactExport(jobId: string, env: RuntimeEnv): Promise<voi
     },
   });
   const now = new Date().toISOString();
-  await env.DB.prepare(
+  await createDatabase(env.DB).prepare(
     "UPDATE import_jobs SET status = 'completed', updated_at = ? WHERE id = ?",
   )
     .bind(now, jobId)
@@ -430,7 +436,7 @@ async function processCampaignJob(
   leaseId: string,
   env: RuntimeEnv,
 ): Promise<void> {
-  const job = await env.DB.prepare(
+  const job = await createDatabase(env.DB).prepare(
     `SELECT j.*, cv.graph,
             c.email AS contact_email, c.first_name, c.last_name, c.phone,
             c.stage, c.score, c.custom_fields
@@ -443,7 +449,7 @@ async function processCampaignJob(
     .bind(jobId, leaseId)
     .first<CampaignJobRow>();
   if (!job) return;
-  const claimed = await env.DB.prepare(
+  const claimed = await createDatabase(env.DB).prepare(
     `UPDATE campaign_jobs SET status = 'running', attempts = attempts + 1, updated_at = ?
      WHERE id = ? AND lease_id = ? AND status = 'leased'`,
   )
@@ -457,7 +463,7 @@ async function processCampaignJob(
     if (!node) throw new PermanentChannelError(`Campaign node ${job.node_id} is missing`);
     const result = await executeNode(node, definition, job, env);
     if (result.waitUntil) {
-      await env.DB.prepare(
+      await createDatabase(env.DB).prepare(
         `UPDATE campaign_jobs SET status = 'pending', due_at = ?, payload = ?,
          lease_id = NULL, lease_until = NULL, updated_at = ?
          WHERE id = ? AND lease_id = ? AND status = 'running'`,
@@ -474,7 +480,7 @@ async function processCampaignJob(
     }
     await finishNode(job, leaseId, definition, result.branch, env);
   } catch (error) {
-    await env.DB.prepare(
+    await createDatabase(env.DB).prepare(
       `UPDATE campaign_jobs SET status = 'leased', last_error = ?, updated_at = ?
        WHERE id = ? AND lease_id = ? AND status = 'running'`,
     )
@@ -495,7 +501,7 @@ async function processBroadcastBatch(
   cursor: string | undefined,
   env: RuntimeEnv,
 ): Promise<void> {
-  const broadcast = await env.DB.prepare(
+  const broadcast = await createDatabase(env.DB).prepare(
     `SELECT b.id, b.workspace_id, b.segment_id, b.template_version_id,
             b.topic_id, b.status, b.started_at, s.kind AS segment_kind,
             s.filter_ast, ev.subject, ev.content_document
@@ -525,7 +531,7 @@ async function snapshotBroadcastRecipients(
   const batchSize = 100;
   let rows: BroadcastContactRow[];
   if (broadcast.segment_kind === "static") {
-    const result = await env.DB.prepare(
+    const result = await createDatabase(env.DB).prepare(
       `SELECT c.id, c.email, c.first_name, c.last_name, c.phone, c.stage,
               c.score, c.custom_fields
        FROM segment_memberships sm
@@ -549,7 +555,7 @@ async function snapshotBroadcastRecipients(
     }
     const filter = JSON.parse(broadcast.filter_ast) as Parameters<typeof compileSegmentFilter>[1];
     const compiled = compileSegmentFilter(broadcast.workspace_id, filter);
-    const result = await env.DB.prepare(
+    const result = await createDatabase(env.DB).prepare(
       `${compiled.sql} AND c.updated_at <= ? AND c.id > ? AND c.status = 'active'
        ORDER BY c.id ASC LIMIT ?`,
     )
@@ -558,9 +564,9 @@ async function snapshotBroadcastRecipients(
     rows = result.results;
   }
   if (rows.length > 0) {
-    await env.DB.batch(
+    await createDatabase(env.DB).batch(
       rows.map((contact) =>
-        env.DB.prepare(
+        createDatabase(env.DB).prepare(
           `INSERT OR IGNORE INTO broadcast_recipients
            (workspace_id, broadcast_id, contact_id, status, snapshot_at)
            VALUES (?, ?, ?, 'pending', ?)`,
@@ -596,7 +602,7 @@ async function createBroadcastDeliveries(
   env: RuntimeEnv,
 ): Promise<void> {
   const batchSize = 40;
-  const recipients = await env.DB.prepare(
+  const recipients = await createDatabase(env.DB).prepare(
     `SELECT c.id, c.email, c.first_name, c.last_name, c.phone, c.stage,
             c.score, c.custom_fields
      FROM broadcast_recipients br
@@ -608,13 +614,13 @@ async function createBroadcastDeliveries(
     .bind(broadcast.workspace_id, broadcast.id, cursor ?? "", batchSize)
     .all<BroadcastContactRow>();
   const content = contentDocumentSchema.parse(JSON.parse(broadcast.content_document));
-  const message = await readMessageVariables(env.DB, broadcast.workspace_id);
-  const statements: D1PreparedStatement[] = [];
+  const message = await readMessageVariables(createDatabase(env.DB), broadcast.workspace_id);
+  const statements: DrizzleRawStatement[] = [];
   const deliveryMessages: Array<{ body: KaenmaQueueMessage }> = [];
   for (const contact of recipients.results) {
     if (!contact.email) {
       statements.push(
-        env.DB.prepare(
+        createDatabase(env.DB).prepare(
           `UPDATE broadcast_recipients SET status = 'skipped'
            WHERE workspace_id = ? AND broadcast_id = ? AND contact_id = ?`,
         ).bind(broadcast.workspace_id, broadcast.id, contact.id),
@@ -684,7 +690,7 @@ async function createBroadcastDeliveries(
       },
     };
     statements.push(
-      env.DB.prepare(
+      createDatabase(env.DB).prepare(
         `INSERT OR IGNORE INTO deliveries
          (id, workspace_id, contact_id, broadcast_id, channel, purpose, provider,
           recipient, topic_id, template_version_id, idempotency_key, payload,
@@ -704,7 +710,7 @@ async function createBroadcastDeliveries(
         new Date().toISOString(),
         new Date().toISOString(),
       ),
-      env.DB.prepare(
+      createDatabase(env.DB).prepare(
         `UPDATE broadcast_recipients SET status = 'queued'
          WHERE workspace_id = ? AND broadcast_id = ? AND contact_id = ? AND status = 'pending'`,
       ).bind(broadcast.workspace_id, broadcast.id, contact.id),
@@ -713,7 +719,7 @@ async function createBroadcastDeliveries(
       body: { kind: "delivery", deliveryId },
     });
   }
-  if (statements.length > 0) await env.DB.batch(statements);
+  if (statements.length > 0) await createDatabase(env.DB).batch(statements);
   if (deliveryMessages.length > 0) await env.DELIVERY_QUEUE.sendBatch(deliveryMessages);
   const last = recipients.results.at(-1);
   if (recipients.results.length === batchSize && last) {
@@ -725,7 +731,7 @@ async function createBroadcastDeliveries(
     });
   } else {
     const now = new Date().toISOString();
-    await env.DB.prepare(
+    await createDatabase(env.DB).prepare(
       `UPDATE broadcasts SET status = 'completed', completed_at = ?, updated_at = ?
        WHERE id = ? AND status = 'sending'`,
     )
@@ -758,7 +764,7 @@ async function executeNode(
       page_viewed: "page_viewed",
       form_submitted: "form_submitted",
     }[node.config.event];
-    const found = await env.DB.prepare(
+    const found = await createDatabase(env.DB).prepare(
       `SELECT id FROM contact_events
        WHERE workspace_id = ? AND contact_id = ? AND type = ?
          AND occurred_at >= ? AND (? IS NULL OR resource_id = ?)
@@ -791,7 +797,7 @@ async function executeNode(
       await createWebhookDelivery(action.endpointId, job, env);
       break;
     case "add_tag":
-      await env.DB.prepare(
+      await createDatabase(env.DB).prepare(
         `INSERT OR IGNORE INTO contact_tags
          (workspace_id, contact_id, tag_id, created_at) VALUES (?, ?, ?, ?)`,
       )
@@ -799,14 +805,14 @@ async function executeNode(
         .run();
       break;
     case "remove_tag":
-      await env.DB.prepare(
+      await createDatabase(env.DB).prepare(
         "DELETE FROM contact_tags WHERE workspace_id = ? AND contact_id = ? AND tag_id = ?",
       )
         .bind(job.workspace_id, job.recipient_id, action.tagId)
         .run();
       break;
     case "add_segment":
-      await env.DB.prepare(
+      await createDatabase(env.DB).prepare(
         `INSERT OR IGNORE INTO segment_memberships
          (workspace_id, segment_id, contact_id, source, joined_at)
          VALUES (?, ?, ?, 'campaign', ?)`,
@@ -815,7 +821,7 @@ async function executeNode(
         .run();
       break;
     case "remove_segment":
-      await env.DB.prepare(
+      await createDatabase(env.DB).prepare(
         `DELETE FROM segment_memberships
          WHERE workspace_id = ? AND segment_id = ? AND contact_id = ?`,
       )
@@ -823,17 +829,17 @@ async function executeNode(
         .run();
       break;
     case "change_score": {
-      const current = await env.DB.prepare(
+      const current = await createDatabase(env.DB).prepare(
         `SELECT score FROM contacts WHERE workspace_id = ? AND id = ?`,
       )
         .bind(job.workspace_id, job.recipient_id)
         .first<{ score: number }>();
       const total = (current?.score ?? 0) + action.amount;
-      await env.DB.batch([
-        env.DB.prepare(
+      await createDatabase(env.DB).batch([
+        createDatabase(env.DB).prepare(
           "UPDATE contacts SET score = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
         ).bind(total, now, job.workspace_id, job.recipient_id),
-        env.DB.prepare(
+        createDatabase(env.DB).prepare(
           `INSERT INTO score_events
            (id, workspace_id, contact_id, delta, total, reason, campaign_enrollment_id, created_at)
            VALUES (?, ?, ?, ?, ?, 'campaign', ?, ?)`,
@@ -864,7 +870,7 @@ async function createEmailDelivery(
   env: RuntimeEnv,
 ): Promise<void> {
   if (!job.contact_email) throw new PermanentChannelError("Contact does not have an email");
-  const template = await env.DB.prepare(
+  const template = await createDatabase(env.DB).prepare(
     `SELECT subject, content_document FROM email_template_versions
      WHERE workspace_id = ? AND id = ?`,
   )
@@ -872,7 +878,7 @@ async function createEmailDelivery(
     .first<{ subject: string; content_document: string }>();
   if (!template) throw new PermanentChannelError("Email template version is missing");
   const content = contentDocumentSchema.parse(JSON.parse(template.content_document));
-  const message = await readMessageVariables(env.DB, job.workspace_id);
+  const message = await readMessageVariables(createDatabase(env.DB), job.workspace_id);
   const contact = {
     email: job.contact_email,
     first_name: job.first_name,
@@ -936,7 +942,7 @@ async function createEmailDelivery(
       ? { metadata: { unsubscribeUrl: `${env.APP_URL}/u/${unsubscribeToken}` } }
       : {}),
   };
-  const result = await env.DB.prepare(
+  const result = await createDatabase(env.DB).prepare(
     `INSERT OR IGNORE INTO deliveries
      (id, workspace_id, contact_id, enrollment_id, channel, purpose, provider,
       recipient, topic_id, template_version_id, idempotency_key, payload,
@@ -969,7 +975,7 @@ async function createWebhookDelivery(
   job: CampaignJobRow,
   env: RuntimeEnv,
 ): Promise<void> {
-  const endpoint = await env.DB.prepare(
+  const endpoint = await createDatabase(env.DB).prepare(
     `SELECT url FROM webhook_endpoints
      WHERE workspace_id = ? AND id = ? AND enabled = 1`,
   )
@@ -992,7 +998,7 @@ async function createWebhookDelivery(
       enrollmentId: job.enrollment_id,
     },
   };
-  const result = await env.DB.prepare(
+  const result = await createDatabase(env.DB).prepare(
     `INSERT OR IGNORE INTO deliveries
      (id, workspace_id, contact_id, enrollment_id, channel, purpose, provider,
       recipient, idempotency_key, payload, status, created_at, updated_at)
@@ -1025,12 +1031,12 @@ async function finishNode(
   const next = outgoingEdges(definition, job.node_id, branch ?? "next")[0];
   const now = new Date().toISOString();
   if (!next) {
-    await env.DB.batch([
-      env.DB.prepare(
+    await createDatabase(env.DB).batch([
+      createDatabase(env.DB).prepare(
         `UPDATE campaign_jobs SET status = 'succeeded', lease_id = NULL,
          lease_until = NULL, updated_at = ? WHERE id = ? AND lease_id = ?`,
       ).bind(now, job.id, leaseId),
-      env.DB.prepare(
+      createDatabase(env.DB).prepare(
         `UPDATE campaign_enrollments SET status = 'completed', current_node_id = NULL,
          completed_at = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`,
       ).bind(now, now, job.workspace_id, job.enrollment_id),
@@ -1038,12 +1044,12 @@ async function finishNode(
     return;
   }
   const nextJobId = uuidv7();
-  await env.DB.batch([
-    env.DB.prepare(
+  await createDatabase(env.DB).batch([
+    createDatabase(env.DB).prepare(
       `UPDATE campaign_jobs SET status = 'succeeded', lease_id = NULL,
        lease_until = NULL, updated_at = ? WHERE id = ? AND lease_id = ?`,
     ).bind(now, job.id, leaseId),
-    env.DB.prepare(
+    createDatabase(env.DB).prepare(
       `INSERT OR IGNORE INTO campaign_jobs
        (id, workspace_id, enrollment_id, campaign_version_id, node_id,
         recipient_id, idempotency_key, status, due_at, created_at, updated_at)
@@ -1060,7 +1066,7 @@ async function finishNode(
       now,
       now,
     ),
-    env.DB.prepare(
+    createDatabase(env.DB).prepare(
       `UPDATE campaign_enrollments SET current_node_id = ?, updated_at = ?
        WHERE workspace_id = ? AND id = ? AND status = 'active'`,
     ).bind(next.target, now, job.workspace_id, job.enrollment_id),
@@ -1082,7 +1088,7 @@ async function evaluateCondition(
     ...safeRecord(job.custom_fields),
   };
   if (node.config.field === "tag") {
-    const row = await env.DB.prepare(
+    const row = await createDatabase(env.DB).prepare(
       `SELECT 1 FROM contact_tags ct JOIN tags t ON t.id = ct.tag_id
        WHERE ct.workspace_id = ? AND ct.contact_id = ? AND t.slug = ? LIMIT 1`,
     )
@@ -1128,7 +1134,7 @@ async function updateContactField(
   };
   const column = columns[field];
   if (column) {
-    await env.DB.prepare(
+    await createDatabase(env.DB).prepare(
       `UPDATE contacts SET ${column} = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`,
     )
       .bind(String(value ?? ""), new Date().toISOString(), job.workspace_id, job.recipient_id)
@@ -1140,7 +1146,7 @@ async function updateContactField(
   }
   const fields = safeRecord(job.custom_fields);
   fields[field] = value;
-  await env.DB.prepare(
+  await createDatabase(env.DB).prepare(
     "UPDATE contacts SET custom_fields = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
   )
     .bind(
@@ -1153,7 +1159,7 @@ async function updateContactField(
 }
 
 async function processDelivery(deliveryId: string, env: RuntimeEnv): Promise<void> {
-  const delivery = await env.DB.prepare(
+  const delivery = await createDatabase(env.DB).prepare(
     `SELECT id, workspace_id, contact_id, channel, purpose, provider, recipient,
             topic_id, idempotency_key, payload, status, attempts
      FROM deliveries WHERE id = ?`,
@@ -1162,7 +1168,7 @@ async function processDelivery(deliveryId: string, env: RuntimeEnv): Promise<voi
     .first<DeliveryRow>();
   if (!delivery || !["queued", "failed"].includes(delivery.status)) return;
 
-  const claimed = await env.DB.prepare(
+  const claimed = await createDatabase(env.DB).prepare(
     `UPDATE deliveries SET status = 'sending', attempts = attempts + 1, updated_at = ?
      WHERE id = ? AND status IN ('queued', 'failed')`,
   )
@@ -1175,7 +1181,7 @@ async function processDelivery(deliveryId: string, env: RuntimeEnv): Promise<voi
       const gate = await readConsentGate(delivery, env);
       const decision = evaluateSendEligibility(delivery.purpose, gate);
       if (!decision.allowed) {
-        await env.DB.prepare(
+        await createDatabase(env.DB).prepare(
           "UPDATE deliveries SET status = 'suppressed', last_error = ?, updated_at = ? WHERE id = ?",
         )
           .bind(decision.reason, new Date().toISOString(), delivery.id)
@@ -1188,12 +1194,12 @@ async function processDelivery(deliveryId: string, env: RuntimeEnv): Promise<voi
     const result = await adapter.send(payload);
     const now = new Date().toISOString();
     const eventId = uuidv7();
-    await env.DB.batch([
-      env.DB.prepare(
+    await createDatabase(env.DB).batch([
+      createDatabase(env.DB).prepare(
         `UPDATE deliveries SET status = 'accepted', provider_message_id = ?,
          last_error = NULL, updated_at = ? WHERE id = ? AND status = 'sending'`,
       ).bind(result.providerMessageId, now, delivery.id),
-      env.DB.prepare(
+      createDatabase(env.DB).prepare(
         `INSERT OR IGNORE INTO delivery_events
          (id, workspace_id, delivery_id, provider, provider_event_id,
           provider_message_id, type, occurred_at, metadata, created_at)
@@ -1212,7 +1218,7 @@ async function processDelivery(deliveryId: string, env: RuntimeEnv): Promise<voi
   } catch (error) {
     const permanent = error instanceof PermanentChannelError;
     const delay = retryDelaySeconds(delivery.attempts + 1);
-    await env.DB.prepare(
+    await createDatabase(env.DB).prepare(
       `UPDATE deliveries SET status = ?, next_attempt_at = ?, last_error = ?, updated_at = ?
        WHERE id = ? AND status = 'sending'`,
     )
@@ -1235,7 +1241,7 @@ async function deliveryAdapter(
 ) {
   if (delivery.provider === "cloudflare") return new CloudflareEmailAdapter(env.EMAIL);
   if (delivery.provider === "resend") {
-    const config = await env.DB.prepare(
+    const config = await createDatabase(env.DB).prepare(
       `SELECT encrypted_credentials FROM provider_configs
        WHERE workspace_id = ? AND provider = 'resend' AND enabled = 1
        ORDER BY updated_at DESC LIMIT 1`,
@@ -1263,7 +1269,7 @@ async function deliveryAdapter(
     );
   }
   if (!endpointId) throw new PermanentChannelError("Webhook endpoint is missing");
-  const endpoint = await env.DB.prepare(
+  const endpoint = await createDatabase(env.DB).prepare(
     `SELECT url, encrypted_secret FROM webhook_endpoints
      WHERE workspace_id = ? AND id = ? AND enabled = 1`,
   )
@@ -1278,19 +1284,19 @@ async function deliveryAdapter(
 }
 
 async function readConsentGate(delivery: DeliveryRow, env: RuntimeEnv) {
-  const [contact, suppression, subscription, frequency] = await env.DB.batch([
-    env.DB.prepare(
+  const [contact, suppression, subscription, frequency] = await createDatabase(env.DB).batch([
+    createDatabase(env.DB).prepare(
       "SELECT status FROM contacts WHERE workspace_id = ? AND id = ? LIMIT 1",
     ).bind(delivery.workspace_id, delivery.contact_id),
-    env.DB.prepare(
+    createDatabase(env.DB).prepare(
       `SELECT reason FROM suppressions
        WHERE workspace_id = ? AND (contact_id = ? OR email = ?) LIMIT 1`,
     ).bind(delivery.workspace_id, delivery.contact_id, delivery.recipient),
-    env.DB.prepare(
+    createDatabase(env.DB).prepare(
       `SELECT status FROM contact_subscriptions
        WHERE workspace_id = ? AND contact_id = ? AND topic_id = ?`,
     ).bind(delivery.workspace_id, delivery.contact_id, delivery.topic_id),
-    env.DB.prepare(
+    createDatabase(env.DB).prepare(
       `SELECT COUNT(*) AS count FROM deliveries
        WHERE workspace_id = ? AND contact_id = ? AND purpose = 'marketing'
          AND status IN ('accepted', 'delivered') AND created_at >= datetime('now', '-1 day')`,
@@ -1331,19 +1337,19 @@ async function persistDeadLetter(
   if (parsed.jobId) {
     workspaceId =
       (
-        await env.DB.prepare("SELECT workspace_id FROM campaign_jobs WHERE id = ?")
+        await createDatabase(env.DB).prepare("SELECT workspace_id FROM campaign_jobs WHERE id = ?")
           .bind(parsed.jobId)
           .first<{ workspace_id: string }>()
       )?.workspace_id ?? null;
   } else if (parsed.deliveryId) {
     workspaceId =
       (
-        await env.DB.prepare("SELECT workspace_id FROM deliveries WHERE id = ?")
+        await createDatabase(env.DB).prepare("SELECT workspace_id FROM deliveries WHERE id = ?")
           .bind(parsed.deliveryId)
           .first<{ workspace_id: string }>()
       )?.workspace_id ?? null;
   }
-  await env.DB.prepare(
+  await createDatabase(env.DB).prepare(
     `INSERT INTO dead_letters
      (id, workspace_id, source_queue, message_body, error, attempts, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -1363,7 +1369,7 @@ async function persistDeadLetter(
 async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
   const retentionDays = Math.max(1, Number(env.RAW_EVENT_RETENTION_DAYS) || 90);
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
-  const events = await env.DB.prepare(
+  const events = await createDatabase(env.DB).prepare(
     `SELECT id, workspace_id, contact_id, visitor_id, type, resource_type,
             resource_id, properties, occurred_at
      FROM contact_events WHERE occurred_at < ? AND archived_at IS NULL
@@ -1381,9 +1387,9 @@ async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
     );
     for (let offset = 0; offset < events.results.length; offset += 50) {
       const chunk = events.results.slice(offset, offset + 50);
-      await env.DB.batch(
+      await createDatabase(env.DB).batch(
         chunk.map((event) =>
-          env.DB.prepare(
+          createDatabase(env.DB).prepare(
             "UPDATE contact_events SET archived_at = ? WHERE id = ? AND archived_at IS NULL",
           ).bind(new Date().toISOString(), event["id"]),
         ),
@@ -1391,7 +1397,7 @@ async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
     }
   }
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  await env.DB.prepare(
+  await createDatabase(env.DB).prepare(
     `INSERT INTO daily_metrics
      (workspace_id, metric_date, dimension_type, dimension_id,
       accepted, delivered, opened, clicked, bounced, complained, unsubscribed, failed)
@@ -1409,13 +1415,13 @@ async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
   )
     .bind(yesterday)
     .run();
-  await env.DB.prepare("DELETE FROM idempotency_keys WHERE expires_at < ?")
+  await createDatabase(env.DB).prepare("DELETE FROM idempotency_keys WHERE expires_at < ?")
     .bind(new Date().toISOString())
     .run();
 }
 
 async function readMessageVariables(
-  database: D1Database,
+  database: KaenmaDatabase,
   workspaceId: string,
 ): Promise<Record<string, unknown>> {
   const result = await database

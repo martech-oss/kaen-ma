@@ -1,4 +1,12 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable(
   "user",
@@ -104,6 +112,10 @@ export const member = sqliteTable(
   (table) => [
     uniqueIndex("member_org_user_unique").on(table.organizationId, table.userId),
     index("member_user_idx").on(table.userId),
+    check(
+      "member_role_check",
+      sql`${table.role} IN ('owner', 'admin', 'marketer', 'analyst', 'viewer')`,
+    ),
   ],
 );
 

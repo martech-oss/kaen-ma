@@ -8,6 +8,11 @@ import type {
   WorkspaceContext,
   WorkspaceRole,
 } from "@kaenma/shared";
+import {
+  createDatabase,
+  type DatabaseSource,
+  type KaenmaDatabase,
+} from "./client";
 
 export interface CursorPage<T> {
   items: T[];
@@ -47,10 +52,14 @@ export interface AccountSummary extends Account {
 }
 
 export class WorkspaceRepository {
+  private readonly database: KaenmaDatabase;
+
   public constructor(
-    private readonly database: D1Database,
+    database: DatabaseSource,
     public readonly context: WorkspaceContext,
-  ) {}
+  ) {
+    this.database = createDatabase(database);
+  }
 
   public async listContacts(input: {
     cursor?: string;
@@ -384,11 +393,11 @@ export class WorkspaceRepository {
 }
 
 export async function resolveMemberContext(
-  database: D1Database,
+  database: DatabaseSource,
   userId: string,
   requestedOrganizationId: string | null,
 ): Promise<WorkspaceContext | null> {
-  const row = await database
+  const row = await createDatabase(database)
     .prepare(
       `SELECT organization_id, role FROM member
        WHERE user_id = ? ${requestedOrganizationId ? "AND organization_id = ?" : ""}
@@ -401,7 +410,7 @@ export async function resolveMemberContext(
 }
 
 export async function writeAuditLog(
-  database: D1Database,
+  database: DatabaseSource,
   context: WorkspaceContext,
   input: {
     action: string;
@@ -411,7 +420,7 @@ export async function writeAuditLog(
     ipAddress?: string;
   },
 ): Promise<void> {
-  await database
+  await createDatabase(database)
     .prepare(
       `INSERT INTO audit_logs (
         id, workspace_id, actor_user_id, api_key_id, action, resource_type,
@@ -434,13 +443,14 @@ export async function writeAuditLog(
 }
 
 export async function claimDueJobs(
-  database: D1Database,
+  database: DatabaseSource,
   now: string,
   leaseUntil: string,
   limit = 100,
   workspaceId?: string,
 ): Promise<Array<{ id: string; leaseId: string }>> {
-  const candidates = await database
+  const drizzle = createDatabase(database);
+  const candidates = await drizzle
     .prepare(
       `SELECT id FROM campaign_jobs
        WHERE status = 'pending' AND due_at <= ? AND (lease_until IS NULL OR lease_until < ?)
@@ -452,7 +462,7 @@ export async function claimDueJobs(
   const claimed: Array<{ id: string; leaseId: string }> = [];
   for (const candidate of candidates.results) {
     const leaseId = uuidv7();
-    const result = await database
+    const result = await drizzle
       .prepare(
         `UPDATE campaign_jobs SET status = 'leased', lease_id = ?, lease_until = ?, updated_at = ?
          WHERE id = ? AND status = 'pending' AND (lease_until IS NULL OR lease_until < ?)`,
@@ -465,13 +475,13 @@ export async function claimDueJobs(
 }
 
 export async function reserveIdempotencyKey(
-  database: D1Database,
+  database: DatabaseSource,
   workspaceId: string,
   scope: string,
   key: string,
   expiresAt: string,
 ): Promise<boolean> {
-  const result = await database
+  const result = await createDatabase(database)
     .prepare(
       `INSERT OR IGNORE INTO idempotency_keys
        (workspace_id, scope, idempotency_key, created_at, expires_at)
