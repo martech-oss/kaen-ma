@@ -54,14 +54,14 @@ flowchart LR
 
 ```text
 apps/
-  admin/                 TanStack Start/Query、Vite、Tailwind、React Flow
-  worker/                Hono API、Cron、Queue、Email Routing
+  client/                TanStack Start/Query、Vite、Tailwind、React Flow
+  server/                Hono API、Cron、Queue、Email Routing
 packages/
-  api-contract/          管理画面とWorkerで共有するoRPC contract
+  contract/              管理画面とWorkerで共有するoRPC contract
   channels/              Cloudflare、Resend、Webhook adapter
   core/                  Segment、Campaign、Consent、Schedule
   create-kaenma/         Setup、doctor、backup、update CLI
-  db/                    Drizzle schema/client、D1 migration、repository
+  database/              Drizzle schema/client、D1 migration、repository
   email-renderer/        安全なHTML/Text renderer
   mcp-server/            Kaenma MCP server
   sdk/                   TypeScript SDK
@@ -89,7 +89,7 @@ pnpm install
 ### 2. 開発用Secret
 
 ```bash
-cp .dev.vars.example apps/worker/.dev.vars
+cp .dev.vars.example apps/server/.dev.vars
 ```
 
 少なくとも次の値を設定します。
@@ -99,11 +99,12 @@ BETTER_AUTH_SECRET=32文字以上のランダム値
 CREDENTIAL_ENCRYPTION_KEY=32バイト相当のランダム値
 TRACKING_SIGNING_SECRET=32文字以上のランダム値
 TURNSTILE_SECRET=任意
-RESEND_API_KEY=任意
-RESEND_WEBHOOK_SECRET=任意
+RESEND_API_KEY=Marketingメールを利用する場合は必須
+RESEND_WEBHOOK_SECRET=Resend Webhookを利用する場合は必須
 ```
 
-`CREDENTIAL_ENCRYPTION_KEY`は、ResendやWebhookの資格情報をD1へ保存する際のAES-GCMマスターキーです。運用開始後に不用意に変更すると、保存済み資格情報を復号できなくなります。
+`CREDENTIAL_ENCRYPTION_KEY`は、Outbound Webhookの署名資格情報をD1へ保存する際のAES-GCMマスターキーです。運用開始後に不用意に変更すると、保存済み資格情報を復号できなくなります。
+Resendの資格情報はD1へ保存せず、WorkerのSecret bindingからのみ読み込みます。
 
 ### 3. D1 migration
 
@@ -111,9 +112,9 @@ RESEND_WEBHOOK_SECRET=任意
 pnpm db:migrate:local
 ```
 
-アプリケーションからのDBアクセスは`@kaenma/db`のDrizzle clientへ統一しています。
-テーブル定義は`packages/db/src/auth-schema.ts`と
-`packages/db/src/business-schema.ts`が正本です。スキーマ変更時は次のコマンドで
+アプリケーションからのDBアクセスは`@kaenma/database`のDrizzle clientへ統一しています。
+テーブル定義は`packages/database/src/auth-schema.ts`と
+`packages/database/src/business-schema.ts`が正本です。スキーマ変更時は次のコマンドで
 Drizzle Kitの差分SQLを生成してレビューできます。
 
 ```bash
@@ -121,7 +122,7 @@ pnpm db:generate
 ```
 
 既存環境とのmigration履歴互換性を維持するため、Wranglerが実際に適用する連番SQLは
-引き続き`packages/db/migrations`へ配置します。
+引き続き`packages/database/migrations`へ配置します。
 
 ### 4. 起動
 
@@ -138,14 +139,14 @@ pnpm dev
 管理画面とAPIをTanStack StartのVite開発サーバーで起動する場合:
 
 ```bash
-pnpm dev:admin
+pnpm dev:client
 ```
 
 ## Cloudflareへのデプロイ
 
 ### Wrangler設定
 
-`apps/worker/wrangler.jsonc`に以下のBindingsが定義されています。
+`apps/server/wrangler.jsonc`に以下のBindingsが定義されています。
 
 - `DB`: D1
 - `ASSETS_BUCKET`: R2
@@ -160,21 +161,16 @@ TanStack StartのSSR WorkerとクライアントアセットはCloudflare Vite�
 ### Secret登録
 
 ```bash
-cd apps/worker
+cd apps/server
 pnpm wrangler secret put BETTER_AUTH_SECRET
 pnpm wrangler secret put CREDENTIAL_ENCRYPTION_KEY
 pnpm wrangler secret put TRACKING_SIGNING_SECRET
 pnpm wrangler secret put TURNSTILE_SECRET
-```
-
-Resend資格情報は管理画面からWorkspace単位で暗号化保存できます。環境共通のフォールバックを使う場合:
-
-```bash
 pnpm wrangler secret put RESEND_API_KEY
 pnpm wrangler secret put RESEND_WEBHOOK_SECRET
 ```
 
-Resend Dashboardには`https://<APP_URL>/api/webhooks/resend/<WORKSPACE_ID>`をWebhook URLとして登録し、`email.sent`、`email.delivered`、`email.opened`、`email.clicked`、`email.bounced`、`email.complained`、`email.failed`、`email.suppressed`を購読します。発行されたSigning secretを管理画面へ保存してください。
+Resend Dashboardには`https://<APP_URL>/api/webhooks/resend/<WORKSPACE_ID>`をWebhook URLとして登録し、`email.sent`、`email.delivered`、`email.opened`、`email.clicked`、`email.bounced`、`email.complained`、`email.failed`、`email.suppressed`を購読します。発行されたSigning secretは`RESEND_WEBHOOK_SECRET`として登録してください。
 
 ### Migrationとデプロイ
 
@@ -191,7 +187,7 @@ Worker build時にTanStack StartのSSR bundleとクライアントアセット�
 2. 確認メールからメールアドレスを検証する
 3. OrganizationとしてWorkspaceを作成する
 4. 必要に応じて購読Topicを作成する
-5. ResendのAPI keyとWebhook signing secretを登録する
+5. WorkerのSecret bindingへResendのAPI keyとWebhook signing secretを登録する
 6. ContactまたはCSVを取り込む
 7. SegmentとEmail Templateを作成する
 8. Campaignを作成・検証・公開する
@@ -493,8 +489,6 @@ IssueやPull Requestを歓迎します。
 ```bash
 pnpm check
 ```
-
-LINE Harnessのコードは直接複製せず、構成上の参考に留めています。外部コードを追加する場合は、ライセンスと由来を明記してください。
 
 ## ライセンス
 

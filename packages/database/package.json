@@ -1,0 +1,32 @@
+{
+  "name": "@kaenma/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./auth-schema": "./src/auth-schema.ts",
+    "./client": "./src/client.ts",
+    "./schema": "./src/schema.ts"
+  },
+  "files": [
+    "src",
+    "drizzle",
+    "migrations"
+  ],
+  "scripts": {
+    "db:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@kaenma/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260728.1",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.17"
+  }
+}

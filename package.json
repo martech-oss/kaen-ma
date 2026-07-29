@@ -11,16 +11,16 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "dev": "pnpm db:migrate:local && pnpm --filter @kaenma/worker dev",
-    "dev:admin": "pnpm --filter @kaenma/admin dev",
-    "deploy": "pnpm --filter @kaenma/worker deploy",
+    "dev": "pnpm db:migrate:local && pnpm --filter @kaenma/server dev",
+    "dev:client": "pnpm --filter @kaenma/client dev",
+    "deploy": "pnpm --filter @kaenma/server deploy",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test --passWithNoTests",
     "check": "pnpm typecheck && pnpm test && pnpm build",
-    "cf:types": "pnpm --filter @kaenma/worker cf:types",
-    "db:generate": "pnpm --filter @kaenma/db db:generate",
-    "db:migrate:local": "pnpm --filter @kaenma/worker db:migrate:local",
-    "db:migrate:remote": "pnpm --filter @kaenma/worker db:migrate:remote"
+    "cf:types": "pnpm --filter @kaenma/server cf:types",
+    "db:generate": "pnpm --filter @kaenma/database db:generate",
+    "db:migrate:local": "pnpm --filter @kaenma/server db:migrate:local",
+    "db:migrate:remote": "pnpm --filter @kaenma/server db:migrate:remote"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",

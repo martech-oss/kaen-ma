@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "kaenma-test",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kaenma-test",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "../../packages/database/migrations"
+    }
+  ],
+  "vars": {
+    "APP_NAME": "Kaenma",
+    "APP_URL": "http://localhost:8787",
+    "ENVIRONMENT": "test",
+    "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com",
+    "TRANSACTIONAL_FROM_NAME": "Kaenma",
+    "REPLY_DOMAIN": "reply.example.com",
+    "RAW_EVENT_RETENTION_DAYS": "90"
+  }
+}

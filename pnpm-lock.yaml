@@ -18,7 +18,7 @@ importers:
         specifier: ^4.0.17
         version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
 
-  apps/admin:
+  apps/client:
     dependencies:
       '@base-ui/react':
         specifier: ^1.6.0
@@ -26,9 +26,9 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.3.0
         version: 5.3.0
-      '@kaenma/api-contract':
+      '@kaenma/contract':
         specifier: workspace:*
-        version: link:../../packages/api-contract
+        version: link:../../packages/contract
       '@kaenma/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -121,7 +121,7 @@ importers:
         specifier: ^4.115.0
         version: 4.115.0(@cloudflare/workers-types@5.20260728.1)
 
-  apps/worker:
+  apps/server:
     dependencies:
       '@better-auth/drizzle-adapter':
         specifier: ^1.6.25
@@ -129,18 +129,18 @@ importers:
       '@hono/zod-validator':
         specifier: ^0.7.6
         version: 0.7.6(hono@4.12.32)(zod@4.4.3)
-      '@kaenma/api-contract':
-        specifier: workspace:*
-        version: link:../../packages/api-contract
       '@kaenma/channels':
         specifier: workspace:*
         version: link:../../packages/channels
+      '@kaenma/contract':
+        specifier: workspace:*
+        version: link:../../packages/contract
       '@kaenma/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@kaenma/db':
+      '@kaenma/database':
         specifier: workspace:*
-        version: link:../../packages/db
+        version: link:../../packages/database
       '@kaenma/email-renderer':
         specifier: workspace:*
         version: link:../../packages/email-renderer
@@ -185,7 +185,23 @@ importers:
         specifier: ^4.114.0
         version: 4.114.0(@cloudflare/workers-types@5.20260728.1)
 
-  packages/api-contract:
+  packages/channels:
+    dependencies:
+      '@kaenma/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^5.20260728.1
+        version: 5.20260728.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.17
+        version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
+
+  packages/contract:
     dependencies:
       '@kaenma/shared':
         specifier: workspace:*
@@ -197,22 +213,6 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.17
-        version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
-
-  packages/channels:
-    dependencies:
-      '@kaenma/shared':
-        specifier: workspace:*
-        version: link:../shared
-    devDependencies:
-      '@cloudflare/workers-types':
-        specifier: ^5.20260728.1
-        version: 5.20260728.1
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -255,7 +255,7 @@ importers:
         specifier: ^4.0.17
         version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
 
-  packages/db:
+  packages/database:
     dependencies:
       '@kaenma/shared':
         specifier: workspace:*

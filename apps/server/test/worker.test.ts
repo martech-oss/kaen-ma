@@ -1,0 +1,552 @@
+import { WorkspaceRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/database";
+import { env, exports } from "cloudflare:workers";
+import { describe, expect, it } from "vitest";
+import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth";
+import { sha256Hex } from "../src/crypto";
+
+declare module "cloudflare:workers" {
+  interface ProvidedEnv {
+    DB: D1Database;
+  }
+}
+
+describe("Kaenma Worker", () => {
+  it("uses the actual localhost port for Better Auth during development", () => {
+    expect(
+      resolveAuthBaseURL(
+        { APP_URL: "http://localhost:8787", ENVIRONMENT: "development" },
+        "http://localhost:8788",
+      ),
+    ).toBe("http://localhost:8788");
+    expect(
+      resolveAuthBaseURL(
+        { APP_URL: "https://app.example.com", ENVIRONMENT: "production" },
+        "https://evil.example.com",
+      ),
+    ).toBe("https://app.example.com");
+  });
+
+  it("skips email verification only in development", () => {
+    expect(isEmailVerificationRequired("development")).toBe(false);
+    expect(isEmailVerificationRequired("test")).toBe(true);
+    expect(isEmailVerificationRequired("production")).toBe(true);
+  });
+
+  it("reports a healthy migrated D1 database", async () => {
+    const response = await exports.default.fetch("http://localhost:8787/api/health");
+    expect(response.status).toBe(200);
+    const payload = (await response.json()) as { data: { status: string; migrations: number } };
+    expect(payload.data.status).toBe("ok");
+    expect(payload.data.migrations).toBeGreaterThan(0);
+  });
+
+  it("never returns a contact from another workspace by direct ID", async () => {
+    const firstWorkspace = uuidv7();
+    const secondWorkspace = uuidv7();
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO organization (id, name, slug, created_at, timezone)
+         VALUES (?, 'First', 'first', ?, 'UTC')`,
+      ).bind(firstWorkspace, now),
+      env.DB.prepare(
+        `INSERT INTO organization (id, name, slug, created_at, timezone)
+         VALUES (?, 'Second', 'second', ?, 'UTC')`,
+      ).bind(secondWorkspace, now),
+    ]);
+    const first = new WorkspaceRepository(env.DB, {
+      workspaceId: firstWorkspace,
+      userId: "user-one",
+      role: "owner",
+    });
+    const second = new WorkspaceRepository(env.DB, {
+      workspaceId: secondWorkspace,
+      userId: "user-two",
+      role: "owner",
+    });
+    const contact = await first.createContact({
+      email: "person@example.com",
+      customFields: {},
+    });
+    expect(await first.getContact(contact.id)).not.toBeNull();
+    expect(await second.getContact(contact.id)).toBeNull();
+  });
+
+  it("filters, paginates, archives, and restores contacts within a workspace", async () => {
+    const workspaceId = uuidv7();
+    const tagId = uuidv7();
+    const listId = uuidv7();
+    const accountId = uuidv7();
+    const now = new Date().toISOString();
+    await env.DB.prepare(
+      `INSERT INTO organization (id, name, slug, created_at, timezone)
+       VALUES (?, 'Contacts Workspace', ?, ?, 'UTC')`,
+    )
+      .bind(workspaceId, `contacts-${workspaceId}`, Date.now())
+      .run();
+    const repository = new WorkspaceRepository(env.DB, {
+      workspaceId,
+      userId: "contacts-owner",
+      role: "owner",
+    });
+    const highScore = await repository.createContact({
+      email: "high@example.com",
+      firstName: "High",
+      stage: "customer",
+      customFields: {},
+    });
+    const lowScore = await repository.createContact({
+      email: "low@example.com",
+      firstName: "Low",
+      stage: "lead",
+      customFields: {},
+    });
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO tags (id, workspace_id, name, slug, color, created_at)
+         VALUES (?, ?, 'VIP', ?, '#6366f1', ?)`,
+      ).bind(tagId, workspaceId, `vip-${tagId}`, now),
+      env.DB.prepare(
+        `INSERT INTO contact_lists
+         (id, workspace_id, name, slug, description, color, created_at, updated_at)
+         VALUES (?, ?, 'Customers', ?, '', '#6366f1', ?, ?)`,
+      ).bind(listId, workspaceId, `customers-${listId}`, now, now),
+      env.DB.prepare(
+        `INSERT INTO companies
+         (id, workspace_id, name, domain, custom_fields, created_at, updated_at)
+         VALUES (?, ?, 'Acme', 'acme.example', '{}', ?, ?)`,
+      ).bind(accountId, workspaceId, now, now),
+      env.DB.prepare(
+        "UPDATE contacts SET score = 80 WHERE workspace_id = ? AND id = ?",
+      ).bind(workspaceId, highScore.id),
+      env.DB.prepare(
+        "UPDATE contacts SET score = 10 WHERE workspace_id = ? AND id = ?",
+      ).bind(workspaceId, lowScore.id),
+    ]);
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO contact_tags (workspace_id, contact_id, tag_id, created_at)
+         VALUES (?, ?, ?, ?)`,
+      ).bind(workspaceId, highScore.id, tagId, now),
+      env.DB.prepare(
+        `INSERT INTO contact_list_memberships
+         (workspace_id, list_id, contact_id, status, source, created_at, updated_at)
+         VALUES (?, ?, ?, 'active', 'manual', ?, ?)`,
+      ).bind(workspaceId, listId, highScore.id, now, now),
+      env.DB.prepare(
+        `INSERT INTO company_contacts
+         (workspace_id, company_id, contact_id, title, is_primary, created_at)
+         VALUES (?, ?, ?, 'Owner', 1, ?)`,
+      ).bind(workspaceId, accountId, highScore.id, now),
+    ]);
+
+    const filtered = await repository.listContacts({
+      tagId,
+      listId,
+      accountId,
+      stage: "customer",
+      scoreMin: 50,
+    });
+    expect(filtered.total).toBe(1);
+    expect(filtered.items.map((contact) => contact.id)).toEqual([highScore.id]);
+
+    const firstPage = await repository.listContacts({
+      limit: 1,
+      sort: "score",
+      direction: "desc",
+    });
+    expect(firstPage.total).toBe(2);
+    expect(firstPage.items[0]?.id).toBe(highScore.id);
+    expect(firstPage.nextCursor).toBe(highScore.id);
+    const secondPage = await repository.listContacts({
+      cursor: firstPage.nextCursor,
+      limit: 1,
+      sort: "score",
+      direction: "desc",
+    });
+    expect(secondPage.total).toBe(2);
+    expect(secondPage.items[0]?.id).toBe(lowScore.id);
+
+    expect(await repository.archiveContact(highScore.id)).toBe(true);
+    expect((await repository.listContacts({})).items.map((contact) => contact.id)).toEqual([
+      lowScore.id,
+    ]);
+    const archived = await repository.listContacts({ status: "archived" });
+    expect(archived.items[0]?.archivedAt).not.toBeNull();
+    expect(await repository.restoreContact(highScore.id)).toBe(true);
+    expect((await repository.listContacts({})).total).toBe(2);
+  });
+
+  it("manages the full contact profile through authenticated API routes", async () => {
+    const workspaceId = uuidv7();
+    const userId = uuidv7();
+    const apiKeyId = uuidv7();
+    const prefix = "contactstest";
+    const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
+    const now = new Date().toISOString();
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO user
+         (id, name, email, email_verified, created_at, updated_at)
+         VALUES (?, 'Contacts Owner', ?, 1, ?, ?)`,
+      ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
+      env.DB.prepare(
+        `INSERT INTO organization (id, name, slug, created_at, timezone)
+         VALUES (?, 'API Contacts Workspace', ?, ?, 'UTC')`,
+      ).bind(workspaceId, `api-contacts-${workspaceId}`, Date.now()),
+      env.DB.prepare(
+        `INSERT INTO api_keys
+         (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
+         VALUES (?, ?, ?, 'Contacts test', ?, ?, 'owner', ?)`,
+      ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
+    ]);
+    const call = (path: string, init?: RequestInit) =>
+      exports.default.fetch(
+        new Request(`http://localhost:8787/api/v1${path}`, {
+          ...init,
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+            ...init?.headers,
+          },
+        }),
+      );
+
+    const tagResponse = await call("/tags", {
+      method: "POST",
+      body: JSON.stringify({ name: "VIP", color: "#6366f1" }),
+    });
+    expect(tagResponse.status).toBe(201);
+    const tag = (await tagResponse.json()) as { data: { id: string; slug: string } };
+    const listResponse = await call("/contact-lists", {
+      method: "POST",
+      body: JSON.stringify({ name: "Customers", description: "Paid customers" }),
+    });
+    expect(listResponse.status).toBe(201);
+    const list = (await listResponse.json()) as { data: { id: string; slug: string } };
+    const accountResponse = await call("/accounts", {
+      method: "POST",
+      body: JSON.stringify({ name: "Acme", domain: "acme.example" }),
+    });
+    expect(accountResponse.status).toBe(201);
+    const account = (await accountResponse.json()) as {
+      data: { id: string; name: string };
+    };
+
+    const contactResponse = await call("/contacts", {
+      method: "POST",
+      body: JSON.stringify({
+        email: "api-contact@example.com",
+        firstName: "API",
+        stage: "customer",
+      }),
+    });
+    expect(contactResponse.status).toBe(201);
+    const contact = (await contactResponse.json()) as { data: { id: string } };
+    expect(
+      (
+        await call(`/contacts/${contact.data.id}/tags`, {
+          method: "POST",
+          body: JSON.stringify({ tagId: tag.data.id }),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await call(`/contacts/${contact.data.id}/lists`, {
+          method: "POST",
+          body: JSON.stringify({ listId: list.data.id }),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await call(`/accounts/${account.data.id}/contacts`, {
+          method: "POST",
+          body: JSON.stringify({
+            contactId: contact.data.id,
+            title: "Marketing Lead",
+            isPrimary: true,
+          }),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await call(`/contacts/${contact.data.id}/score`, {
+          method: "POST",
+          body: JSON.stringify({ delta: 75, reason: "Qualified lead" }),
+        })
+      ).status,
+    ).toBe(200);
+
+    const segmentResponse = await call("/segments", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Tokyo VIP",
+        slug: "tokyo-vip",
+        kind: "dynamic",
+        filter: {
+          kind: "group",
+          combinator: "and",
+          children: [
+            { kind: "condition", field: "tag", operator: "eq", value: tag.data.slug },
+            { kind: "condition", field: "list", operator: "eq", value: list.data.slug },
+            { kind: "condition", field: "score", operator: "gte", value: 50 },
+          ],
+        },
+      }),
+    });
+    expect(segmentResponse.status).toBe(201);
+    const segment = (await segmentResponse.json()) as { data: { id: string } };
+
+    const variableResponse = await call("/message-variables", {
+      method: "POST",
+      body: JSON.stringify({
+        key: "brand_name",
+        name: "Brand name",
+        value: "Kaenma",
+        description: "Shared brand label",
+      }),
+    });
+    expect(variableResponse.status).toBe(201);
+    const variable = (await variableResponse.json()) as {
+      data: { id: string };
+    };
+    expect(
+      (
+        await call(`/message-variables/${variable.data.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            key: "brand_name",
+            name: "Brand name",
+            value: "Kaenma MA",
+            description: "Updated shared brand label",
+          }),
+        })
+      ).status,
+    ).toBe(200);
+
+    const content = {
+      schemaVersion: 1,
+      backgroundColor: "#f4f5f7",
+      contentColor: "#ffffff",
+      width: 600,
+      blocks: [
+        {
+          id: "message",
+          type: "text",
+          html: "<h1>{{ message.brand_name }}</h1><p>Hello {{ contact.first_name }}</p>",
+        },
+      ],
+    };
+    const templateResponse = await call("/email-templates", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Welcome",
+        purpose: "marketing",
+        subject: "{{ message.brand_name }} news",
+        previewText: "Latest news",
+        content,
+      }),
+    });
+    expect(templateResponse.status).toBe(201);
+    const template = (await templateResponse.json()) as {
+      data: { id: string; versionId: string };
+    };
+    const templateUpdateResponse = await call(
+      `/email-templates/${template.data.id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Welcome updated",
+          purpose: "marketing",
+          subject: "{{ message.brand_name }} update",
+          previewText: "Updated news",
+          content,
+        }),
+      },
+    );
+    expect(templateUpdateResponse.status).toBe(200);
+    const templateUpdate = (await templateUpdateResponse.json()) as {
+      data: { versionId: string };
+    };
+    const templateDetailResponse = await call(
+      `/email-templates/${template.data.id}`,
+    );
+    expect(templateDetailResponse.status).toBe(200);
+    const templateDetail = (await templateDetailResponse.json()) as {
+      data: { version: number; subject: string; content_document: unknown };
+    };
+    expect(templateDetail.data).toMatchObject({
+      version: 2,
+      subject: "{{ message.brand_name }} update",
+      content_document: content,
+    });
+
+    const broadcastResponse = await call("/broadcasts", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "August update",
+        segmentId: segment.data.id,
+        templateVersionId: templateUpdate.data.versionId,
+        topicId: null,
+        scheduledAt: null,
+      }),
+    });
+    expect(broadcastResponse.status).toBe(201);
+    const broadcast = (await broadcastResponse.json()) as {
+      data: { id: string };
+    };
+    expect(
+      (
+        await call(`/broadcasts/${broadcast.data.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: "August update edited",
+            segmentId: segment.data.id,
+            templateVersionId: templateUpdate.data.versionId,
+            topicId: null,
+            scheduledAt: null,
+          }),
+        })
+      ).status,
+    ).toBe(200);
+    const broadcastsResponse = await call("/broadcasts");
+    expect(broadcastsResponse.status).toBe(200);
+    const broadcasts = (await broadcastsResponse.json()) as {
+      data: Array<{ id: string; name: string; segment_name: string }>;
+    };
+    expect(broadcasts.data).toEqual([
+      expect.objectContaining({
+        id: broadcast.data.id,
+        name: "August update edited",
+        segment_name: "Tokyo VIP",
+      }),
+    ]);
+    expect(
+      (
+        await call(`/broadcasts/${broadcast.data.id}/archive`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(200);
+    const archivedBroadcasts = (await (
+      await call("/broadcasts?archived=true")
+    ).json()) as { data: Array<{ id: string }> };
+    expect(archivedBroadcasts.data).toEqual([
+      expect.objectContaining({ id: broadcast.data.id }),
+    ]);
+    expect(
+      (
+        await call(`/email-templates/${template.data.id}/archive`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await call(`/message-variables/${variable.data.id}/archive`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(200);
+
+    const filteredResponse = await call(
+      `/contacts?tagId=${tag.data.id}&listId=${list.data.id}` +
+        `&accountId=${account.data.id}&segmentId=${segment.data.id}&scoreMin=50`,
+    );
+    expect(filteredResponse.status).toBe(200);
+    const filtered = (await filteredResponse.json()) as {
+      data: Array<{
+        id: string;
+        tags: unknown[];
+        lists: unknown[];
+        accounts: unknown[];
+      }>;
+      meta: { total: number };
+    };
+    expect(filtered.meta.total).toBe(1);
+    expect(filtered.data[0]).toMatchObject({
+      id: contact.data.id,
+      tags: [expect.objectContaining({ id: tag.data.id })],
+      lists: [expect.objectContaining({ id: list.data.id })],
+      accounts: [expect.objectContaining({ id: account.data.id })],
+    });
+
+    const profileResponse = await call(`/contacts/${contact.data.id}/profile`);
+    expect(profileResponse.status).toBe(200);
+    const profile = (await profileResponse.json()) as {
+      data: {
+        contact: { score: number };
+        tags: unknown[];
+        lists: unknown[];
+        accounts: unknown[];
+        scoreEvents: unknown[];
+      };
+    };
+    expect(profile.data.contact.score).toBe(75);
+    expect(profile.data.tags).toHaveLength(1);
+    expect(profile.data.lists).toHaveLength(1);
+    expect(profile.data.accounts).toHaveLength(1);
+    expect(profile.data.scoreEvents).toHaveLength(1);
+
+    const accountDetailResponse = await call(`/accounts/${account.data.id}`);
+    expect(accountDetailResponse.status).toBe(200);
+    const accountDetail = (await accountDetailResponse.json()) as {
+      data: { name: string; contacts: Array<{ id: string; title: string }> };
+    };
+    expect(accountDetail.data.name).toBe("Acme");
+    expect(accountDetail.data.contacts).toEqual([
+      expect.objectContaining({
+        id: contact.data.id,
+        title: "Marketing Lead",
+      }),
+    ]);
+
+    expect((await call(`/contacts/${contact.data.id}`, { method: "DELETE" })).status).toBe(200);
+    expect(
+      (
+        await call(`/contacts/${contact.data.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ firstName: "Blocked" }),
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await call(`/contacts/${contact.data.id}/tags/${tag.data.id}`, {
+          method: "DELETE",
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (await call(`/contacts/${contact.data.id}/restore`, { method: "POST" })).status,
+    ).toBe(200);
+    expect(
+      (
+        await call(`/contacts/${contact.data.id}/tags/${tag.data.id}`, {
+          method: "DELETE",
+        })
+      ).status,
+    ).toBe(200);
+  });
+
+  it("reserves a delivery idempotency key only once", async () => {
+    const workspaceId = uuidv7();
+    await env.DB.prepare(
+      `INSERT INTO organization (id, name, slug, created_at, timezone)
+       VALUES (?, 'Workspace', 'workspace', ?, 'UTC')`,
+    )
+      .bind(workspaceId, Date.now())
+      .run();
+    const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    expect(
+      await reserveIdempotencyKey(env.DB, workspaceId, "delivery", "same-key", expiresAt),
+    ).toBe(true);
+    expect(
+      await reserveIdempotencyKey(env.DB, workspaceId, "delivery", "same-key", expiresAt),
+    ).toBe(false);
+  });
+
+});
