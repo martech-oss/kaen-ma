@@ -11,7 +11,7 @@ export class ApiClientError extends Error {
 
 interface Envelope<T> {
   data: T;
-  meta?: { nextCursor?: string };
+  meta?: { nextCursor?: string; total?: number; requestId?: string };
 }
 
 export async function api<T>(

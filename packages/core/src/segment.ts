@@ -60,6 +60,14 @@ function compileCondition(
         JOIN tags t ON t.id = ct.tag_id AND t.workspace_id = c.workspace_id
         WHERE ct.contact_id = c.id AND ct.workspace_id = c.workspace_id AND t.slug = ?
       )`;
+    case "list":
+      params.push(String(condition.value ?? ""));
+      return `${existsPrefix(condition.operator)} EXISTS (
+        SELECT 1 FROM contact_list_memberships clm
+        JOIN contact_lists cl ON cl.id = clm.list_id AND cl.workspace_id = c.workspace_id
+        WHERE clm.contact_id = c.id AND clm.workspace_id = c.workspace_id
+          AND cl.slug = ? AND clm.status = 'active'
+      )`;
     case "company":
       params.push(String(condition.value ?? ""));
       return `${existsPrefix(condition.operator)} EXISTS (

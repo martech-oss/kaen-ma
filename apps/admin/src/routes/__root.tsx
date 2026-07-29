@@ -4,6 +4,8 @@ import {
   Scripts,
   createRootRoute,
 } from "@tanstack/react-router";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { ReactNode } from "react";
 import "@xyflow/react/dist/style.css";
 import "../styles.css";
@@ -27,7 +29,10 @@ function RootComponent(): ReactNode {
         <HeadContent />
       </head>
       <body>
-        <Outlet />
+        <TooltipProvider>
+          <Outlet />
+          <Toaster position="top-right" richColors />
+        </TooltipProvider>
         <Scripts />
       </body>
     </html>

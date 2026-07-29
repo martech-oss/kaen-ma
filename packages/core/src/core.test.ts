@@ -112,6 +112,23 @@ describe("delivery safeguards", () => {
     expect(evaluateSendEligibility("transactional", snapshot)).toEqual({ allowed: true });
   });
 
+  it("blocks every delivery to an archived contact", () => {
+    const snapshot = {
+      contactStatus: "archived" as const,
+      globalStatus: "subscribed" as const,
+      suppressed: false,
+      frequency: { sentInWindow: 0, limit: null },
+    };
+    expect(evaluateSendEligibility("marketing", snapshot)).toEqual({
+      allowed: false,
+      reason: "contact_archived",
+    });
+    expect(evaluateSendEligibility("transactional", snapshot)).toEqual({
+      allowed: false,
+      reason: "contact_archived",
+    });
+  });
+
   it("defines bounded retries and valid transitions", () => {
     expect(canTransitionJob("processing", "completed")).toBe(true);
     expect(canTransitionJob("completed", "pending")).toBe(false);

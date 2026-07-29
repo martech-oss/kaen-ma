@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { SegmentsPage } from "../App";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app/segments")({
-  component: SegmentsPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/contacts/segments", replace: true });
+  },
 });

@@ -2,16 +2,58 @@ import type {
   CampaignDefinition,
   CampaignEdge,
   CampaignNode,
-  Contact,
   ContentDocument,
   SegmentFilter,
 } from "@kaenma/shared";
+import { contactAttributeDefinitions } from "@kaenma/shared";
 import {
-  Link,
-  Outlet,
-  linkOptions,
-  useNavigate,
-} from "@tanstack/react-router";
+  AppDialog,
+  ErrorAlert as ErrorMessage,
+  FormInput as Field,
+  FormNativeSelect,
+  FormSelectOption,
+  LoadingButton,
+  PageLayout as Page,
+  PageLoading,
+  ResourceCard,
+  ResourceGrid,
+  SimpleEmpty as Empty,
+  SuccessAlert as SuccessMessage,
+} from "@/components/app-ui";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { Link, Outlet, linkOptions, useNavigate } from "@tanstack/react-router";
 import {
   Background,
   Controls,
@@ -32,23 +74,23 @@ import {
 import {
   Activity,
   Blocks,
+  Building2,
   ContactRound,
   FileText,
   Gauge,
   GitBranch,
   KeyRound,
   LayoutTemplate,
+  ListChecks,
   LogOut,
   Mail,
-  Menu,
   Plus,
   Save,
-  Search,
   Send,
   Settings,
   Shapes,
+  Tags,
   UsersRound,
-  X,
 } from "lucide-react";
 import {
   createContext,
@@ -82,7 +124,8 @@ interface DashboardData {
 
 export function App(): ReactNode {
   const session = authClient.useSession();
-  if (session.isPending) return <FullScreenStatus label="セッションを確認しています…" />;
+  if (session.isPending)
+    return <FullScreenStatus label="セッションを確認しています…" />;
   if (!session.data) return <AuthScreen />;
   return <AuthenticatedApp />;
 }
@@ -96,14 +139,18 @@ function AuthenticatedApp(): ReactNode {
     void api<Workspace>("/workspace")
       .then((response) => setWorkspace(response.data))
       .catch((error: unknown) => {
-        if (error instanceof ApiClientError && error.code === "workspace_required") {
+        if (
+          error instanceof ApiClientError &&
+          error.code === "workspace_required"
+        ) {
           setNeedsWorkspace(true);
         }
       })
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <FullScreenStatus label="ワークスペースを読み込んでいます…" />;
+  if (loading)
+    return <FullScreenStatus label="ワークスペースを読み込んでいます…" />;
   if (needsWorkspace || !workspace) {
     return (
       <WorkspaceSetup
@@ -117,272 +164,279 @@ function AuthenticatedApp(): ReactNode {
 }
 
 function Shell({ workspace }: { workspace: Workspace }): ReactNode {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const navigation = linkOptions([
+  const navigationBeforeContacts = linkOptions([
     { to: "/dashboard", label: "ダッシュボード", icon: Gauge },
-    { to: "/contacts", label: "連絡先", icon: ContactRound },
-    { to: "/segments", label: "セグメント", icon: Shapes },
+  ]);
+  const contactNavigation = linkOptions([
+    { to: "/contacts", label: "連絡先", icon: UsersRound },
+    { to: "/contacts/accounts", label: "アカウント", icon: Building2 },
+    { to: "/contacts/lists", label: "リスト", icon: ListChecks },
+    { to: "/contacts/tags", label: "タグ", icon: Tags },
+    { to: "/contacts/segments", label: "セグメント", icon: Shapes },
+  ]);
+  const navigationAfterContacts = linkOptions([
     { to: "/campaigns", label: "キャンペーン", icon: GitBranch },
     { to: "/emails", label: "メール", icon: Mail },
     { to: "/forms", label: "フォーム", icon: FileText },
     { to: "/settings", label: "設定", icon: Settings },
   ]);
   return (
-    <div className="min-h-screen bg-cloud">
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 w-68 border-r border-slate-200 bg-[#151927] text-white transition-transform lg:translate-x-0 ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+    <SidebarProvider>
+      <a
+        href="#main-content"
+        className="sr-only z-[100] rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:outline-none focus:ring-3 focus:ring-ring/50"
       >
-        <div className="flex h-18 items-center justify-between border-b border-white/10 px-5">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-xl bg-brand">
-              <Blocks className="size-5" />
+        メインコンテンツへ移動
+      </a>
+      <Sidebar collapsible="icon">
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg" tooltip="Kaenma">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Blocks />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">Kaenma</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {workspace.name}
+                  </span>
+                </div>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>ワークスペース</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {navigationBeforeContacts.map((item) => (
+                  <SidebarMenuItem key={item.to}>
+                    <SidebarMenuButton
+                      render={
+                        <Link
+                          to={item.to}
+                          activeProps={{ "data-active": "true" }}
+                        />
+                      }
+                      tooltip={item.label}
+                    >
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={
+                      <Link
+                        to="/contacts"
+                        activeProps={{ "data-active": "true" }}
+                      />
+                    }
+                    tooltip="コンタクト"
+                  >
+                    <ContactRound />
+                    <span>コンタクト</span>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                    {contactNavigation.map((item) => (
+                      <SidebarMenuSubItem key={item.to}>
+                        <SidebarMenuSubButton
+                          render={
+                            <Link
+                              to={item.to}
+                              activeOptions={{ exact: true }}
+                              activeProps={{ "data-active": "true" }}
+                            />
+                          }
+                        >
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+                {navigationAfterContacts.map((item) => (
+                  <SidebarMenuItem key={item.to}>
+                    <SidebarMenuButton
+                      render={
+                        <Link
+                          to={item.to}
+                          activeProps={{ "data-active": "true" }}
+                        />
+                      }
+                      tooltip={item.label}
+                    >
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <SidebarFooter>
+          <div className="flex flex-col gap-2 rounded-lg border p-2 text-xs group-data-[collapsible=icon]:hidden">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Cloudflare native</span>
+              <Badge variant="secondary">
+                <span className="size-1.5 rounded-full bg-success" />
+                Online
+              </Badge>
             </div>
-            <div>
-              <div className="text-base font-bold tracking-tight">Kaenma</div>
-              <div className="max-w-38 truncate text-xs text-slate-400">{workspace.name}</div>
-            </div>
+            <span className="text-muted-foreground">
+              Role: {workspace.role}
+            </span>
           </div>
-          <button className="lg:hidden" onClick={() => setMobileOpen(false)} aria-label="閉じる">
-            <X />
-          </button>
-        </div>
-        <nav className="space-y-1 p-3">
-          {navigation.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition"
-              activeProps={{ className: "bg-white/12 text-white" }}
-              inactiveProps={{
-                className: "text-slate-400 hover:bg-white/6 hover:text-white",
-              }}
-            >
-              <item.icon className="size-4.5" />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-        <div className="absolute inset-x-3 bottom-4 rounded-xl border border-white/10 bg-white/5 p-3">
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Cloudflare native</span>
-            <span className="rounded-full bg-mint/15 px-2 py-0.5 text-mint">Online</span>
+        </SidebarFooter>
+        <SidebarRail />
+      </Sidebar>
+      <SidebarInset id="main-content" tabIndex={-1}>
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
+          <div className="flex items-center gap-2">
+            <SidebarTrigger aria-label="ナビゲーションを開閉" />
+            <Separator orientation="vertical" className="h-4" />
+            <span className="hidden text-sm text-muted-foreground sm:inline">
+              {workspace.name} / {workspace.timezone}
+            </span>
           </div>
-          <div className="text-xs text-slate-500">Role: {workspace.role}</div>
-        </div>
-      </aside>
-      <div className="lg:pl-68">
-        <header className="sticky top-0 z-30 flex h-18 items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur lg:px-8">
-          <button className="button-secondary !p-2 lg:hidden" onClick={() => setMobileOpen(true)}>
-            <Menu className="size-5" />
-          </button>
-          <div className="hidden text-sm text-slate-500 sm:block">
-            {workspace.name} <span className="mx-2">/</span> {workspace.timezone}
-          </div>
-          <button
-            className="button-secondary"
+          <Button
+            variant="outline"
             onClick={() => {
               void authClient.signOut().then(() => window.location.reload());
             }}
           >
-            <LogOut className="size-4" /> ログアウト
-          </button>
+            <LogOut data-icon="inline-start" />
+            ログアウト
+          </Button>
         </header>
-        <main className="mx-auto max-w-[1500px] p-4 lg:p-8">
+        <div className="mx-auto w-full max-w-[1500px] p-4 lg:p-8">
           <WorkspaceContext.Provider value={workspace}>
             <Outlet />
           </WorkspaceContext.Provider>
-        </main>
-      </div>
-    </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 
 export function Dashboard(): ReactNode {
   const [data, setData] = useState<DashboardData | null>(null);
   useEffect(() => {
-    void api<DashboardData>("/dashboard").then((response) => setData(response.data));
+    void api<DashboardData>("/dashboard").then((response) =>
+      setData(response.data),
+    );
   }, []);
   if (!data) return <PageLoading />;
   const deliveredRate =
     data.deliveries.sent > 0
-      ? Math.round((data.deliveries.delivered / data.deliveries.sent) * 1000) / 10
+      ? Math.round((data.deliveries.delivered / data.deliveries.sent) * 1000) /
+        10
       : 0;
   const cards = [
-    { label: "アクティブ連絡先", value: data.contacts.count.toLocaleString(), icon: UsersRound },
-    { label: "公開キャンペーン", value: data.campaigns.count.toLocaleString(), icon: Activity },
-    { label: "30日間の配信", value: data.deliveries.sent.toLocaleString(), icon: Send },
+    {
+      label: "アクティブ連絡先",
+      value: data.contacts.count.toLocaleString(),
+      icon: UsersRound,
+    },
+    {
+      label: "公開キャンペーン",
+      value: data.campaigns.count.toLocaleString(),
+      icon: Activity,
+    },
+    {
+      label: "30日間の配信",
+      value: data.deliveries.sent.toLocaleString(),
+      icon: Send,
+    },
     { label: "配信到達率", value: `${deliveredRate}%`, icon: Gauge },
   ];
   return (
-    <Page title="ダッシュボード" description="獲得・自動化・配信の現在地を確認します。">
+    <Page
+      title="ダッシュボード"
+      description="獲得・自動化・配信の現在地を確認します。"
+    >
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
-          <div key={card.label} className="card p-5">
-            <div className="mb-5 flex items-center justify-between">
-              <span className="text-sm text-slate-500">{card.label}</span>
-              <span className="grid size-10 place-items-center rounded-xl bg-brand/8 text-brand">
-                <card.icon className="size-5" />
-              </span>
-            </div>
-            <div className="text-3xl font-bold tracking-tight">{card.value}</div>
-          </div>
+          <Card key={card.label}>
+            <CardHeader>
+              <CardDescription>{card.label}</CardDescription>
+              <CardAction>
+                <div className="flex size-8 items-center justify-center rounded-lg bg-muted">
+                  <card.icon className="size-4" />
+                </div>
+              </CardAction>
+              <CardTitle className="text-3xl font-semibold tabular-nums">
+                {card.value}
+              </CardTitle>
+            </CardHeader>
+          </Card>
         ))}
       </div>
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-        <div className="card min-h-80 p-6">
-          <h2 className="font-semibold">配信ヘルス</h2>
-          <div className="mt-8 flex h-44 items-end gap-3">
-            {[45, 56, 38, 70, 62, 83, Math.max(12, deliveredRate)].map((height, index) => (
-              <div key={index} className="flex flex-1 flex-col items-center gap-2">
-                <div
-                  className="w-full rounded-t-lg bg-gradient-to-t from-brand to-[#9b83ff]"
-                  style={{ height: `${height}%` }}
-                />
-                <span className="text-xs text-slate-400">{index + 1}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="card p-6">
-          <h2 className="font-semibold">最近のイベント</h2>
-          <div className="mt-4 divide-y divide-slate-100">
+      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+        <Card className="min-h-80">
+          <CardHeader>
+            <CardTitle>配信ヘルス</CardTitle>
+            <CardDescription>直近7期間の配信到達率</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex h-44 items-end gap-3">
+              {[45, 56, 38, 70, 62, 83, Math.max(12, deliveredRate)].map(
+                (height, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-1 flex-col items-center gap-2"
+                  >
+                    <div
+                      className="w-full rounded-t-md bg-primary"
+                      style={{
+                        height: `${height}%`,
+                        opacity: 0.45 + index * 0.08,
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {index + 1}
+                    </span>
+                  </div>
+                ),
+              )}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>最近のイベント</CardTitle>
+            <CardDescription>
+              ワークスペースの最新アクティビティ
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             {data.recentEvents.length === 0 ? (
               <Empty compact label="まだイベントがありません" />
             ) : (
               data.recentEvents.slice(0, 8).map((event, index) => (
-                <div key={`${event.occurred_at}-${index}`} className="flex gap-3 py-3">
-                  <span className="mt-1 size-2 rounded-full bg-mint" />
-                  <div>
-                    <div className="text-sm font-medium">{event.type}</div>
-                    <div className="text-xs text-slate-400">{formatDate(event.occurred_at)}</div>
+                <div key={`${event.occurred_at}-${index}`}>
+                  {index > 0 ? <Separator /> : null}
+                  <div className="flex gap-3 py-3">
+                    <span className="mt-1 size-2 rounded-full bg-success" />
+                    <div>
+                      <div className="text-sm font-medium">{event.type}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatDate(event.occurred_at)}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </Page>
-  );
-}
-
-export function ContactsPage(): ReactNode {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [query, setQuery] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const load = useCallback(() => {
-    void api<Contact[]>(`/contacts${query ? `?q=${encodeURIComponent(query)}` : ""}`).then(
-      (response) => setContacts(response.data),
-    );
-  }, [query]);
-  useEffect(load, [load]);
-  return (
-    <Page
-      title="連絡先"
-      description="既知Contactと匿名訪問者を一つのタイムラインで管理します。"
-      action={
-        <button className="button-primary" onClick={() => setShowForm(true)}>
-          <Plus className="size-4" /> 連絡先を追加
-        </button>
-      }
-    >
-      <div className="card overflow-hidden">
-        <div className="flex items-center border-b border-slate-100 p-4">
-          <Search className="ml-1 size-4 text-slate-400" />
-          <input
-            className="w-full bg-transparent px-3 text-sm outline-none"
-            placeholder="名前、メールアドレスで検索"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-5 py-3">Contact</th>
-                <th className="px-5 py-3">Stage</th>
-                <th className="px-5 py-3">Score</th>
-                <th className="px-5 py-3">更新</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {contacts.map((contact) => (
-                <tr key={contact.id} className="hover:bg-slate-50/70">
-                  <td className="px-5 py-4">
-                    <div className="font-medium">
-                      {[contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
-                        contact.email ||
-                        "匿名Contact"}
-                    </div>
-                    <div className="text-xs text-slate-400">{contact.email}</div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs text-indigo-700">
-                      {contact.stage}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 font-semibold">{contact.score}</td>
-                  <td className="px-5 py-4 text-slate-500">{formatDate(contact.updatedAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {contacts.length === 0 && <Empty label="連絡先がまだありません" />}
-        </div>
-      </div>
-      {showForm && (
-        <Modal title="連絡先を追加" onClose={() => setShowForm(false)}>
-          <ContactForm
-            onSaved={() => {
-              setShowForm(false);
-              load();
-            }}
-          />
-        </Modal>
-      )}
-    </Page>
-  );
-}
-
-function ContactForm({ onSaved }: { onSaved: () => void }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      await api("/contacts", {
-        method: "POST",
-        body: JSON.stringify({
-          email: form.get("email"),
-          firstName: form.get("firstName") || undefined,
-          lastName: form.get("lastName") || undefined,
-          customFields: {},
-        }),
-      });
-      onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <form onSubmit={(event) => void submit(event)} className="space-y-4">
-      <Field label="メールアドレス" name="email" type="email" required />
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="名" name="firstName" />
-        <Field label="姓" name="lastName" />
-      </div>
-      {error && <ErrorMessage>{error}</ErrorMessage>}
-      <button className="button-primary w-full" disabled={busy}>
-        {busy ? "保存中…" : "保存"}
-      </button>
-    </form>
   );
 }
 
@@ -399,7 +453,9 @@ export function SegmentsPage(): ReactNode {
   const [segments, setSegments] = useState<SegmentRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const load = useCallback(() => {
-    void api<SegmentRow[]>("/segments").then((response) => setSegments(response.data));
+    void api<SegmentRow[]>("/segments").then((response) =>
+      setSegments(response.data),
+    );
   }, []);
   useEffect(load, [load]);
   return (
@@ -407,9 +463,10 @@ export function SegmentsPage(): ReactNode {
       title="セグメント"
       description="属性・タグ・行動・同意を組み合わせた安全な動的条件です。"
       action={
-        <button className="button-primary" onClick={() => setShowForm(true)}>
-          <Plus className="size-4" /> セグメントを作成
-        </button>
+        <Button onClick={() => setShowForm(true)}>
+          <Plus data-icon="inline-start" />
+          セグメントを作成
+        </Button>
       }
     >
       <ResourceGrid>
@@ -423,16 +480,23 @@ export function SegmentsPage(): ReactNode {
           />
         ))}
       </ResourceGrid>
-      {segments.length === 0 && <Empty label="最初のセグメントを作成しましょう" />}
+      {segments.length === 0 && (
+        <Empty label="最初のセグメントを作成しましょう" />
+      )}
       {showForm && (
-        <Modal title="動的セグメント" onClose={() => setShowForm(false)}>
+        <AppDialog
+          open={showForm}
+          onOpenChange={setShowForm}
+          title="動的セグメント"
+          description="属性や行動条件から更新されるセグメントを作成します。"
+        >
           <SegmentForm
             onSaved={() => {
               setShowForm(false);
               load();
             }}
           />
-        </Modal>
+        </AppDialog>
       )}
     </Page>
   );
@@ -449,7 +513,10 @@ function SegmentForm({ onSaved }: { onSaved: () => void }): ReactNode {
     const filter: SegmentFilter = {
       kind: "condition",
       field: field as Extract<SegmentFilter, { kind: "condition" }>["field"],
-      operator: operator as Extract<SegmentFilter, { kind: "condition" }>["operator"],
+      operator: operator as Extract<
+        SegmentFilter,
+        { kind: "condition" }
+      >["operator"],
       value: String(form.get("value")),
     };
     setBusy(true);
@@ -466,35 +533,43 @@ function SegmentForm({ onSaved }: { onSaved: () => void }): ReactNode {
     onSaved();
   }
   return (
-    <form onSubmit={(event) => void submit(event)} className="space-y-4">
+    <form
+      onSubmit={(event) => void submit(event)}
+      className="flex flex-col gap-5"
+    >
       <Field label="名前" name="name" required />
       <div className="grid grid-cols-2 gap-3">
-        <label>
-          <span className="label">フィールド</span>
-          <select className="field" value={field} onChange={(event) => setField(event.target.value)}>
-            <option value="stage">Stage</option>
-            <option value="score">Score</option>
-            <option value="email">Email</option>
-            <option value="tag">Tag</option>
-            <option value="event">Event</option>
-          </select>
-        </label>
-        <label>
-          <span className="label">演算子</span>
-          <select
-            className="field"
-            value={operator}
-            onChange={(event) => setOperator(event.target.value)}
-          >
-            <option value="eq">等しい</option>
-            <option value="neq">等しくない</option>
-            <option value="contains">含む</option>
-            <option value="gte">以上</option>
-          </select>
-        </label>
+        <FormNativeSelect
+          label="フィールド"
+          name="field"
+          value={field}
+          onChange={(event) => setField(event.target.value)}
+        >
+          {contactAttributeDefinitions.map((attribute) => (
+            <FormSelectOption key={attribute.key} value={attribute.key}>
+              {attribute.label}
+            </FormSelectOption>
+          ))}
+          <FormSelectOption value="company">アカウント</FormSelectOption>
+          <FormSelectOption value="tag">タグ</FormSelectOption>
+          <FormSelectOption value="event">イベント</FormSelectOption>
+        </FormNativeSelect>
+        <FormNativeSelect
+          label="演算子"
+          name="operator"
+          value={operator}
+          onChange={(event) => setOperator(event.target.value)}
+        >
+          <FormSelectOption value="eq">等しい</FormSelectOption>
+          <FormSelectOption value="neq">等しくない</FormSelectOption>
+          <FormSelectOption value="contains">含む</FormSelectOption>
+          <FormSelectOption value="gte">以上</FormSelectOption>
+        </FormNativeSelect>
       </div>
       <Field label="値" name="value" required />
-      <button className="button-primary w-full" disabled={busy}>作成</button>
+      <LoadingButton busy={busy} className="w-full" type="submit">
+        作成
+      </LoadingButton>
     </form>
   );
 }
@@ -511,7 +586,9 @@ export function CampaignsPage(): ReactNode {
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const navigate = useNavigate();
   const load = useCallback(() => {
-    void api<CampaignRow[]>("/campaigns").then((response) => setCampaigns(response.data));
+    void api<CampaignRow[]>("/campaigns").then((response) =>
+      setCampaigns(response.data),
+    );
   }, []);
   useEffect(load, [load]);
   async function createCampaign() {
@@ -530,16 +607,18 @@ export function CampaignsPage(): ReactNode {
       title="キャンペーン"
       description="SourceからDecision、Delay、Actionへつながる不変バージョンの自動化です。"
       action={
-        <button className="button-primary" onClick={() => void createCampaign()}>
-          <Plus className="size-4" /> キャンペーンを作成
-        </button>
+        <Button onClick={() => void createCampaign()}>
+          <Plus data-icon="inline-start" />
+          キャンペーンを作成
+        </Button>
       }
     >
       <ResourceGrid>
         {campaigns.map((campaign) => (
-          <button
+          <Button
             key={campaign.id}
-            className="text-left"
+            variant="ghost"
+            className="h-auto w-full items-stretch p-0 text-left"
             onClick={() => {
               void navigate({
                 to: "/campaigns/$id",
@@ -553,10 +632,12 @@ export function CampaignsPage(): ReactNode {
               subtitle={campaign.status}
               footer={formatDate(campaign.updated_at)}
             />
-          </button>
+          </Button>
         ))}
       </ResourceGrid>
-      {campaigns.length === 0 && <Empty label="最初のキャンペーンを作成しましょう" />}
+      {campaigns.length === 0 && (
+        <Empty label="最初のキャンペーンを作成しましょう" />
+      )}
     </Page>
   );
 }
@@ -566,8 +647,8 @@ export function CampaignBuilder({ id }: { id: string }): ReactNode {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   useEffect(() => {
-    void api<{ graph: CampaignDefinition }>(`/campaigns/${id}/draft`).then((response) =>
-      setDefinition(response.data.graph),
+    void api<{ graph: CampaignDefinition }>(`/campaigns/${id}/draft`).then(
+      (response) => setDefinition(response.data.graph),
     );
   }, [id]);
   const flowNodes: Node[] = useMemo(
@@ -576,6 +657,8 @@ export function CampaignBuilder({ id }: { id: string }): ReactNode {
         id: node.id,
         position: node.position,
         type: "campaign",
+        width: 160,
+        height: 66,
         data: { node },
       })),
     [definition],
@@ -615,7 +698,9 @@ export function CampaignBuilder({ id }: { id: string }): ReactNode {
           id: edge.id,
           source: edge.source,
           target: edge.target,
-          branch: (edge.data?.["branch"] as CampaignEdge["branch"] | undefined) ?? "next",
+          branch:
+            (edge.data?.["branch"] as CampaignEdge["branch"] | undefined) ??
+            "next",
         })),
       });
     },
@@ -624,9 +709,13 @@ export function CampaignBuilder({ id }: { id: string }): ReactNode {
   const onConnect = useCallback(
     (connection: Connection) => {
       if (!definition || !connection.source || !connection.target) return;
-      const source = definition.nodes.find((node) => node.id === connection.source);
+      const source = definition.nodes.find(
+        (node) => node.id === connection.source,
+      );
       const branch: CampaignEdge["branch"] =
-        source?.type === "condition" || source?.type === "decision" ? "yes" : "next";
+        source?.type === "condition" || source?.type === "decision"
+          ? "yes"
+          : "next";
       const added = addEdge(
         {
           ...connection,
@@ -641,7 +730,9 @@ export function CampaignBuilder({ id }: { id: string }): ReactNode {
           id: edge.id,
           source: edge.source,
           target: edge.target,
-          branch: (edge.data?.["branch"] as CampaignEdge["branch"] | undefined) ?? "next",
+          branch:
+            (edge.data?.["branch"] as CampaignEdge["branch"] | undefined) ??
+            "next",
         })),
       });
     },
@@ -659,11 +750,15 @@ export function CampaignBuilder({ id }: { id: string }): ReactNode {
       if (publish) {
         await api(`/campaigns/${id}/publish`, { method: "POST" });
         setNotice("新しい不変バージョンを公開しました");
+        toast.success("キャンペーンを公開しました");
       } else {
         setNotice("下書きを保存しました");
+        toast.success("下書きを保存しました");
       }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "保存できませんでした");
+      setNotice(
+        error instanceof Error ? error.message : "保存できませんでした",
+      );
     } finally {
       setSaving(false);
     }
@@ -671,26 +766,39 @@ export function CampaignBuilder({ id }: { id: string }): ReactNode {
   if (!definition) return <PageLoading />;
   return (
     <div className="-m-4 lg:-m-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4 lg:px-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-background px-5 py-4 lg:px-8">
         <div>
-          <input
-            className="text-xl font-bold outline-none"
+          <Input
+            aria-label="キャンペーン名"
+            className="h-auto border-0 px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
             value={definition.name}
-            onChange={(event) => setDefinition({ ...definition, name: event.target.value })}
+            onChange={(event) =>
+              setDefinition({ ...definition, name: event.target.value })
+            }
           />
-          <div className="text-xs text-slate-400">Draft · {definition.timezone}</div>
+          <div className="text-xs text-muted-foreground">
+            Draft · {definition.timezone}
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          {notice && <span className="text-sm text-slate-500">{notice}</span>}
-          <button className="button-secondary" disabled={saving} onClick={() => void save()}>
-            <Save className="size-4" /> 保存
-          </button>
-          <button className="button-primary" disabled={saving} onClick={() => void save(true)}>
-            <Send className="size-4" /> 公開
-          </button>
+          {notice && (
+            <span className="text-sm text-muted-foreground">{notice}</span>
+          )}
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => void save()}
+          >
+            <Save data-icon="inline-start" />
+            保存
+          </Button>
+          <Button disabled={saving} onClick={() => void save(true)}>
+            <Send data-icon="inline-start" />
+            公開
+          </Button>
         </div>
       </div>
-      <div className="h-[calc(100vh-8.5rem)] bg-[#eef1f7]">
+      <div className="h-[calc(100vh-8.5rem)] bg-muted/60">
         <ReactFlow
           nodes={flowNodes}
           edges={flowEdges}
@@ -709,14 +817,16 @@ export function CampaignBuilder({ id }: { id: string }): ReactNode {
   );
 }
 
-function CampaignFlowNode({ data }: NodeProps<Node<{ node: CampaignNode }>>): ReactNode {
+function CampaignFlowNode({
+  data,
+}: NodeProps<Node<{ node: CampaignNode }>>): ReactNode {
   const node = data.node;
   const colors: Record<CampaignNode["type"], string> = {
-    source: "border-mint",
-    action: "border-brand",
-    condition: "border-amber-400",
-    decision: "border-pink-400",
-    delay: "border-sky-400",
+    source: "border-success",
+    action: "border-primary",
+    condition: "border-warning",
+    decision: "border-foreground",
+    delay: "border-muted-foreground",
   };
   const label =
     node.type === "action"
@@ -725,14 +835,21 @@ function CampaignFlowNode({ data }: NodeProps<Node<{ node: CampaignNode }>>): Re
         ? node.config.source.replaceAll("_", " ")
         : node.type;
   return (
-    <div className={`flow-node ${colors[node.type]}`}>
-      {node.type !== "source" && <Handle type="target" position={Position.Left} />}
-      <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
-        {node.type}
-      </div>
-      <div className="mt-1 text-sm font-semibold capitalize">{label}</div>
+    <Card
+      size="sm"
+      className={cn("min-w-40 border-2 py-3 shadow-md", colors[node.type])}
+    >
+      {node.type !== "source" && (
+        <Handle type="target" position={Position.Left} />
+      )}
+      <CardHeader>
+        <CardDescription className="text-[10px] font-semibold uppercase tracking-widest">
+          {node.type}
+        </CardDescription>
+        <CardTitle className="capitalize">{label}</CardTitle>
+      </CardHeader>
       <Handle type="source" position={Position.Right} />
-    </div>
+    </Card>
   );
 }
 
@@ -748,7 +865,9 @@ export function EmailsPage(): ReactNode {
   const [items, setItems] = useState<TemplateRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const load = useCallback(() => {
-    void api<TemplateRow[]>("/email-templates").then((response) => setItems(response.data));
+    void api<TemplateRow[]>("/email-templates").then((response) =>
+      setItems(response.data),
+    );
   }, []);
   useEffect(load, [load]);
   return (
@@ -756,9 +875,10 @@ export function EmailsPage(): ReactNode {
       title="メール"
       description="TransactionalとMarketingを型・プロバイダーごとに明確に分離します。"
       action={
-        <button className="button-primary" onClick={() => setShowForm(true)}>
-          <Plus className="size-4" /> テンプレート
-        </button>
+        <Button onClick={() => setShowForm(true)}>
+          <Plus data-icon="inline-start" />
+          テンプレート
+        </Button>
       }
     >
       <ResourceGrid>
@@ -774,14 +894,19 @@ export function EmailsPage(): ReactNode {
       </ResourceGrid>
       {items.length === 0 && <Empty label="メールテンプレートがありません" />}
       {showForm && (
-        <Modal title="メールテンプレート" onClose={() => setShowForm(false)}>
+        <AppDialog
+          open={showForm}
+          onOpenChange={setShowForm}
+          title="メールテンプレート"
+          description="配信用コンテンツの基本情報を入力します。"
+        >
           <EmailForm
             onSaved={() => {
               setShowForm(false);
               load();
             }}
           />
-        </Modal>
+        </AppDialog>
       )}
     </Page>
   );
@@ -827,18 +952,24 @@ function EmailForm({ onSaved }: { onSaved: () => void }): ReactNode {
     onSaved();
   }
   return (
-    <form onSubmit={(event) => void submit(event)} className="space-y-4">
+    <form
+      onSubmit={(event) => void submit(event)}
+      className="flex flex-col gap-5"
+    >
       <Field label="名前" name="name" required />
       <Field label="件名" name="subject" required />
       <Field label="見出し" name="headline" required />
-      <label>
-        <span className="label">用途</span>
-        <select className="field" name="purpose" defaultValue="marketing">
-          <option value="marketing">Marketing（Resend）</option>
-          <option value="transactional">Transactional（Cloudflare）</option>
-        </select>
-      </label>
-      <button className="button-primary w-full" disabled={busy}>作成</button>
+      <FormNativeSelect label="用途" name="purpose" defaultValue="marketing">
+        <FormSelectOption value="marketing">
+          Marketing（Resend）
+        </FormSelectOption>
+        <FormSelectOption value="transactional">
+          Transactional（Cloudflare）
+        </FormSelectOption>
+      </FormNativeSelect>
+      <LoadingButton busy={busy} className="w-full" type="submit">
+        作成
+      </LoadingButton>
     </form>
   );
 }
@@ -863,9 +994,10 @@ export function FormsPage(): ReactNode {
       title="フォーム"
       description="Turnstile、honeypot、許可ドメイン、二重送信防止を組み込んだ獲得面です。"
       action={
-        <button className="button-primary" onClick={() => setShowForm(true)}>
-          <Plus className="size-4" /> フォーム
-        </button>
+        <Button onClick={() => setShowForm(true)}>
+          <Plus data-icon="inline-start" />
+          フォーム
+        </Button>
       }
     >
       <ResourceGrid>
@@ -881,7 +1013,12 @@ export function FormsPage(): ReactNode {
       </ResourceGrid>
       {items.length === 0 && <Empty label="フォームがありません" />}
       {showForm && (
-        <Modal title="フォームを作成" onClose={() => setShowForm(false)}>
+        <AppDialog
+          open={showForm}
+          onOpenChange={setShowForm}
+          title="フォームを作成"
+          description="連絡先を獲得する公開フォームを作成します。"
+        >
           <SimpleResourceForm
             buttonLabel="フォームを公開"
             onSubmit={async (name) => {
@@ -905,7 +1042,7 @@ export function FormsPage(): ReactNode {
               load();
             }}
           />
-        </Modal>
+        </AppDialog>
       )}
     </Page>
   );
@@ -934,64 +1071,119 @@ export function SettingsPage(): ReactNode {
       }),
     });
     setProviderSaved(true);
+    toast.success("Resend設定を保存しました");
   }
   return (
-    <Page title="設定" description="チャネル資格情報はAES-GCMで暗号化してD1へ保存します。">
+    <Page
+      title="設定"
+      description="チャネル資格情報はAES-GCMで暗号化してD1へ保存します。"
+    >
       <div className="grid gap-6 xl:grid-cols-2">
         <TwoFactorSettings />
-        <section className="card p-6">
-          <div className="mb-5 flex items-center gap-3">
-            <Mail className="size-5 text-brand" />
-            <h2 className="font-semibold">Resend Marketing Email</h2>
-          </div>
-          <p className="mb-5 text-sm text-slate-500">
-            Webhook URL:{" "}
-            <code className="break-all">{`/api/webhooks/resend/${workspace.id}`}</code>
-          </p>
-          <form onSubmit={(event) => void saveResend(event)} className="space-y-4">
-            <Field label="API key" name="apiKey" type="password" required />
-            <Field label="Webhook signing secret" name="webhookSecret" type="password" required />
-            {providerSaved && <SuccessMessage>保存しました</SuccessMessage>}
-            <button className="button-primary">暗号化して保存</button>
-          </form>
-        </section>
-        <section className="card p-6">
-          <div className="mb-2 flex items-center gap-3">
-            <KeyRound className="size-5 text-brand" />
-            <h2 className="font-semibold">Workspace APIキー</h2>
-          </div>
-          <p className="mb-5 text-sm text-slate-500">
-            SDK/MCP用。キーは作成時に一度だけ表示されます。
-          </p>
-          <button className="button-secondary" onClick={() => void createKey()}>
-            APIキーを作成
-          </button>
-          {apiKey && (
-            <pre className="mt-4 overflow-x-auto rounded-xl bg-slate-950 p-4 text-xs text-emerald-300">
-              {apiKey}
-            </pre>
-          )}
-        </section>
-        <section className="card p-6 xl:col-span-2">
-          <h2 className="font-semibold">Workspace</h2>
-          <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-3">
-            <div><dt className="text-slate-400">ID</dt><dd className="mt-1 font-mono">{workspace.id}</dd></div>
-            <div><dt className="text-slate-400">Slug</dt><dd className="mt-1">{workspace.slug}</dd></div>
-            <div><dt className="text-slate-400">Timezone</dt><dd className="mt-1">{workspace.timezone}</dd></div>
-          </dl>
-        </section>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
+                <Mail />
+              </div>
+              <div>
+                <CardTitle>Resend Marketing Email</CardTitle>
+                <CardDescription>
+                  マーケティングメールの配信資格情報
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-5">
+              <p className="text-sm text-muted-foreground">
+                Webhook URL:{" "}
+                <code className="break-all rounded bg-muted px-1 py-0.5 text-foreground">
+                  {`/api/webhooks/resend/${workspace.id}`}
+                </code>
+              </p>
+              <form
+                onSubmit={(event) => void saveResend(event)}
+                className="flex flex-col gap-5"
+              >
+                <Field label="API key" name="apiKey" type="password" required />
+                <Field
+                  label="Webhook signing secret"
+                  name="webhookSecret"
+                  type="password"
+                  required
+                />
+                {providerSaved && <SuccessMessage>保存しました</SuccessMessage>}
+                <Button type="submit">暗号化して保存</Button>
+              </form>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
+                <KeyRound />
+              </div>
+              <div>
+                <CardTitle>Workspace APIキー</CardTitle>
+                <CardDescription>
+                  SDK/MCP用。キーは作成時に一度だけ表示されます。
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col items-start gap-4">
+            <Button variant="outline" onClick={() => void createKey()}>
+              APIキーを作成
+            </Button>
+            {apiKey && (
+              <pre className="w-full overflow-x-auto rounded-lg bg-muted p-4 text-xs">
+                {apiKey}
+              </pre>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle>Workspace</CardTitle>
+            <CardDescription>現在のワークスペース情報</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <dl className="grid gap-4 text-sm sm:grid-cols-3">
+              <div className="flex flex-col gap-1">
+                <dt className="text-muted-foreground">ID</dt>
+                <dd className="font-mono">{workspace.id}</dd>
+              </div>
+              <div className="flex flex-col gap-1">
+                <dt className="text-muted-foreground">Slug</dt>
+                <dd>{workspace.slug}</dd>
+              </div>
+              <div className="flex flex-col gap-1">
+                <dt className="text-muted-foreground">Timezone</dt>
+                <dd>{workspace.timezone}</dd>
+              </div>
+            </dl>
+          </CardContent>
+        </Card>
       </div>
     </Page>
   );
 }
 
 function TwoFactorSettings(): ReactNode {
-  const [setup, setSetup] = useState<{ totpURI: string; backupCodes: string[] } | null>(null);
+  const [setup, setSetup] = useState<{
+    totpURI: string;
+    backupCodes: string[];
+  } | null>(null);
   const [verified, setVerified] = useState(false);
   async function enable(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const password = String(new FormData(event.currentTarget).get("password"));
-    const result = await authClient.twoFactor.enable({ password, issuer: "Kaenma" });
+    const result = await authClient.twoFactor.enable({
+      password,
+      issuer: "Kaenma",
+    });
     if (result.data) setSetup(result.data);
   }
   async function verify(event: FormEvent<HTMLFormElement>) {
@@ -1001,29 +1193,65 @@ function TwoFactorSettings(): ReactNode {
     if (result.data) setVerified(true);
   }
   return (
-    <section className="card p-6">
-      <div className="mb-2 flex items-center gap-3">
-        <KeyRound className="size-5 text-brand" />
-        <h2 className="font-semibold">TOTP 二要素認証</h2>
-      </div>
-      {!setup ? (
-        <form className="mt-5 space-y-4" onSubmit={(event) => void enable(event)}>
-          <Field label="現在のパスワード" name="password" type="password" required />
-          <button className="button-secondary">セットアップを開始</button>
-        </form>
-      ) : verified ? (
-        <SuccessMessage>TOTPを有効にしました。バックアップコードを安全に保管してください。</SuccessMessage>
-      ) : (
-        <div className="mt-4 space-y-4">
-          <p className="break-all rounded-xl bg-slate-50 p-3 font-mono text-xs">{setup.totpURI}</p>
-          <pre className="rounded-xl bg-slate-950 p-3 text-xs text-emerald-300">{setup.backupCodes.join("\n")}</pre>
-          <form className="flex gap-2" onSubmit={(event) => void verify(event)}>
-            <input className="field" name="code" inputMode="numeric" placeholder="6桁コード" required />
-            <button className="button-primary">確認</button>
-          </form>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
+            <KeyRound />
+          </div>
+          <div>
+            <CardTitle>TOTP 二要素認証</CardTitle>
+            <CardDescription>
+              認証アプリを利用してログインを保護します。
+            </CardDescription>
+          </div>
         </div>
-      )}
-    </section>
+      </CardHeader>
+      <CardContent>
+        {!setup ? (
+          <form
+            className="flex flex-col gap-5"
+            onSubmit={(event) => void enable(event)}
+          >
+            <Field
+              label="現在のパスワード"
+              name="password"
+              type="password"
+              required
+            />
+            <Button variant="outline" type="submit">
+              セットアップを開始
+            </Button>
+          </form>
+        ) : verified ? (
+          <SuccessMessage>
+            TOTPを有効にしました。バックアップコードを安全に保管してください。
+          </SuccessMessage>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <p className="break-all rounded-lg bg-muted p-3 font-mono text-xs">
+              {setup.totpURI}
+            </p>
+            <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs">
+              {setup.backupCodes.join("\n")}
+            </pre>
+            <form
+              className="flex items-end gap-2"
+              onSubmit={(event) => void verify(event)}
+            >
+              <Field
+                label="認証コード"
+                name="code"
+                inputMode="numeric"
+                placeholder="6桁コード"
+                required
+              />
+              <Button type="submit">確認</Button>
+            </form>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1063,87 +1291,125 @@ function AuthScreen(): ReactNode {
       window.location.reload();
     } else if (mode === "signup") {
       setMode("signin");
-      setNotice("アカウントを作成しました。確認メールのリンクを開いてからログインしてください。");
+      setNotice(
+        "アカウントを作成しました。確認メールのリンクを開いてからログインしてください。",
+      );
     } else {
       window.location.reload();
     }
   }
   return (
-    <div className="grid min-h-screen lg:grid-cols-[1.1fr_1fr]">
-      <div className="hidden overflow-hidden bg-[#151927] p-14 text-white lg:flex lg:flex-col lg:justify-between">
+    <div className="grid min-h-screen bg-background lg:grid-cols-[1.05fr_1fr]">
+      <div className="hidden border-r bg-muted/40 p-14 lg:flex lg:flex-col lg:justify-between">
         <div className="flex items-center gap-3">
-          <div className="grid size-10 place-items-center rounded-xl bg-brand"><Blocks /></div>
-          <span className="text-xl font-bold">Kaenma</span>
-        </div>
-        <div>
-          <div className="mb-8 inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
-            Cloudflare-native marketing automation
+          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Blocks />
           </div>
-          <h1 className="max-w-2xl text-5xl font-bold leading-[1.1] tracking-tight">
-            獲得から配信まで、
-            <span className="text-[#9b83ff]">エッジで自動化。</span>
+          <span className="font-heading text-xl font-semibold">Kaenma</span>
+        </div>
+        <div className="flex flex-col items-start gap-6">
+          <Badge variant="outline">
+            Cloudflare-native marketing automation
+          </Badge>
+          <h1 className="max-w-2xl font-heading text-5xl font-semibold leading-[1.08] tracking-tight">
+            獲得から配信まで、エッジで自動化。
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-8 text-slate-400">
+          <p className="max-w-xl text-lg leading-8 text-muted-foreground">
             D1、Queues、R2、Email Serviceを一つのWorkerに統合した、
             オープンソースのマーケティング基盤です。
           </p>
         </div>
-        <div className="flex gap-8 text-sm text-slate-500">
-          <span>MIT License</span><span>TypeScript</span><span>Cloudflare Workers</span>
+        <div className="flex gap-8 text-sm text-muted-foreground">
+          <span>MIT License</span>
+          <span>TypeScript</span>
+          <span>Cloudflare Workers</span>
         </div>
       </div>
-      <div className="flex items-center justify-center bg-white p-6">
-        <div className="w-full max-w-md">
-          <div className="mb-8 lg:hidden">
-            <div className="flex items-center gap-2 text-xl font-bold"><Blocks className="text-brand" />Kaenma</div>
-          </div>
-          <h2 className="text-3xl font-bold tracking-tight">
-            {mode === "signin" ? "おかえりなさい" : "アカウントを作成"}
-          </h2>
-          <p className="mt-2 text-slate-500">
-            {mode === "signin" ? "ワークスペースへログインします。" : "アカウントを作成します。"}
-          </p>
-          {twoFactorPending ? (
-            <form
-              className="mt-8 space-y-4"
-              onSubmit={(event) => {
-                event.preventDefault();
-                const code = String(new FormData(event.currentTarget).get("code"));
-                setBusy(true);
-                void authClient.twoFactor
-                  .verifyTotp({ code, trustDevice: true })
-                  .then((result) => {
-                    if (result.error) setError(result.error.message ?? "コードが無効です");
-                    else window.location.reload();
-                  })
-                  .finally(() => setBusy(false));
+      <div className="flex items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <div className="mb-2 flex items-center gap-2 lg:hidden">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Blocks />
+              </div>
+              <span className="font-heading font-semibold">Kaenma</span>
+            </div>
+            <CardTitle className="text-2xl">
+              {mode === "signin" ? "おかえりなさい" : "アカウントを作成"}
+            </CardTitle>
+            <CardDescription>
+              {mode === "signin"
+                ? "ワークスペースへログインします。"
+                : "アカウントを作成します。"}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-6">
+            {twoFactorPending ? (
+              <form
+                className="flex flex-col gap-5"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const code = String(
+                    new FormData(event.currentTarget).get("code"),
+                  );
+                  setBusy(true);
+                  void authClient.twoFactor
+                    .verifyTotp({ code, trustDevice: true })
+                    .then((result) => {
+                      if (result.error)
+                        setError(result.error.message ?? "コードが無効です");
+                      else window.location.reload();
+                    })
+                    .finally(() => setBusy(false));
+                }}
+              >
+                <Field label="認証アプリの6桁コード" name="code" required />
+                {error && <ErrorMessage>{error}</ErrorMessage>}
+                <LoadingButton busy={busy} className="w-full" type="submit">
+                  確認してログイン
+                </LoadingButton>
+              </form>
+            ) : (
+              <form
+                onSubmit={(event) => void submit(event)}
+                className="flex flex-col gap-5"
+              >
+                {mode === "signup" && (
+                  <Field label="名前" name="name" required />
+                )}
+                <Field
+                  label="メールアドレス"
+                  name="email"
+                  type="email"
+                  required
+                />
+                <Field
+                  label="パスワード（12文字以上）"
+                  name="password"
+                  type="password"
+                  minLength={12}
+                  required
+                />
+                {notice && <SuccessMessage>{notice}</SuccessMessage>}
+                {error && <ErrorMessage>{error}</ErrorMessage>}
+                <LoadingButton busy={busy} className="w-full" type="submit">
+                  {mode === "signin" ? "ログイン" : "登録"}
+                </LoadingButton>
+              </form>
+            )}
+            <Button
+              variant="link"
+              className="self-start px-0"
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError("");
+                setNotice("");
               }}
             >
-              <Field label="認証アプリの6桁コード" name="code" required />
-              {error && <ErrorMessage>{error}</ErrorMessage>}
-              <button className="button-primary w-full py-3" disabled={busy}>確認してログイン</button>
-            </form>
-          ) : <form onSubmit={(event) => void submit(event)} className="mt-8 space-y-4">
-            {mode === "signup" && <Field label="名前" name="name" required />}
-            <Field label="メールアドレス" name="email" type="email" required />
-            <Field label="パスワード（12文字以上）" name="password" type="password" minLength={12} required />
-            {notice && <SuccessMessage>{notice}</SuccessMessage>}
-            {error && <ErrorMessage>{error}</ErrorMessage>}
-            <button className="button-primary w-full py-3" disabled={busy}>
-              {busy ? "処理中…" : mode === "signin" ? "ログイン" : "登録"}
-            </button>
-          </form>}
-          <button
-            className="mt-6 text-sm font-medium text-brand"
-            onClick={() => {
-              setMode(mode === "signin" ? "signup" : "signin");
-              setError("");
-              setNotice("");
-            }}
-          >
-            {mode === "signin" ? "新しいアカウントを作成" : "ログインへ戻る"}
-          </button>
-        </div>
+              {mode === "signin" ? "新しいアカウントを作成" : "ログインへ戻る"}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -1155,135 +1421,52 @@ function WorkspaceSetup({ onCreated }: { onCreated: () => void }): ReactNode {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name"));
-    const result = await authClient.organization.create({ name, slug: slugify(name) });
+    const result = await authClient.organization.create({
+      name,
+      slug: slugify(name),
+    });
     if (result.error) {
       setError(result.error.message ?? "作成できませんでした");
       return;
     }
     if (result.data?.id) {
-      await authClient.organization.setActive({ organizationId: result.data.id });
+      await authClient.organization.setActive({
+        organizationId: result.data.id,
+      });
     }
     onCreated();
   }
   return (
-    <div className="grid min-h-screen place-items-center bg-cloud p-6">
-      <div className="card w-full max-w-lg p-8">
-        <div className="mb-6 grid size-12 place-items-center rounded-2xl bg-brand text-white">
-          <UsersRound />
-        </div>
-        <h1 className="text-2xl font-bold">ワークスペースを作成</h1>
-        <p className="mt-2 text-sm text-slate-500">OrganizationがKaenmaのWorkspaceになります。</p>
-        <form onSubmit={(event) => void submit(event)} className="mt-6 space-y-4">
-          <Field label="ワークスペース名" name="name" required />
-          {error && <ErrorMessage>{error}</ErrorMessage>}
-          <button className="button-primary w-full">作成して開始</button>
-        </form>
-      </div>
+    <div className="grid min-h-screen place-items-center bg-muted/40 p-6">
+      <Card className="w-full max-w-lg">
+        <CardHeader>
+          <div className="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <UsersRound />
+          </div>
+          <CardTitle className="text-2xl">ワークスペースを作成</CardTitle>
+          <CardDescription>
+            OrganizationがKaenmaのWorkspaceになります。
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form
+            onSubmit={(event) => void submit(event)}
+            className="flex flex-col gap-5"
+          >
+            <Field label="ワークスペース名" name="name" required />
+            {error && <ErrorMessage>{error}</ErrorMessage>}
+            <Button className="w-full" type="submit">
+              作成して開始
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
-}
-
-function Page({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description: string;
-  action?: ReactNode;
-  children: ReactNode;
-}): ReactNode {
-  return (
-    <>
-      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-        <div><h1 className="text-2xl font-bold tracking-tight lg:text-3xl">{title}</h1><p className="mt-2 text-sm text-slate-500">{description}</p></div>
-        {action}
-      </div>
-      {children}
-    </>
-  );
-}
-
-function Field({
-  label,
-  name,
-  type = "text",
-  ...props
-}: {
-  label: string;
-  name: string;
-  type?: string;
-  required?: boolean;
-  minLength?: number;
-  defaultValue?: string;
-}): ReactNode {
-  return <label><span className="label">{label}</span><input className="field" name={name} type={type} {...props} /></label>;
-}
-
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-}): ReactNode {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={onClose}>
-      <div className="card w-full max-w-lg p-6" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="mb-5 flex items-center justify-between"><h2 className="text-lg font-semibold">{title}</h2><button onClick={onClose}><X className="size-5 text-slate-400" /></button></div>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function ResourceGrid({ children }: { children: ReactNode }): ReactNode {
-  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>;
-}
-
-function ResourceCard({
-  icon,
-  title,
-  subtitle,
-  footer,
-}: {
-  icon: ReactNode;
-  title: string;
-  subtitle: string;
-  footer: string;
-}): ReactNode {
-  return (
-    <div className="card group p-5 transition hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md">
-      <div className="flex items-start gap-4">
-        <div className="grid size-11 place-items-center rounded-xl bg-brand/8 text-brand [&>svg]:size-5">{icon}</div>
-        <div className="min-w-0 flex-1"><h3 className="truncate font-semibold">{title}</h3><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div>
-      </div>
-      <div className="mt-5 border-t border-slate-100 pt-3 text-xs text-slate-400">{footer}</div>
-    </div>
-  );
-}
-
-function Empty({ label, compact = false }: { label: string; compact?: boolean }): ReactNode {
-  return <div className={`text-center text-sm text-slate-400 ${compact ? "py-8" : "card mt-4 py-16"}`}><Blocks className="mx-auto mb-3 size-7 opacity-40" />{label}</div>;
-}
-
-function PageLoading(): ReactNode {
-  return <div className="grid min-h-72 place-items-center text-sm text-slate-400">読み込み中…</div>;
 }
 
 function FullScreenStatus({ label }: { label: string }): ReactNode {
-  return <div className="grid min-h-screen place-items-center bg-cloud text-sm text-slate-500">{label}</div>;
-}
-
-function ErrorMessage({ children }: { children: ReactNode }): ReactNode {
-  return <div className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{children}</div>;
-}
-
-function SuccessMessage({ children }: { children: ReactNode }): ReactNode {
-  return <div className="rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{children}</div>;
+  return <PageLoading label={label} />;
 }
 
 function SimpleResourceForm({
@@ -1296,7 +1479,7 @@ function SimpleResourceForm({
   const [busy, setBusy] = useState(false);
   return (
     <form
-      className="space-y-4"
+      className="flex flex-col gap-5"
       onSubmit={(event) => {
         event.preventDefault();
         const name = String(new FormData(event.currentTarget).get("name"));
@@ -1305,7 +1488,9 @@ function SimpleResourceForm({
       }}
     >
       <Field label="名前" name="name" required />
-      <button className="button-primary w-full" disabled={busy}>{buttonLabel}</button>
+      <LoadingButton busy={busy} className="w-full" type="submit">
+        {buttonLabel}
+      </LoadingButton>
     </form>
   );
 }
@@ -1329,7 +1514,9 @@ function starterCampaign(name: string): CampaignDefinition {
         config: { action: "change_score", amount: 5 },
       },
     ],
-    edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
+    edges: [
+      { id: "source-score", source: "source", target: "score", branch: "next" },
+    ],
   };
 }
 

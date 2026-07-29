@@ -1266,7 +1266,10 @@ async function deliveryAdapter(
 }
 
 async function readConsentGate(delivery: DeliveryRow, env: RuntimeEnv) {
-  const [suppression, subscription, frequency] = await env.DB.batch([
+  const [contact, suppression, subscription, frequency] = await env.DB.batch([
+    env.DB.prepare(
+      "SELECT status FROM contacts WHERE workspace_id = ? AND id = ? LIMIT 1",
+    ).bind(delivery.workspace_id, delivery.contact_id),
     env.DB.prepare(
       `SELECT reason FROM suppressions
        WHERE workspace_id = ? AND (contact_id = ? OR email = ?) LIMIT 1`,
@@ -1281,6 +1284,7 @@ async function readConsentGate(delivery: DeliveryRow, env: RuntimeEnv) {
          AND status IN ('accepted', 'delivered') AND created_at >= datetime('now', '-1 day')`,
     ).bind(delivery.workspace_id, delivery.contact_id),
   ]);
+  const contactRow = contact?.results[0] as { status?: string } | undefined;
   const suppressionReason = suppression?.results[0] as { reason?: string } | undefined;
   const subscriptionStatus = subscription?.results[0] as { status?: string } | undefined;
   const count = frequency?.results[0] as { count?: number } | undefined;
@@ -1289,6 +1293,9 @@ async function readConsentGate(delivery: DeliveryRow, env: RuntimeEnv) {
       ? (subscriptionStatus.status as "subscribed" | "unsubscribed" | "pending")
       : undefined;
   return {
+    ...(contactRow?.status
+      ? { contactStatus: contactRow.status as "active" | "archived" | "anonymous" }
+      : {}),
     globalStatus:
       suppressionReason?.reason === "global_unsubscribe" ? "unsubscribed" as const : "subscribed" as const,
     suppressed: Boolean(suppressionReason),

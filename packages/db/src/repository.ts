@@ -1,4 +1,7 @@
 import type {
+  Account,
+  AccountCreate,
+  AccountUpdate,
   Contact,
   ContactCreate,
   ContactUpdate,
@@ -8,6 +11,7 @@ import type {
 
 export interface CursorPage<T> {
   items: T[];
+  total: number;
   nextCursor?: string;
 }
 
@@ -23,9 +27,23 @@ interface ContactRow {
   stage: string;
   score: number;
   status: "active" | "archived" | "anonymous";
+  archived_at: string | null;
   custom_fields: string;
   created_at: string;
   updated_at: string;
+}
+
+interface AccountRow {
+  id: string;
+  workspace_id: string;
+  name: string;
+  domain: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AccountSummary extends Account {
+  contactCount: number;
 }
 
 export class WorkspaceRepository {
@@ -38,31 +56,125 @@ export class WorkspaceRepository {
     cursor?: string;
     limit?: number;
     query?: string;
+    status?: "active" | "archived" | "anonymous" | "all";
+    stage?: string;
+    tagId?: string;
+    listId?: string;
+    accountId?: string;
+    segmentId?: string;
+    scoreMin?: number;
+    scoreMax?: number;
+    sort?: "createdAt" | "updatedAt" | "score" | "name" | "email";
+    direction?: "asc" | "desc";
   }): Promise<CursorPage<Contact>> {
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
     const params: Array<string | number> = [this.context.workspaceId];
-    let cursorSql = "";
-    let querySql = "";
-
-    if (input.cursor) {
-      cursorSql = "AND c.id < ?";
-      params.push(input.cursor);
-    }
+    const conditions = ["c.workspace_id = ?"];
+    const direction = input.direction === "asc" ? "ASC" : "DESC";
+    const sortColumn = {
+      createdAt: "c.created_at",
+      updatedAt: "c.updated_at",
+      score: "c.score",
+      name: "COALESCE(c.last_name, c.first_name, c.email, '')",
+      email: "COALESCE(c.email, '')",
+    }[input.sort ?? "updatedAt"];
     if (input.query) {
-      querySql =
-        "AND (c.email LIKE ? ESCAPE '\\' OR c.first_name LIKE ? ESCAPE '\\' OR c.last_name LIKE ? ESCAPE '\\')";
+      conditions.push(
+        `(c.email LIKE ? ESCAPE '\\'
+          OR c.first_name LIKE ? ESCAPE '\\'
+          OR c.last_name LIKE ? ESCAPE '\\'
+          OR c.phone LIKE ? ESCAPE '\\'
+          OR c.external_id LIKE ? ESCAPE '\\')`,
+      );
       const query = `%${escapeLike(input.query)}%`;
-      params.push(query, query, query);
+      params.push(query, query, query, query, query);
     }
-
-    params.push(limit + 1);
+    const status = input.status ?? "active";
+    if (status !== "all") {
+      conditions.push("c.status = ?");
+      params.push(status);
+    }
+    if (input.stage) {
+      conditions.push("c.stage = ?");
+      params.push(input.stage);
+    }
+    if (input.scoreMin !== undefined) {
+      conditions.push("c.score >= ?");
+      params.push(input.scoreMin);
+    }
+    if (input.scoreMax !== undefined) {
+      conditions.push("c.score <= ?");
+      params.push(input.scoreMax);
+    }
+    if (input.tagId) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1 FROM contact_tags ct
+          WHERE ct.workspace_id = c.workspace_id AND ct.contact_id = c.id AND ct.tag_id = ?
+        )`,
+      );
+      params.push(input.tagId);
+    }
+    if (input.listId) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1 FROM contact_list_memberships clm
+          WHERE clm.workspace_id = c.workspace_id AND clm.contact_id = c.id
+            AND clm.list_id = ? AND clm.status = 'active'
+        )`,
+      );
+      params.push(input.listId);
+    }
+    if (input.accountId) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1 FROM company_contacts cc
+          WHERE cc.workspace_id = c.workspace_id AND cc.contact_id = c.id
+            AND cc.company_id = ?
+        )`,
+      );
+      params.push(input.accountId);
+    }
+    if (input.segmentId) {
+      conditions.push(
+        `EXISTS (
+          SELECT 1 FROM segment_memberships sm
+          WHERE sm.workspace_id = c.workspace_id AND sm.contact_id = c.id AND sm.segment_id = ?
+        )`,
+      );
+      params.push(input.segmentId);
+    }
+    const whereSql = conditions.join(" AND ");
+    const count = await this.database
+      .prepare(`SELECT COUNT(*) AS count FROM contacts c WHERE ${whereSql}`)
+      .bind(...params)
+      .first<{ count: number }>();
+    const pageConditions = [...conditions];
+    const pageParams = [...params];
+    if (input.cursor) {
+      const cursor = await this.database
+        .prepare(
+          `SELECT ${sortColumn} AS sort_value
+           FROM contacts c WHERE c.workspace_id = ? AND c.id = ?`,
+        )
+        .bind(this.context.workspaceId, input.cursor)
+        .first<{ sort_value: string | number }>();
+      if (cursor) {
+        const comparison = direction === "ASC" ? ">" : "<";
+        pageConditions.push(
+          `(${sortColumn} ${comparison} ? OR (${sortColumn} = ? AND c.id ${comparison} ?))`,
+        );
+        pageParams.push(cursor.sort_value, cursor.sort_value, input.cursor);
+      }
+    }
+    pageParams.push(limit + 1);
     const result = await this.database
       .prepare(
         `SELECT c.* FROM contacts c
-         WHERE c.workspace_id = ? ${cursorSql} ${querySql}
-         ORDER BY c.id DESC LIMIT ?`,
+         WHERE ${pageConditions.join(" AND ")}
+         ORDER BY ${sortColumn} ${direction}, c.id ${direction} LIMIT ?`,
       )
-      .bind(...params)
+      .bind(...pageParams)
       .all<ContactRow>();
     const rows = result.results;
     const hasMore = rows.length > limit;
@@ -70,6 +182,7 @@ export class WorkspaceRepository {
     const last = items.at(-1);
     return {
       items,
+      total: count?.count ?? 0,
       ...(hasMore && last ? { nextCursor: last.id } : {}),
     };
   }
@@ -90,7 +203,7 @@ export class WorkspaceRepository {
         `INSERT INTO contacts (
           id, workspace_id, email, first_name, last_name, phone, external_id,
           stage, score, status, custom_fields, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'lead', 0, 'active', ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?, ?)`,
       )
       .bind(
         id,
@@ -100,6 +213,7 @@ export class WorkspaceRepository {
         input.lastName ?? null,
         input.phone ?? null,
         input.externalId ?? null,
+        input.stage ?? "lead",
         JSON.stringify(input.customFields),
         now,
         now,
@@ -119,13 +233,14 @@ export class WorkspaceRepository {
       lastName: input.lastName === undefined ? existing.lastName : input.lastName ?? null,
       phone: input.phone === undefined ? existing.phone : input.phone ?? null,
       externalId: input.externalId === undefined ? existing.externalId : input.externalId ?? null,
+      stage: input.stage === undefined ? existing.stage : input.stage,
       customFields:
         input.customFields === undefined ? existing.customFields : input.customFields,
     };
     await this.database
       .prepare(
         `UPDATE contacts SET email = ?, first_name = ?, last_name = ?, phone = ?,
-         external_id = ?, custom_fields = ?, updated_at = ?
+         external_id = ?, stage = ?, custom_fields = ?, updated_at = ?
          WHERE workspace_id = ? AND id = ?`,
       )
       .bind(
@@ -134,6 +249,7 @@ export class WorkspaceRepository {
         fields.lastName,
         fields.phone,
         fields.externalId,
+        fields.stage,
         JSON.stringify(fields.customFields),
         new Date().toISOString(),
         this.context.workspaceId,
@@ -146,11 +262,124 @@ export class WorkspaceRepository {
   public async archiveContact(id: string): Promise<boolean> {
     const result = await this.database
       .prepare(
-        "UPDATE contacts SET status = 'archived', updated_at = ? WHERE workspace_id = ? AND id = ?",
+        `UPDATE contacts SET status = 'archived', archived_at = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
+      )
+      .bind(
+        new Date().toISOString(),
+        new Date().toISOString(),
+        this.context.workspaceId,
+        id,
+      )
+      .run();
+    return result.meta.changes > 0;
+  }
+
+  public async restoreContact(id: string): Promise<boolean> {
+    const result = await this.database
+      .prepare(
+        `UPDATE contacts SET status = 'active', archived_at = NULL, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND status = 'archived'`,
       )
       .bind(new Date().toISOString(), this.context.workspaceId, id)
       .run();
     return result.meta.changes > 0;
+  }
+
+  public async listAccounts(input: {
+    query?: string;
+    limit?: number;
+  }): Promise<AccountSummary[]> {
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 200);
+    const params: Array<string | number> = [this.context.workspaceId];
+    const conditions = ["co.workspace_id = ?"];
+    if (input.query) {
+      const query = `%${escapeLike(input.query)}%`;
+      conditions.push(
+        "(co.name LIKE ? ESCAPE '\\' OR co.domain LIKE ? ESCAPE '\\')",
+      );
+      params.push(query, query);
+    }
+    params.push(limit);
+    const result = await this.database
+      .prepare(
+        `SELECT co.id, co.workspace_id, co.name, co.domain,
+                co.created_at, co.updated_at,
+                COUNT(CASE WHEN c.status != 'archived' THEN 1 END) AS contact_count
+         FROM companies co
+         LEFT JOIN company_contacts cc
+           ON cc.workspace_id = co.workspace_id AND cc.company_id = co.id
+         LEFT JOIN contacts c
+           ON c.workspace_id = cc.workspace_id AND c.id = cc.contact_id
+         WHERE ${conditions.join(" AND ")}
+         GROUP BY co.id
+         ORDER BY co.updated_at DESC, co.id DESC
+         LIMIT ?`,
+      )
+      .bind(...params)
+      .all<AccountRow & { contact_count: number }>();
+    return result.results.map((row) => ({
+      ...toAccount(row),
+      contactCount: Number(row.contact_count),
+    }));
+  }
+
+  public async getAccount(id: string): Promise<Account | null> {
+    const row = await this.database
+      .prepare(
+        `SELECT id, workspace_id, name, domain, created_at, updated_at
+         FROM companies WHERE workspace_id = ? AND id = ?`,
+      )
+      .bind(this.context.workspaceId, id)
+      .first<AccountRow>();
+    return row ? toAccount(row) : null;
+  }
+
+  public async createAccount(input: AccountCreate): Promise<Account> {
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await this.database
+      .prepare(
+        `INSERT INTO companies
+         (id, workspace_id, name, domain, custom_fields, created_at, updated_at)
+         VALUES (?, ?, ?, ?, '{}', ?, ?)`,
+      )
+      .bind(
+        id,
+        this.context.workspaceId,
+        input.name,
+        input.domain?.toLowerCase() ?? null,
+        now,
+        now,
+      )
+      .run();
+    const account = await this.getAccount(id);
+    if (!account) throw new Error("Created account could not be loaded");
+    return account;
+  }
+
+  public async updateAccount(
+    id: string,
+    input: AccountUpdate,
+  ): Promise<Account | null> {
+    const existing = await this.getAccount(id);
+    if (!existing) return null;
+    await this.database
+      .prepare(
+        `UPDATE companies SET name = ?, domain = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ?`,
+      )
+      .bind(
+        input.name ?? existing.name,
+        input.domain === undefined
+          ? existing.domain
+          : input.domain?.toLowerCase() ?? null,
+        new Date().toISOString(),
+        this.context.workspaceId,
+        id,
+      )
+      .run();
+    return this.getAccount(id);
   }
 }
 
@@ -280,7 +509,19 @@ function toContact(row: ContactRow): Contact {
     stage: row.stage,
     score: row.score,
     status: row.status,
+    archivedAt: row.archived_at,
     customFields: safeJson(row.custom_fields),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function toAccount(row: AccountRow): Account {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    name: row.name,
+    domain: row.domain,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

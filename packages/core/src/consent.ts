@@ -1,6 +1,7 @@
 import type { MessagePurpose } from "@kaenma/shared";
 
 export interface ConsentSnapshot {
+  contactStatus?: "active" | "archived" | "anonymous";
   globalStatus: "subscribed" | "unsubscribed";
   topicStatus?: "subscribed" | "unsubscribed" | "pending";
   suppressed: boolean;
@@ -15,6 +16,7 @@ export type SendBlockReason =
   | "topic_unsubscribed"
   | "topic_pending"
   | "suppressed"
+  | "contact_archived"
   | "frequency_cap";
 
 export type SendEligibility =
@@ -25,6 +27,9 @@ export function evaluateSendEligibility(
   purpose: MessagePurpose,
   snapshot: ConsentSnapshot,
 ): SendEligibility {
+  if (snapshot.contactStatus === "archived") {
+    return { allowed: false, reason: "contact_archived" };
+  }
   if (snapshot.suppressed) return { allowed: false, reason: "suppressed" };
   if (purpose === "transactional") return { allowed: true };
   if (snapshot.globalStatus === "unsubscribed") {
@@ -44,4 +49,3 @@ export function evaluateSendEligibility(
   }
   return { allowed: true };
 }
-

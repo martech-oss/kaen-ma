@@ -34,6 +34,7 @@ const contactFieldsSchema = z.object({
   lastName: z.string().trim().max(120).optional(),
   phone: z.string().trim().max(40).optional(),
   externalId: z.string().trim().max(191).optional(),
+  stage: z.string().trim().min(1).max(80).optional(),
   customFields: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -47,7 +48,14 @@ export type ContactCreate = z.infer<typeof contactCreateSchema>;
 
 export const contactUpdateSchema = contactFieldsSchema
   .partial()
-  .extend({ customFields: z.record(z.string(), z.unknown()).optional() });
+  .extend({
+    email: z.email().nullable().optional(),
+    firstName: z.string().trim().max(120).nullable().optional(),
+    lastName: z.string().trim().max(120).nullable().optional(),
+    phone: z.string().trim().max(40).nullable().optional(),
+    externalId: z.string().trim().max(191).nullable().optional(),
+    customFields: z.record(z.string(), z.unknown()).optional(),
+  });
 export type ContactUpdate = z.infer<typeof contactUpdateSchema>;
 
 export const contactSchema = z.object({
@@ -62,11 +70,58 @@ export const contactSchema = z.object({
   stage: z.string(),
   score: z.number().int(),
   status: z.enum(["active", "archived", "anonymous"]),
+  archivedAt: z.string().nullable(),
   customFields: z.record(z.string(), z.unknown()),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type Contact = z.infer<typeof contactSchema>;
+
+export const contactAttributeDefinitions = [
+  { key: "email", label: "メールアドレス", dataType: "text" },
+  { key: "first_name", label: "名", dataType: "text" },
+  { key: "last_name", label: "姓", dataType: "text" },
+  { key: "phone", label: "電話番号", dataType: "text" },
+  { key: "external_id", label: "外部ID", dataType: "text" },
+  { key: "stage", label: "ステージ", dataType: "text" },
+  { key: "score", label: "スコア", dataType: "number" },
+  { key: "status", label: "ステータス", dataType: "text" },
+  { key: "created_at", label: "作成日時", dataType: "date" },
+  { key: "updated_at", label: "更新日時", dataType: "date" },
+] as const;
+export type ContactAttributeKey =
+  (typeof contactAttributeDefinitions)[number]["key"];
+
+const accountFieldsSchema = z.object({
+  name: z.string().trim().min(1).max(191),
+  domain: z
+    .string()
+    .trim()
+    .max(253)
+    .regex(
+      /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i,
+      "domain must be a hostname such as example.com",
+    )
+    .optional(),
+});
+
+export const accountCreateSchema = accountFieldsSchema;
+export type AccountCreate = z.infer<typeof accountCreateSchema>;
+
+export const accountUpdateSchema = accountFieldsSchema.partial().extend({
+  domain: accountFieldsSchema.shape.domain.unwrap().nullable().optional(),
+});
+export type AccountUpdate = z.infer<typeof accountUpdateSchema>;
+
+export const accountSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string(),
+  domain: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type Account = z.infer<typeof accountSchema>;
 
 const segmentFieldSchema = z.enum([
   "email",
@@ -80,6 +135,7 @@ const segmentFieldSchema = z.enum([
   "created_at",
   "updated_at",
   "tag",
+  "list",
   "company",
   "subscription",
   "event",
