@@ -3,6 +3,7 @@ import type { ContentDocument, EmailBlock } from "@kaenma/shared";
 export interface RenderContext {
   contact: Record<string, unknown>;
   workspace: Record<string, unknown>;
+  message?: Record<string, unknown>;
   unsubscribeUrl?: string;
   preferenceUrl?: string;
 }
@@ -47,9 +48,13 @@ export function interpolate(
   escape = true,
 ): string {
   return template.replace(
-    /\{\{\s*(contact|workspace)\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g,
-    (_match, namespace: "contact" | "workspace", path: string) => {
-      const value = readPath(context[namespace], path);
+    /\{\{\s*(contact|workspace|message)\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g,
+    (
+      _match,
+      namespace: "contact" | "workspace" | "message",
+      path: string,
+    ) => {
+      const value = readPath(context[namespace] ?? {}, path);
       const rendered =
         typeof value === "string" || typeof value === "number" || typeof value === "boolean"
           ? String(value)

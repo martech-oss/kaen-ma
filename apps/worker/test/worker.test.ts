@@ -300,6 +300,158 @@ describe("Kaenma Worker", () => {
     expect(segmentResponse.status).toBe(201);
     const segment = (await segmentResponse.json()) as { data: { id: string } };
 
+    const variableResponse = await call("/message-variables", {
+      method: "POST",
+      body: JSON.stringify({
+        key: "brand_name",
+        name: "Brand name",
+        value: "Kaenma",
+        description: "Shared brand label",
+      }),
+    });
+    expect(variableResponse.status).toBe(201);
+    const variable = (await variableResponse.json()) as {
+      data: { id: string };
+    };
+    expect(
+      (
+        await call(`/message-variables/${variable.data.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            key: "brand_name",
+            name: "Brand name",
+            value: "Kaenma MA",
+            description: "Updated shared brand label",
+          }),
+        })
+      ).status,
+    ).toBe(200);
+
+    const content = {
+      schemaVersion: 1,
+      backgroundColor: "#f4f5f7",
+      contentColor: "#ffffff",
+      width: 600,
+      blocks: [
+        {
+          id: "message",
+          type: "text",
+          html: "<h1>{{ message.brand_name }}</h1><p>Hello {{ contact.first_name }}</p>",
+        },
+      ],
+    };
+    const templateResponse = await call("/email-templates", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Welcome",
+        purpose: "marketing",
+        subject: "{{ message.brand_name }} news",
+        previewText: "Latest news",
+        content,
+      }),
+    });
+    expect(templateResponse.status).toBe(201);
+    const template = (await templateResponse.json()) as {
+      data: { id: string; versionId: string };
+    };
+    const templateUpdateResponse = await call(
+      `/email-templates/${template.data.id}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Welcome updated",
+          purpose: "marketing",
+          subject: "{{ message.brand_name }} update",
+          previewText: "Updated news",
+          content,
+        }),
+      },
+    );
+    expect(templateUpdateResponse.status).toBe(200);
+    const templateUpdate = (await templateUpdateResponse.json()) as {
+      data: { versionId: string };
+    };
+    const templateDetailResponse = await call(
+      `/email-templates/${template.data.id}`,
+    );
+    expect(templateDetailResponse.status).toBe(200);
+    const templateDetail = (await templateDetailResponse.json()) as {
+      data: { version: number; subject: string; content_document: unknown };
+    };
+    expect(templateDetail.data).toMatchObject({
+      version: 2,
+      subject: "{{ message.brand_name }} update",
+      content_document: content,
+    });
+
+    const broadcastResponse = await call("/broadcasts", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "August update",
+        segmentId: segment.data.id,
+        templateVersionId: templateUpdate.data.versionId,
+        topicId: null,
+        scheduledAt: null,
+      }),
+    });
+    expect(broadcastResponse.status).toBe(201);
+    const broadcast = (await broadcastResponse.json()) as {
+      data: { id: string };
+    };
+    expect(
+      (
+        await call(`/broadcasts/${broadcast.data.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: "August update edited",
+            segmentId: segment.data.id,
+            templateVersionId: templateUpdate.data.versionId,
+            topicId: null,
+            scheduledAt: null,
+          }),
+        })
+      ).status,
+    ).toBe(200);
+    const broadcastsResponse = await call("/broadcasts");
+    expect(broadcastsResponse.status).toBe(200);
+    const broadcasts = (await broadcastsResponse.json()) as {
+      data: Array<{ id: string; name: string; segment_name: string }>;
+    };
+    expect(broadcasts.data).toEqual([
+      expect.objectContaining({
+        id: broadcast.data.id,
+        name: "August update edited",
+        segment_name: "Tokyo VIP",
+      }),
+    ]);
+    expect(
+      (
+        await call(`/broadcasts/${broadcast.data.id}/archive`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(200);
+    const archivedBroadcasts = (await (
+      await call("/broadcasts?archived=true")
+    ).json()) as { data: Array<{ id: string }> };
+    expect(archivedBroadcasts.data).toEqual([
+      expect.objectContaining({ id: broadcast.data.id }),
+    ]);
+    expect(
+      (
+        await call(`/email-templates/${template.data.id}/archive`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await call(`/message-variables/${variable.data.id}/archive`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(200);
+
     const filteredResponse = await call(
       `/contacts?tagId=${tag.data.id}&listId=${list.data.id}` +
         `&accountId=${account.data.id}&segmentId=${segment.data.id}&scoreMin=50`,

@@ -32,4 +32,14 @@ describe("email renderer", () => {
       }),
     ).toBe("Hello A B");
   });
+
+  it("renders reusable message variables", () => {
+    expect(
+      renderSubject("{{ message.brand }}からのお知らせ", {
+        contact: {},
+        workspace: {},
+        message: { brand: "Kaenma" },
+      }),
+    ).toBe("Kaenmaからのお知らせ");
+  });
 });

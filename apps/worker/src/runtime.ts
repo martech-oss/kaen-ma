@@ -608,6 +608,7 @@ async function createBroadcastDeliveries(
     .bind(broadcast.workspace_id, broadcast.id, cursor ?? "", batchSize)
     .all<BroadcastContactRow>();
   const content = contentDocumentSchema.parse(JSON.parse(broadcast.content_document));
+  const message = await readMessageVariables(env.DB, broadcast.workspace_id);
   const statements: D1PreparedStatement[] = [];
   const deliveryMessages: Array<{ body: KaenmaQueueMessage }> = [];
   for (const contact of recipients.results) {
@@ -647,6 +648,7 @@ async function createBroadcastDeliveries(
     const rendered = renderContent(content, {
       contact: contactData,
       workspace: {},
+      message,
       unsubscribeUrl: `${env.APP_URL}/u/${unsubscribeToken}`,
       preferenceUrl: `${env.APP_URL}/preference/${unsubscribeToken}`,
     });
@@ -666,7 +668,11 @@ async function createBroadcastDeliveries(
         deliveryId,
         contact.id,
       ),
-      subject: renderSubject(broadcast.subject, { contact: contactData, workspace: {} }),
+      subject: renderSubject(broadcast.subject, {
+        contact: contactData,
+        workspace: {},
+        message,
+      }),
       html: rendered.html.replace(
         "</body>",
         `<img src="${env.APP_URL}/t/${trackingToken}" width="1" height="1" alt="" style="display:none"></body>`,
@@ -866,6 +872,7 @@ async function createEmailDelivery(
     .first<{ subject: string; content_document: string }>();
   if (!template) throw new PermanentChannelError("Email template version is missing");
   const content = contentDocumentSchema.parse(JSON.parse(template.content_document));
+  const message = await readMessageVariables(env.DB, job.workspace_id);
   const contact = {
     email: job.contact_email,
     first_name: job.first_name,
@@ -893,6 +900,7 @@ async function createEmailDelivery(
   const rendered = renderContent(content, {
     contact,
     workspace: {},
+    message,
     unsubscribeUrl: `${env.APP_URL}/u/${unsubscribeToken}`,
     preferenceUrl: `${env.APP_URL}/preference/${unsubscribeToken}`,
   });
@@ -917,7 +925,11 @@ async function createEmailDelivery(
       name: env.TRANSACTIONAL_FROM_NAME,
     },
     replyTo,
-    subject: renderSubject(template.subject, { contact, workspace: {} }),
+    subject: renderSubject(template.subject, {
+      contact,
+      workspace: {},
+      message,
+    }),
     html,
     text: rendered.text,
     ...(action.purpose === "marketing"
@@ -1400,6 +1412,23 @@ async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
   await env.DB.prepare("DELETE FROM idempotency_keys WHERE expires_at < ?")
     .bind(new Date().toISOString())
     .run();
+}
+
+async function readMessageVariables(
+  database: D1Database,
+  workspaceId: string,
+): Promise<Record<string, unknown>> {
+  const result = await database
+    .prepare(
+      `SELECT key, value FROM message_variables
+       WHERE workspace_id = ? AND archived_at IS NULL
+       ORDER BY key`,
+    )
+    .bind(workspaceId)
+    .all<{ key: string; value: string }>();
+  return Object.fromEntries(
+    result.results.map((variable) => [variable.key, variable.value]),
+  );
 }
 
 function safeRecord(value: string): Record<string, unknown>;

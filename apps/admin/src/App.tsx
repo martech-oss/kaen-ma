@@ -2,7 +2,6 @@ import type {
   CampaignDefinition,
   CampaignEdge,
   CampaignNode,
-  ContentDocument,
   SegmentFilter,
 } from "@kaenma/shared";
 import { contactAttributeDefinitions } from "@kaenma/shared";
@@ -73,7 +72,9 @@ import {
 } from "@xyflow/react";
 import {
   Activity,
+  Archive,
   Blocks,
+  Braces,
   Building2,
   ContactRound,
   FileText,
@@ -174,9 +175,16 @@ function Shell({ workspace }: { workspace: Workspace }): ReactNode {
     { to: "/contacts/tags", label: "タグ", icon: Tags },
     { to: "/contacts/segments", label: "セグメント", icon: Shapes },
   ]);
-  const navigationAfterContacts = linkOptions([
+  const navigationBeforeEmail = linkOptions([
     { to: "/campaigns", label: "キャンペーン", icon: GitBranch },
-    { to: "/emails", label: "メール", icon: Mail },
+  ]);
+  const emailNavigation = linkOptions([
+    { to: "/emails", label: "キャンペーン", icon: Send },
+    { to: "/emails/templates", label: "テンプレート", icon: FileText },
+    { to: "/emails/variables", label: "メッセージ変数", icon: Braces },
+    { to: "/emails/archive", label: "アーカイブ", icon: Archive },
+  ]);
+  const navigationAfterEmail = linkOptions([
     { to: "/forms", label: "フォーム", icon: FileText },
     { to: "/settings", label: "設定", icon: Settings },
   ]);
@@ -259,7 +267,55 @@ function Shell({ workspace }: { workspace: Workspace }): ReactNode {
                     ))}
                   </SidebarMenuSub>
                 </SidebarMenuItem>
-                {navigationAfterContacts.map((item) => (
+                {navigationBeforeEmail.map((item) => (
+                  <SidebarMenuItem key={item.to}>
+                    <SidebarMenuButton
+                      render={
+                        <Link
+                          to={item.to}
+                          activeProps={{ "data-active": "true" }}
+                        />
+                      }
+                      tooltip={item.label}
+                    >
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    render={
+                      <Link
+                        to="/emails"
+                        activeProps={{ "data-active": "true" }}
+                      />
+                    }
+                    tooltip="メール"
+                  >
+                    <Mail />
+                    <span>メール</span>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                    {emailNavigation.map((item) => (
+                      <SidebarMenuSubItem key={item.to}>
+                        <SidebarMenuSubButton
+                          render={
+                            <Link
+                              to={item.to}
+                              activeOptions={{ exact: true }}
+                              activeProps={{ "data-active": "true" }}
+                            />
+                          }
+                        >
+                          <item.icon />
+                          <span>{item.label}</span>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+                {navigationAfterEmail.map((item) => (
                   <SidebarMenuItem key={item.to}>
                     <SidebarMenuButton
                       render={
@@ -850,127 +906,6 @@ function CampaignFlowNode({
       </CardHeader>
       <Handle type="source" position={Position.Right} />
     </Card>
-  );
-}
-
-interface TemplateRow {
-  id: string;
-  name: string;
-  purpose: string;
-  status: string;
-  updated_at: string;
-}
-
-export function EmailsPage(): ReactNode {
-  const [items, setItems] = useState<TemplateRow[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const load = useCallback(() => {
-    void api<TemplateRow[]>("/email-templates").then((response) =>
-      setItems(response.data),
-    );
-  }, []);
-  useEffect(load, [load]);
-  return (
-    <Page
-      title="メール"
-      description="TransactionalとMarketingを型・プロバイダーごとに明確に分離します。"
-      action={
-        <Button onClick={() => setShowForm(true)}>
-          <Plus data-icon="inline-start" />
-          テンプレート
-        </Button>
-      }
-    >
-      <ResourceGrid>
-        {items.map((item) => (
-          <ResourceCard
-            key={item.id}
-            icon={<Mail />}
-            title={item.name}
-            subtitle={`${item.purpose} · ${item.status}`}
-            footer={formatDate(item.updated_at)}
-          />
-        ))}
-      </ResourceGrid>
-      {items.length === 0 && <Empty label="メールテンプレートがありません" />}
-      {showForm && (
-        <AppDialog
-          open={showForm}
-          onOpenChange={setShowForm}
-          title="メールテンプレート"
-          description="配信用コンテンツの基本情報を入力します。"
-        >
-          <EmailForm
-            onSaved={() => {
-              setShowForm(false);
-              load();
-            }}
-          />
-        </AppDialog>
-      )}
-    </Page>
-  );
-}
-
-function EmailForm({ onSaved }: { onSaved: () => void }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const content: ContentDocument = {
-      schemaVersion: 1,
-      backgroundColor: "#f4f5f7",
-      contentColor: "#ffffff",
-      width: 600,
-      blocks: [
-        {
-          id: crypto.randomUUID(),
-          type: "text",
-          html: `<h1>${String(form.get("headline"))}</h1><p>{{ contact.first_name }}さん、こんにちは。</p>`,
-        },
-        {
-          id: crypto.randomUUID(),
-          type: "button",
-          label: "詳しく見る",
-          href: "https://example.com",
-          color: "#6d4aff",
-        },
-      ],
-    };
-    setBusy(true);
-    await api("/email-templates", {
-      method: "POST",
-      body: JSON.stringify({
-        name: form.get("name"),
-        purpose: form.get("purpose"),
-        subject: form.get("subject"),
-        previewText: "",
-        content,
-      }),
-    });
-    setBusy(false);
-    onSaved();
-  }
-  return (
-    <form
-      onSubmit={(event) => void submit(event)}
-      className="flex flex-col gap-5"
-    >
-      <Field label="名前" name="name" required />
-      <Field label="件名" name="subject" required />
-      <Field label="見出し" name="headline" required />
-      <FormNativeSelect label="用途" name="purpose" defaultValue="marketing">
-        <FormSelectOption value="marketing">
-          Marketing（Resend）
-        </FormSelectOption>
-        <FormSelectOption value="transactional">
-          Transactional（Cloudflare）
-        </FormSelectOption>
-      </FormNativeSelect>
-      <LoadingButton busy={busy} className="w-full" type="submit">
-        作成
-      </LoadingButton>
-    </form>
   );
 }
 

@@ -336,6 +336,7 @@ function createApi(): Hono<AppEnvironment> {
   registerContactManagementRoutes(api);
   registerSegmentRoutes(api);
   registerTemplateRoutes(api);
+  registerMessageVariableRoutes(api);
   registerCampaignRoutes(api);
   registerBroadcastRoutes(api);
   registerFormRoutes(api);
@@ -1254,41 +1255,97 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
   });
 }
 
+const broadcastInputSchema = z.object({
+  name: z.string().trim().min(1).max(191),
+  segmentId: z.string().min(1),
+  templateVersionId: z.string().min(1),
+  topicId: z.string().min(1).nullable().optional(),
+  scheduledAt: z.iso.datetime().nullable().optional(),
+});
+
 function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
   api.get("/broadcasts", async (context) => {
+    const archived = context.req.query("archived") === "true";
     const result = await context.env.DB.prepare(
-      `SELECT id, name, segment_id, template_version_id, topic_id, status,
-              scheduled_at, started_at, completed_at, created_at, updated_at
-       FROM broadcasts WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 200`,
+      `SELECT b.id, b.name, b.segment_id, b.template_version_id, b.topic_id,
+              b.status, b.scheduled_at, b.started_at, b.completed_at,
+              b.archived_at, b.created_at, b.updated_at,
+              s.name AS segment_name, s.member_count,
+              et.name AS template_name, ev.subject,
+              (SELECT COUNT(*) FROM broadcast_recipients br
+               WHERE br.workspace_id = b.workspace_id AND br.broadcast_id = b.id)
+                AS recipient_count,
+              (SELECT COUNT(*) FROM deliveries d
+               WHERE d.workspace_id = b.workspace_id AND d.broadcast_id = b.id
+                 AND d.status IN ('accepted', 'delivered')) AS sent_count,
+              (SELECT COUNT(*) FROM deliveries d
+               WHERE d.workspace_id = b.workspace_id AND d.broadcast_id = b.id
+                 AND d.status = 'delivered') AS delivered_count
+       FROM broadcasts b
+       JOIN segments s ON s.workspace_id = b.workspace_id AND s.id = b.segment_id
+       JOIN email_template_versions ev
+         ON ev.workspace_id = b.workspace_id AND ev.id = b.template_version_id
+       JOIN email_templates et
+         ON et.workspace_id = ev.workspace_id AND et.id = ev.template_id
+       WHERE b.workspace_id = ?
+         AND ${archived ? "b.archived_at IS NOT NULL" : "b.archived_at IS NULL"}
+       ORDER BY b.updated_at DESC LIMIT 200`,
     )
       .bind(context.get("workspace").workspaceId)
       .all();
     return context.json({ data: result.results });
   });
 
+  api.get("/broadcasts/:id", async (context) => {
+    const row = await context.env.DB.prepare(
+      `SELECT b.id, b.name, b.segment_id, b.template_version_id, b.topic_id,
+              b.status, b.scheduled_at, b.started_at, b.completed_at,
+              b.archived_at, b.created_at, b.updated_at,
+              s.name AS segment_name, et.name AS template_name, ev.subject,
+              (SELECT COUNT(*) FROM broadcast_recipients br
+               WHERE br.workspace_id = b.workspace_id AND br.broadcast_id = b.id)
+                AS recipient_count,
+              (SELECT COUNT(*) FROM deliveries d
+               WHERE d.workspace_id = b.workspace_id AND d.broadcast_id = b.id
+                 AND d.status IN ('accepted', 'delivered')) AS sent_count,
+              (SELECT COUNT(*) FROM deliveries d
+               WHERE d.workspace_id = b.workspace_id AND d.broadcast_id = b.id
+                 AND d.status = 'delivered') AS delivered_count
+       FROM broadcasts b
+       JOIN segments s ON s.workspace_id = b.workspace_id AND s.id = b.segment_id
+       JOIN email_template_versions ev
+         ON ev.workspace_id = b.workspace_id AND ev.id = b.template_version_id
+       JOIN email_templates et
+         ON et.workspace_id = ev.workspace_id AND et.id = ev.template_id
+       WHERE b.workspace_id = ? AND b.id = ?`,
+    )
+      .bind(
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .first();
+    return row
+      ? context.json({ data: row })
+      : apiError(
+          context,
+          404,
+          "broadcast_not_found",
+          "メールキャンペーンが見つかりません",
+        );
+  });
+
   api.post("/broadcasts", requireRole("marketer"), async (context) => {
-    const parsed = z
-      .object({
-        name: z.string().trim().min(1).max(191),
-        segmentId: z.string().min(1),
-        templateVersionId: z.string().min(1),
-        topicId: z.string().optional(),
-        scheduledAt: z.iso.datetime().optional(),
-      })
-      .safeParse(await safeJson(context));
+    const parsed = broadcastInputSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspace = context.get("workspace");
-    const valid = await context.env.DB.prepare(
-      `SELECT s.id
-       FROM segments s JOIN email_template_versions ev
-         ON ev.id = ? AND ev.workspace_id = s.workspace_id
-       JOIN email_templates et
-         ON et.id = ev.template_id AND et.workspace_id = ev.workspace_id
-       WHERE s.workspace_id = ? AND s.id = ? AND et.purpose = 'marketing'`,
-    )
-      .bind(parsed.data.templateVersionId, workspace.workspaceId, parsed.data.segmentId)
-      .first();
-    if (!valid) {
+    if (
+      !(await hasValidBroadcastResources(
+        context.env.DB,
+        workspace.workspaceId,
+        parsed.data.segmentId,
+        parsed.data.templateVersionId,
+      ))
+    ) {
       return apiError(
         context,
         422,
@@ -1320,13 +1377,77 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
     return context.json({ data: { id } }, 201);
   });
 
+  api.patch("/broadcasts/:id", requireRole("marketer"), async (context) => {
+    const parsed = broadcastInputSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspaceId = context.get("workspace").workspaceId;
+    if (
+      !(await hasValidBroadcastResources(
+        context.env.DB,
+        workspaceId,
+        parsed.data.segmentId,
+        parsed.data.templateVersionId,
+      ))
+    ) {
+      return apiError(
+        context,
+        422,
+        "invalid_broadcast_resources",
+        "SegmentまたはMarketingテンプレートが見つかりません",
+      );
+    }
+    const now = new Date().toISOString();
+    const result = await context.env.DB.prepare(
+      `UPDATE broadcasts
+       SET name = ?, segment_id = ?, template_version_id = ?, topic_id = ?,
+           status = ?, scheduled_at = ?, updated_at = ?
+       WHERE workspace_id = ? AND id = ? AND archived_at IS NULL
+         AND status IN ('draft', 'scheduled')`,
+    )
+      .bind(
+        parsed.data.name,
+        parsed.data.segmentId,
+        parsed.data.templateVersionId,
+        parsed.data.topicId ?? null,
+        parsed.data.scheduledAt ? "scheduled" : "draft",
+        parsed.data.scheduledAt ?? null,
+        now,
+        workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { updated: true } })
+      : apiError(
+          context,
+          409,
+          "broadcast_not_editable",
+          "送信済みまたはアーカイブ済みのメールキャンペーンは編集できません",
+        );
+  });
+
   api.post("/broadcasts/:id/start", requireRole("marketer"), async (context) => {
     const workspace = context.get("workspace");
+    const resend = await context.env.DB.prepare(
+      `SELECT id FROM provider_configs
+       WHERE workspace_id = ? AND provider = 'resend' AND enabled = 1
+       LIMIT 1`,
+    )
+      .bind(workspace.workspaceId)
+      .first();
+    if (!resend && !context.env.RESEND_API_KEY) {
+      return apiError(
+        context,
+        422,
+        "resend_not_configured",
+        "送信前に設定画面でResend APIを設定してください",
+      );
+    }
     const now = new Date().toISOString();
     const result = await context.env.DB.prepare(
       `UPDATE broadcasts SET status = 'sending', started_at = COALESCE(started_at, ?),
        updated_at = ? WHERE workspace_id = ? AND id = ?
-       AND status IN ('draft', 'scheduled')`,
+       AND archived_at IS NULL AND status IN ('draft', 'scheduled')`,
     )
       .bind(now, now, workspace.workspaceId, context.req.param("id"))
       .run();
@@ -1344,6 +1465,53 @@ function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
     });
     return context.json({ data: { started: true } }, 202);
   });
+
+  api.post("/broadcasts/:id/archive", requireRole("marketer"), async (context) => {
+    const now = new Date().toISOString();
+    const result = await context.env.DB.prepare(
+      `UPDATE broadcasts
+       SET status = CASE WHEN status IN ('draft', 'scheduled') THEN 'cancelled' ELSE status END,
+           archived_at = ?, updated_at = ?
+       WHERE workspace_id = ? AND id = ? AND archived_at IS NULL
+         AND status <> 'sending'`,
+    )
+      .bind(
+        now,
+        now,
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { archived: true } })
+      : apiError(
+          context,
+          409,
+          "broadcast_not_archivable",
+          "送信中のメールキャンペーンはアーカイブできません",
+        );
+  });
+}
+
+async function hasValidBroadcastResources(
+  database: D1Database,
+  workspaceId: string,
+  segmentId: string,
+  templateVersionId: string,
+): Promise<boolean> {
+  const valid = await database
+    .prepare(
+      `SELECT s.id
+       FROM segments s JOIN email_template_versions ev
+         ON ev.id = ? AND ev.workspace_id = s.workspace_id
+       JOIN email_templates et
+         ON et.id = ev.template_id AND et.workspace_id = ev.workspace_id
+       WHERE s.workspace_id = ? AND s.id = ? AND et.purpose = 'marketing'
+         AND et.status <> 'archived'`,
+    )
+    .bind(templateVersionId, workspaceId, segmentId)
+    .first();
+  return Boolean(valid);
 }
 
 function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
@@ -1422,27 +1590,66 @@ function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
   });
 }
 
+const emailTemplateInputSchema = z.object({
+  name: z.string().trim().min(1).max(191),
+  purpose: messagePurposeSchema,
+  subject: z.string().trim().min(1).max(998),
+  previewText: z.string().max(500).default(""),
+  content: contentDocumentSchema,
+});
+
 function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
   api.get("/email-templates", async (context) => {
     const workspace = context.get("workspace");
+    const archived = context.req.query("archived") === "true";
     const result = await context.env.DB.prepare(
-      `SELECT id, name, purpose, status, current_version_id, created_at, updated_at
-       FROM email_templates WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
+      `SELECT et.id, et.name, et.purpose, et.status, et.current_version_id,
+              et.created_at, et.updated_at, ev.version, ev.subject,
+              ev.preview_text
+       FROM email_templates et
+       LEFT JOIN email_template_versions ev
+         ON ev.workspace_id = et.workspace_id AND ev.id = et.current_version_id
+       WHERE et.workspace_id = ?
+         AND et.status ${archived ? "=" : "<>"} 'archived'
+       ORDER BY et.updated_at DESC LIMIT 200`,
     )
       .bind(workspace.workspaceId)
       .all();
     return context.json({ data: result.results });
   });
 
+  api.get("/email-templates/:id", async (context) => {
+    const row = await context.env.DB.prepare(
+      `SELECT et.id, et.name, et.purpose, et.status, et.current_version_id,
+              et.created_at, et.updated_at, ev.version, ev.subject,
+              ev.preview_text, ev.content_document
+       FROM email_templates et
+       JOIN email_template_versions ev
+         ON ev.workspace_id = et.workspace_id AND ev.id = et.current_version_id
+       WHERE et.workspace_id = ? AND et.id = ?`,
+    )
+      .bind(
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .first<{ content_document: string } & Record<string, unknown>>();
+    return row
+      ? context.json({
+          data: {
+            ...row,
+            content_document: JSON.parse(row.content_document) as unknown,
+          },
+        })
+      : apiError(
+          context,
+          404,
+          "email_template_not_found",
+          "メールテンプレートが見つかりません",
+        );
+  });
+
   api.post("/email-templates", requireRole("marketer"), async (context) => {
-    const schema = z.object({
-      name: z.string().trim().min(1).max(191),
-      purpose: messagePurposeSchema,
-      subject: z.string().min(1).max(998),
-      previewText: z.string().max(500).default(""),
-      content: contentDocumentSchema,
-    });
-    const parsed = schema.safeParse(await safeJson(context));
+    const parsed = emailTemplateInputSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspace = context.get("workspace");
     const id = uuidv7();
@@ -1451,6 +1658,10 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
     const rendered = renderContent(parsed.data.content, {
       contact: {},
       workspace: {},
+      message: await readMessageVariableValues(
+        context.env.DB,
+        workspace.workspaceId,
+      ),
     });
     await context.env.DB.batch([
       context.env.DB.prepare(
@@ -1485,6 +1696,258 @@ function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
     ]);
     return context.json({ data: { id, versionId } }, 201);
   });
+
+  api.put("/email-templates/:id", requireRole("marketer"), async (context) => {
+    const parsed = emailTemplateInputSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspaceId = context.get("workspace").workspaceId;
+    const template = await context.env.DB.prepare(
+      `SELECT id, status FROM email_templates
+       WHERE workspace_id = ? AND id = ?`,
+    )
+      .bind(workspaceId, context.req.param("id"))
+      .first<{ id: string; status: string }>();
+    if (!template) {
+      return apiError(
+        context,
+        404,
+        "email_template_not_found",
+        "メールテンプレートが見つかりません",
+      );
+    }
+    if (template.status === "archived") {
+      return apiError(
+        context,
+        409,
+        "email_template_archived",
+        "アーカイブ済みのテンプレートは編集できません",
+      );
+    }
+    const latest = await context.env.DB.prepare(
+      `SELECT COALESCE(MAX(version), 0) AS version
+       FROM email_template_versions WHERE workspace_id = ? AND template_id = ?`,
+    )
+      .bind(workspaceId, template.id)
+      .first<{ version: number }>();
+    const versionId = uuidv7();
+    const now = new Date().toISOString();
+    const rendered = renderContent(parsed.data.content, {
+      contact: {},
+      workspace: {},
+      message: await readMessageVariableValues(context.env.DB, workspaceId),
+    });
+    await context.env.DB.batch([
+      context.env.DB.prepare(
+        `INSERT INTO email_template_versions
+         (id, workspace_id, template_id, version, subject, preview_text,
+          content_document, html, text, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        versionId,
+        workspaceId,
+        template.id,
+        (latest?.version ?? 0) + 1,
+        parsed.data.subject,
+        parsed.data.previewText,
+        JSON.stringify(parsed.data.content),
+        rendered.html,
+        rendered.text,
+        now,
+      ),
+      context.env.DB.prepare(
+        `UPDATE email_templates
+         SET name = ?, purpose = ?, status = 'draft', current_version_id = ?,
+             updated_at = ?
+         WHERE workspace_id = ? AND id = ?`,
+      ).bind(
+        parsed.data.name,
+        parsed.data.purpose,
+        versionId,
+        now,
+        workspaceId,
+        template.id,
+      ),
+    ]);
+    return context.json({ data: { updated: true, versionId } });
+  });
+
+  api.post(
+    "/email-templates/:id/archive",
+    requireRole("marketer"),
+    async (context) => {
+      const now = new Date().toISOString();
+      const result = await context.env.DB.prepare(
+        `UPDATE email_templates SET status = 'archived', updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND status <> 'archived'`,
+      )
+        .bind(
+          now,
+          context.get("workspace").workspaceId,
+          context.req.param("id"),
+        )
+        .run();
+      return result.meta.changes === 1
+        ? context.json({ data: { archived: true } })
+        : apiError(
+            context,
+            404,
+            "email_template_not_found",
+            "メールテンプレートが見つかりません",
+          );
+    },
+  );
+}
+
+const messageVariableInputSchema = z.object({
+  key: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .regex(
+      /^[a-z][a-z0-9_]*$/,
+      "keyは英小文字で始まり、英小文字・数字・_のみ使用できます",
+    ),
+  name: z.string().trim().min(1).max(191),
+  value: z.string().max(20_000),
+  description: z.string().max(2_000).default(""),
+});
+
+function registerMessageVariableRoutes(api: Hono<AppEnvironment>): void {
+  api.get("/message-variables", async (context) => {
+    const archived = context.req.query("archived") === "true";
+    const result = await context.env.DB.prepare(
+      `SELECT id, key, name, value, description, archived_at, created_at, updated_at
+       FROM message_variables
+       WHERE workspace_id = ?
+         AND archived_at IS ${archived ? "NOT NULL" : "NULL"}
+       ORDER BY updated_at DESC`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/message-variables", requireRole("marketer"), async (context) => {
+    const parsed = messageVariableInputSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const now = new Date().toISOString();
+    try {
+      const id = uuidv7();
+      await context.env.DB.prepare(
+        `INSERT INTO message_variables
+         (id, workspace_id, key, name, value, description, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          id,
+          context.get("workspace").workspaceId,
+          parsed.data.key,
+          parsed.data.name,
+          parsed.data.value,
+          parsed.data.description,
+          now,
+          now,
+        )
+        .run();
+      return context.json({ data: { id } }, 201);
+    } catch (error) {
+      return apiError(
+        context,
+        409,
+        "message_variable_key_exists",
+        "同じキーのメッセージ変数が既にあります",
+        error instanceof Error ? error.message : undefined,
+      );
+    }
+  });
+
+  api.patch(
+    "/message-variables/:id",
+    requireRole("marketer"),
+    async (context) => {
+      const parsed = messageVariableInputSchema.safeParse(
+        await safeJson(context),
+      );
+      if (!parsed.success) return validationError(context, parsed.error);
+      try {
+        const result = await context.env.DB.prepare(
+          `UPDATE message_variables
+           SET key = ?, name = ?, value = ?, description = ?, updated_at = ?
+           WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
+        )
+          .bind(
+            parsed.data.key,
+            parsed.data.name,
+            parsed.data.value,
+            parsed.data.description,
+            new Date().toISOString(),
+            context.get("workspace").workspaceId,
+            context.req.param("id"),
+          )
+          .run();
+        return result.meta.changes === 1
+          ? context.json({ data: { updated: true } })
+          : apiError(
+              context,
+              404,
+              "message_variable_not_found",
+              "メッセージ変数が見つかりません",
+            );
+      } catch (error) {
+        return apiError(
+          context,
+          409,
+          "message_variable_key_exists",
+          "同じキーのメッセージ変数が既にあります",
+          error instanceof Error ? error.message : undefined,
+        );
+      }
+    },
+  );
+
+  api.post(
+    "/message-variables/:id/archive",
+    requireRole("marketer"),
+    async (context) => {
+      const now = new Date().toISOString();
+      const result = await context.env.DB.prepare(
+        `UPDATE message_variables SET archived_at = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
+      )
+        .bind(
+          now,
+          now,
+          context.get("workspace").workspaceId,
+          context.req.param("id"),
+        )
+        .run();
+      return result.meta.changes === 1
+        ? context.json({ data: { archived: true } })
+        : apiError(
+            context,
+            404,
+            "message_variable_not_found",
+            "メッセージ変数が見つかりません",
+          );
+    },
+  );
+}
+
+async function readMessageVariableValues(
+  database: D1Database,
+  workspaceId: string,
+): Promise<Record<string, unknown>> {
+  const result = await database
+    .prepare(
+      `SELECT key, value FROM message_variables
+       WHERE workspace_id = ? AND archived_at IS NULL`,
+    )
+    .bind(workspaceId)
+    .all<{ key: string; value: string }>();
+  return Object.fromEntries(
+    result.results.map((variable) => [variable.key, variable.value]),
+  );
 }
 
 function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
