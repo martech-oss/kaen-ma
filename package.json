@@ -11,11 +11,11 @@
   },
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "dev": "pnpm --filter @kaenma/worker dev",
+    "dev": "pnpm db:migrate:local && pnpm --filter @kaenma/worker dev",
     "dev:admin": "pnpm --filter @kaenma/admin dev",
     "deploy": "pnpm --filter @kaenma/worker deploy",
     "typecheck": "pnpm -r --if-present typecheck",
-    "test": "pnpm -r --if-present test",
+    "test": "pnpm -r --if-present test --passWithNoTests",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "cf:types": "pnpm --filter @kaenma/worker cf:types",
     "db:migrate:local": "pnpm --filter @kaenma/worker db:migrate:local",
@@ -27,4 +27,3 @@
     "vitest": "^4.0.17"
   }
 }
-

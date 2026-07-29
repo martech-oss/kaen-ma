@@ -42,6 +42,35 @@ describe("campaign validation", () => {
       expect.arrayContaining(["cycle", "marketing_provider_mismatch"]),
     );
   });
+
+  it("accepts Resend for a marketing email action", () => {
+    const definition: CampaignDefinition = {
+      name: "resend campaign",
+      description: "",
+      timezone: "UTC",
+      nodes: [
+        {
+          id: "source",
+          type: "source",
+          position: { x: 0, y: 0 },
+          config: { source: "contact_created" },
+        },
+        {
+          id: "send",
+          type: "action",
+          position: { x: 0, y: 100 },
+          config: {
+            action: "send_email",
+            templateVersionId: "template",
+            purpose: "marketing",
+            provider: "resend",
+          },
+        },
+      ],
+      edges: [{ id: "one", source: "source", target: "send", branch: "next" }],
+    };
+    expect(validateCampaign(definition)).toEqual([]);
+  });
 });
 
 describe("segment compiler", () => {
@@ -89,4 +118,3 @@ describe("delivery safeguards", () => {
     expect(retryDelaySeconds(20)).toBe(3_600);
   });
 });
-

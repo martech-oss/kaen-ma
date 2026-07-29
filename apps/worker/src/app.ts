@@ -1,5 +1,5 @@
 import { compileSegmentFilter, validateCampaign } from "@kaenma/core";
-import { PostmarkEmailAdapter } from "@kaenma/channels";
+import { ResendEmailAdapter } from "@kaenma/channels";
 import {
   WorkspaceRepository,
   uuidv7,
@@ -38,9 +38,10 @@ import {
 const app = new Hono<AppEnvironment>();
 
 app.use("*", requestContext);
-app.on(["GET", "POST"], "/api/auth/*", (context) =>
-  createAuth(context.env).handler(context.req.raw),
-);
+app.on(["GET", "POST"], "/api/auth/*", (context) => {
+  const requestOrigin = new URL(context.req.url).origin;
+  return createAuth(context.env, requestOrigin).handler(context.req.raw);
+});
 
 app.get("/api/health", async (context) => {
   try {
@@ -70,28 +71,33 @@ app.get("/api/openapi.json", (context) =>
   context.json(createOpenApiDocument(context.env.APP_URL)),
 );
 
-app.post("/api/webhooks/postmark/:workspaceId", async (context) => {
+app.post("/api/webhooks/resend/:workspaceId", async (context) => {
   const workspaceId = context.req.param("workspaceId");
   const config = await context.env.DB.prepare(
     `SELECT encrypted_credentials FROM provider_configs
-     WHERE workspace_id = ? AND provider = 'postmark' AND enabled = 1
+     WHERE workspace_id = ? AND provider = 'resend' AND enabled = 1
      ORDER BY updated_at DESC LIMIT 1`,
   )
     .bind(workspaceId)
     .first<{ encrypted_credentials: string }>();
   const credentials = config
-    ? await decryptCredentials<{ serverToken: string; webhookSecret: string }>(
+    ? await decryptCredentials<{ apiKey: string; webhookSecret: string }>(
         context.env.CREDENTIAL_ENCRYPTION_KEY,
         config.encrypted_credentials,
       )
     : null;
-  const webhookSecret = credentials?.webhookSecret ?? context.env.POSTMARK_WEBHOOK_SECRET;
-  const serverToken = credentials?.serverToken ?? context.env.POSTMARK_SERVER_TOKEN;
-  if (!webhookSecret || !serverToken) {
-    return apiError(context, 404, "postmark_not_configured", "Postmark設定がありません");
+  const webhookSecret = credentials?.webhookSecret ?? context.env.RESEND_WEBHOOK_SECRET;
+  const apiKey = credentials?.apiKey ?? context.env.RESEND_API_KEY;
+  if (!webhookSecret) {
+    return apiError(
+      context,
+      404,
+      "resend_webhook_not_configured",
+      "Resend Webhook設定がありません",
+    );
   }
   const rawBody = await context.req.text();
-  const adapter = new PostmarkEmailAdapter({ serverToken, webhookSecret });
+  const adapter = new ResendEmailAdapter({ apiKey: apiKey ?? "", webhookSecret });
   const verification = await adapter.verifyWebhook(context.req.raw, rawBody);
   if (!verification.valid) {
     return apiError(context, 401, "invalid_webhook_signature", "Webhook署名が無効です");
@@ -102,7 +108,7 @@ app.post("/api/webhooks/postmark/:workspaceId", async (context) => {
   } catch {
     return apiError(context, 400, "invalid_json", "JSONが不正です");
   }
-  const events = adapter.normalizeEvents(body, workspaceId);
+  const events = adapter.normalizeEvents(body, workspaceId, verification.eventId);
   for (const event of events) {
     const status =
       event.type === "delivered"
@@ -115,7 +121,7 @@ app.post("/api/webhooks/postmark/:workspaceId", async (context) => {
         `INSERT OR IGNORE INTO delivery_events
          (id, workspace_id, delivery_id, provider, provider_event_id,
           provider_message_id, type, occurred_at, metadata, created_at)
-         SELECT ?, ?, d.id, 'postmark', ?, ?, ?, ?, ?, ?
+         SELECT ?, ?, d.id, 'resend', ?, ?, ?, ?, ?, ?
          FROM deliveries d WHERE d.workspace_id = ? AND d.id = ?`,
       ).bind(
         uuidv7(),
@@ -143,7 +149,7 @@ app.post("/api/webhooks/postmark/:workspaceId", async (context) => {
         context.env.DB.prepare(
           `INSERT OR IGNORE INTO suppressions
            (id, workspace_id, contact_id, email, reason, provider, created_at)
-           SELECT ?, d.workspace_id, d.contact_id, d.recipient, ?, 'postmark', ?
+           SELECT ?, d.workspace_id, d.contact_id, d.recipient, ?, 'resend', ?
            FROM deliveries d WHERE d.workspace_id = ? AND d.id = ?`,
         ).bind(
           uuidv7(),
@@ -1294,13 +1300,12 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
     return context.json({ data: { id, token, prefix } }, 201);
   });
 
-  api.post("/providers/postmark", requireRole("admin"), async (context) => {
+  api.post("/providers/resend", requireRole("admin"), async (context) => {
     const parsed = z
       .object({
         name: z.string().trim().min(1).max(191).default("default"),
-        serverToken: z.string().min(10),
+        apiKey: z.string().min(10),
         webhookSecret: z.string().min(16),
-        messageStream: z.string().min(1).default("broadcasts"),
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
@@ -1308,7 +1313,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
     const encrypted = await encryptCredentials(
       context.env.CREDENTIAL_ENCRYPTION_KEY,
       {
-        serverToken: parsed.data.serverToken,
+        apiKey: parsed.data.apiKey,
         webhookSecret: parsed.data.webhookSecret,
       },
     );
@@ -1316,7 +1321,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
     await context.env.DB.prepare(
       `INSERT INTO provider_configs
        (id, workspace_id, provider, name, encrypted_credentials, settings, created_at, updated_at)
-       VALUES (?, ?, 'postmark', ?, ?, ?, ?, ?)
+       VALUES (?, ?, 'resend', ?, ?, ?, ?, ?)
        ON CONFLICT(workspace_id, provider, name) DO UPDATE SET
          encrypted_credentials = excluded.encrypted_credentials,
          settings = excluded.settings,
@@ -1328,7 +1333,7 @@ function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
         workspace.workspaceId,
         parsed.data.name,
         encrypted,
-        JSON.stringify({ messageStream: parsed.data.messageStream }),
+        JSON.stringify({}),
         now,
         now,
       )

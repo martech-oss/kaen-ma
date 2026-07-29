@@ -10,18 +10,20 @@ import {
 import { drizzle } from "drizzle-orm/d1";
 import type { RuntimeEnv } from "./env";
 
-export function createAuth(env: RuntimeEnv) {
+export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
   const database = drizzle(env.DB, { schema: authSchema });
+  const baseURL = resolveAuthBaseURL(env, requestOrigin);
+  const requireEmailVerification = isEmailVerificationRequired(env.ENVIRONMENT);
   return betterAuth({
     appName: env.APP_NAME,
-    baseURL: env.APP_URL,
+    baseURL,
     secret: env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(database, {
       provider: "sqlite",
       schema: authSchema,
       usePlural: false,
     }),
-    trustedOrigins: [env.APP_URL],
+    trustedOrigins: [...new Set([env.APP_URL, baseURL])],
     advanced: {
       useSecureCookies: env.ENVIRONMENT !== "development",
       cookiePrefix: "kaenma",
@@ -33,7 +35,7 @@ export function createAuth(env: RuntimeEnv) {
     },
     emailAndPassword: {
       enabled: true,
-      requireEmailVerification: true,
+      requireEmailVerification,
       minPasswordLength: 12,
       async sendResetPassword({ user, url }) {
         await sendAuthEmail(env, {
@@ -45,7 +47,7 @@ export function createAuth(env: RuntimeEnv) {
       },
     },
     emailVerification: {
-      sendOnSignUp: true,
+      sendOnSignUp: requireEmailVerification,
       autoSignInAfterVerification: true,
       async sendVerificationEmail({ user, url }) {
         await sendAuthEmail(env, {
@@ -73,7 +75,7 @@ export function createAuth(env: RuntimeEnv) {
         },
         requireEmailVerificationOnInvitation: true,
         async sendInvitationEmail(data) {
-          const url = `${env.APP_URL}/accept-invitation?id=${encodeURIComponent(data.id)}`;
+          const url = `${baseURL}/accept-invitation?id=${encodeURIComponent(data.id)}`;
           await sendAuthEmail(env, {
             to: data.email,
             subject: `${data.organization.name} への招待`,
@@ -84,7 +86,7 @@ export function createAuth(env: RuntimeEnv) {
       }),
     ],
     rateLimit: {
-      enabled: true,
+      enabled: env.ENVIRONMENT !== "development",
       window: 60,
       max: 100,
       customRules: {
@@ -94,6 +96,30 @@ export function createAuth(env: RuntimeEnv) {
       },
     },
   });
+}
+
+export function isEmailVerificationRequired(environment: string): boolean {
+  return environment !== "development";
+}
+
+export function resolveAuthBaseURL(
+  env: Pick<RuntimeEnv, "APP_URL" | "ENVIRONMENT">,
+  requestOrigin?: string,
+): string {
+  if (env.ENVIRONMENT !== "development" || !requestOrigin) return env.APP_URL;
+  try {
+    const origin = new URL(requestOrigin);
+    const hostname = origin.hostname.toLowerCase();
+    if (
+      origin.protocol === "http:" &&
+      (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]")
+    ) {
+      return origin.origin;
+    }
+  } catch {
+    // Fall back to the configured URL when the request origin is malformed.
+  }
+  return env.APP_URL;
 }
 
 async function sendAuthEmail(

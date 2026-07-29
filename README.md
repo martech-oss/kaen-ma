@@ -5,16 +5,16 @@ Cloudflare上で完結する、オープンソースのマーケティングオ�
 Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」という考え方を、TypeScriptとCloudflare Workers向けに再構築しています。Mautic APIやPHPプラグインとの互換性は目的としていません。
 
 > [!IMPORTANT]
-> 現在は `v0.1` の開発版です。本番投入前に、送信ドメイン、同意要件、Postmark設定、負荷特性、バックアップ手順を環境ごとに検証してください。
+> 現在は `v0.1` の開発版です。本番投入前に、送信ドメイン、同意要件、Resend設定、負荷特性、バックアップ手順を環境ごとに検証してください。
 
 ## 特徴
 
-- 単一のCloudflare WorkerからREST APIとReact管理画面を配信
+- 単一のCloudflare WorkerからREST APIとTanStack Start管理画面を配信
 - D1を業務データとキャンペーン状態機械の正本として使用
 - R2によるAsset、CSV、受信添付ファイル、イベントアーカイブの保存
 - Queuesと1分Cronによる再開可能なキャンペーン実行
 - Cloudflare Email ServiceによるTransactionalメール
-- Postmark Broadcast Message StreamによるMarketingメール
+- Resend Emails APIによるMarketingメール
 - React Flowを使ったビジュアルキャンペーンビルダー
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
 - Workspace限定APIキー、TypeScript SDK、MCPサーバー
@@ -27,7 +27,7 @@ Kaenmaはメールの用途を型と実行時検証の両方で分離します�
 | 用途 | 既定プロバイダー | 使用例 |
 | --- | --- | --- |
 | `transactional` | Cloudflare Email Service | メール確認、招待、パスワード再設定、申込確認 |
-| `marketing` | Postmark Broadcast | Campaign、Segment配信、Broadcast |
+| `marketing` | Resend | Campaign、Segment配信、Broadcast |
 
 Cloudflare Email ServiceをMarketing用途で選択すると、キャンペーン公開時と送信時の両方で拒否されます。
 
@@ -35,7 +35,7 @@ Cloudflare Email ServiceをMarketing用途で選択すると、キャンペー�
 
 ```mermaid
 flowchart LR
-    A["管理者・マーケター"] --> W["Cloudflare Worker<br>Hono API + Admin SPA"]
+    A["管理者・マーケター"] --> W["Cloudflare Worker<br>Hono API + TanStack Start"]
     V["訪問者・フォーム・Tracking"] --> W
     C["Cron Scheduler"] --> W
     W --> D["D1<br>業務データ・実行状態"]
@@ -43,7 +43,7 @@ flowchart LR
     W --> Q["Queues<br>Campaign・Delivery"]
     Q --> W
     W --> CF["Cloudflare Email Service<br>Transactional"]
-    W --> PM["Postmark<br>Marketing"]
+    W --> RE["Resend<br>Marketing"]
     W --> WH["Outbound Webhook"]
     ER["Cloudflare Email Routing"] --> W
 ```
@@ -54,10 +54,10 @@ flowchart LR
 
 ```text
 apps/
-  admin/                 React、Vite、Tailwind、React Flow
+  admin/                 TanStack Start、Vite、Tailwind、React Flow
   worker/                Hono API、Cron、Queue、Email Routing
 packages/
-  channels/              Cloudflare、Postmark、Webhook adapter
+  channels/              Cloudflare、Resend、Webhook adapter
   core/                  Segment、Campaign、Consent、Schedule
   create-kaenma/         Setup、doctor、backup、update CLI
   db/                    D1 migration、Better Auth schema、repository
@@ -75,7 +75,7 @@ packages/
 - Workers Paidプランを推奨
 - D1、R2、Queues
 - Cloudflare Email ServiceとEmail Routing
-- Marketingメールを送る場合はPostmark
+- Marketingメールを送る場合はResend
 
 ## ローカル開発
 
@@ -98,11 +98,11 @@ BETTER_AUTH_SECRET=32文字以上のランダム値
 CREDENTIAL_ENCRYPTION_KEY=32バイト相当のランダム値
 TRACKING_SIGNING_SECRET=32文字以上のランダム値
 TURNSTILE_SECRET=任意
-POSTMARK_SERVER_TOKEN=任意
-POSTMARK_WEBHOOK_SECRET=任意
+RESEND_API_KEY=任意
+RESEND_WEBHOOK_SECRET=任意
 ```
 
-`CREDENTIAL_ENCRYPTION_KEY`は、PostmarkやWebhookの資格情報をD1へ保存する際のAES-GCMマスターキーです。運用開始後に不用意に変更すると、保存済み資格情報を復号できなくなります。
+`CREDENTIAL_ENCRYPTION_KEY`は、ResendやWebhookの資格情報をD1へ保存する際のAES-GCMマスターキーです。運用開始後に不用意に変更すると、保存済み資格情報を復号できなくなります。
 
 ### 3. D1 migration
 
@@ -116,9 +116,13 @@ pnpm db:migrate:local
 pnpm dev
 ```
 
-管理画面とAPIは通常 `http://localhost:8787` で利用できます。
+`pnpm dev`は未適用のローカルD1 migrationを先に適用してから開発サーバーを起動します。
 
-管理画面だけをViteで起動する場合:
+管理画面とAPIは `http://localhost:5173` で利用できます。
+
+開発環境では登録時のメール確認を省略し、アカウント作成後にそのままログインします。本番環境ではメール確認が必須です。
+
+管理画面とAPIをTanStack StartのVite開発サーバーで起動する場合:
 
 ```bash
 pnpm dev:admin
@@ -135,7 +139,8 @@ pnpm dev:admin
 - `CAMPAIGN_QUEUE`: Campaign、Broadcast、Import/Export
 - `DELIVERY_QUEUE`: Email、Webhook delivery
 - `EMAIL`: Cloudflare Email Service
-- `ASSETS`: Admin SPA
+
+TanStack StartのSSR WorkerとクライアントアセットはCloudflare Viteプラグインが同じデプロイ成果物へまとめます。
 
 初期状態のD1 `database_id` はプレースホルダーです。実際のD1 IDへ置き換えてください。
 
@@ -149,12 +154,14 @@ pnpm wrangler secret put TRACKING_SIGNING_SECRET
 pnpm wrangler secret put TURNSTILE_SECRET
 ```
 
-Postmark資格情報は管理画面からWorkspace単位で暗号化保存できます。環境共通のフォールバックを使う場合:
+Resend資格情報は管理画面からWorkspace単位で暗号化保存できます。環境共通のフォールバックを使う場合:
 
 ```bash
-pnpm wrangler secret put POSTMARK_SERVER_TOKEN
-pnpm wrangler secret put POSTMARK_WEBHOOK_SECRET
+pnpm wrangler secret put RESEND_API_KEY
+pnpm wrangler secret put RESEND_WEBHOOK_SECRET
 ```
+
+Resend Dashboardには`https://<APP_URL>/api/webhooks/resend/<WORKSPACE_ID>`をWebhook URLとして登録し、`email.sent`、`email.delivered`、`email.opened`、`email.clicked`、`email.bounced`、`email.complained`、`email.failed`、`email.suppressed`を購読します。発行されたSigning secretを管理画面へ保存してください。
 
 ### Migrationとデプロイ
 
@@ -163,7 +170,7 @@ pnpm db:migrate:remote
 pnpm deploy
 ```
 
-Worker build時にAdmin SPAもビルドされ、Static Assetsとして同時にデプロイされます。
+Worker build時にTanStack StartのSSR bundleとクライアントアセットもビルドされ、同時にデプロイされます。
 
 ## 初回セットアップ
 
@@ -171,7 +178,7 @@ Worker build時にAdmin SPAもビルドされ、Static Assetsとして同時に�
 2. 確認メールからメールアドレスを検証する
 3. OrganizationとしてWorkspaceを作成する
 4. 必要に応じて購読Topicを作成する
-5. Postmark Broadcast設定を登録する
+5. ResendのAPI keyとWebhook signing secretを登録する
 6. ContactまたはCSVを取り込む
 7. SegmentとEmail Templateを作成する
 8. Campaignを作成・検証・公開する
@@ -204,7 +211,7 @@ Campaignは次のNodeから構成されます。
 - Node種別に対してBranchが正しい
 - 循環がない
 - Sourceから到達不能なNodeがない
-- MarketingメールがPostmarkを使用している
+- MarketingメールがResendを使用している
 
 公開バージョンは不変です。公開後は同じグラフから新しいdraftが作られ、進行中Contactは参加時のバージョンを完走します。
 
@@ -216,7 +223,7 @@ BroadcastはMarketingメール専用です。
 2. Segmentの受信者を`broadcast_recipients`へ分割スナップショット
 3. 同じDelivery Queueへ投入
 4. 送信直前に同意と抑止を再評価
-5. Postmark Broadcast Message Streamで送信
+5. Resend Emails APIで受信者ごとに送信
 
 CampaignメールとBroadcastは同じDeliveryテーブル、同意判定、イベント正規化を使用します。
 
@@ -442,7 +449,7 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 ## 現在の制約
 
 - `wrangler.jsonc`のD1 ID、送信元ドメイン、Reply domainは環境ごとの設定が必要です。
-- Postmark WebhookはKaenmaのtimestamp付きHMACヘッダーを前提とします。中継サービスを使う場合も同じ署名形式へ変換してください。
+- Resend Webhookは`/api/webhooks/resend/:workspaceId`で受け取り、raw bodyと`svix-*`ヘッダーを使ってResend標準の署名を検証します。
 - 大規模なCSVやSegmentは、実データ分布を使った負荷試験が必要です。
 - D1は唯一の業務DBですが、古い詳細イベントと大容量ファイルはR2へ退避します。
 - SMS、LINE、Push、Mautic API/PHPプラグイン互換、SAML/SCIMは対象外です。

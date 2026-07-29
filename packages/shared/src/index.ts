@@ -154,7 +154,7 @@ export const actionNodeSchema = z.object({
       action: z.literal("send_email"),
       templateVersionId: z.string(),
       purpose: messagePurposeSchema,
-      provider: z.enum(["cloudflare", "postmark"]),
+      provider: z.enum(["cloudflare", "resend"]),
       topicId: z.string().optional(),
     }),
     z.object({ action: z.literal("send_webhook"), endpointId: z.string() }),
@@ -361,7 +361,7 @@ export interface DeliveryEvent {
   id: string;
   workspaceId: string;
   deliveryId: string;
-  provider: "cloudflare" | "postmark" | "webhook";
+  provider: "cloudflare" | "resend" | "webhook";
   providerMessageId?: string;
   type: DeliveryEventType;
   occurredAt: string;

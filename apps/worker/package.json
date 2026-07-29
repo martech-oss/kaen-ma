@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @kaenma/admin build && wrangler dev",
-    "build": "pnpm --filter @kaenma/admin build && wrangler deploy --dry-run --outdir dist",
-    "deploy": "pnpm --filter @kaenma/admin build && wrangler deploy",
+    "dev": "pnpm --filter @kaenma/admin dev",
+    "build": "pnpm --filter @kaenma/admin build",
+    "deploy": "pnpm --filter @kaenma/admin deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "cf:types": "wrangler types --env-interface CloudflareBindings",
-    "db:migrate:local": "wrangler d1 migrations apply kaenma --local",
+    "db:migrate:local": "wrangler d1 migrations apply kaenma --local --persist-to ../admin/.wrangler/state",
     "db:migrate:remote": "wrangler d1 migrations apply kaenma --remote"
   },
   "dependencies": {

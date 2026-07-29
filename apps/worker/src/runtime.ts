@@ -2,7 +2,7 @@ import {
   CloudflareEmailAdapter,
   OutboundWebhookAdapter,
   PermanentChannelError,
-  PostmarkEmailAdapter,
+  ResendEmailAdapter,
   TransientChannelError,
   type ChannelMessage,
 } from "@kaenma/channels";
@@ -61,7 +61,7 @@ interface DeliveryRow {
   contact_id: string | null;
   channel: "email" | "webhook";
   purpose: "transactional" | "marketing";
-  provider: "cloudflare" | "postmark" | "webhook";
+  provider: "cloudflare" | "postmark" | "resend" | "webhook";
   recipient: string;
   topic_id: string | null;
   idempotency_key: string;
@@ -683,7 +683,7 @@ async function createBroadcastDeliveries(
          (id, workspace_id, contact_id, broadcast_id, channel, purpose, provider,
           recipient, topic_id, template_version_id, idempotency_key, payload,
           status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'email', 'marketing', 'postmark', ?, ?, ?, ?, ?,
+         VALUES (?, ?, ?, ?, 'email', 'marketing', 'resend', ?, ?, ?, ?, ?,
                  'queued', ?, ?)`,
       ).bind(
         deliveryId,
@@ -1222,32 +1222,33 @@ async function deliveryAdapter(
   env: RuntimeEnv,
 ) {
   if (delivery.provider === "cloudflare") return new CloudflareEmailAdapter(env.EMAIL);
-  if (delivery.provider === "postmark") {
+  if (delivery.provider === "resend") {
     const config = await env.DB.prepare(
-      `SELECT encrypted_credentials, settings FROM provider_configs
-       WHERE workspace_id = ? AND provider = 'postmark' AND enabled = 1
+      `SELECT encrypted_credentials FROM provider_configs
+       WHERE workspace_id = ? AND provider = 'resend' AND enabled = 1
        ORDER BY updated_at DESC LIMIT 1`,
     )
       .bind(delivery.workspace_id)
-      .first<{ encrypted_credentials: string; settings: string }>();
+      .first<{ encrypted_credentials: string }>();
     const credentials = config
-      ? await decryptCredentials<{ serverToken: string; webhookSecret?: string }>(
+      ? await decryptCredentials<{ apiKey: string; webhookSecret?: string }>(
           env.CREDENTIAL_ENCRYPTION_KEY,
           config.encrypted_credentials,
         )
       : null;
-    const settings = config ? safeRecord(config.settings) : {};
-    const token = credentials?.serverToken ?? env.POSTMARK_SERVER_TOKEN;
-    if (!token) throw new PermanentChannelError("Postmark is not configured");
-    return new PostmarkEmailAdapter({
-      serverToken: token,
-      ...(credentials?.webhookSecret || env.POSTMARK_WEBHOOK_SECRET
-        ? { webhookSecret: credentials?.webhookSecret ?? env.POSTMARK_WEBHOOK_SECRET }
-        : {}),
-      ...(typeof settings["messageStream"] === "string"
-        ? { messageStream: settings["messageStream"] }
+    const apiKey = credentials?.apiKey ?? env.RESEND_API_KEY;
+    if (!apiKey) throw new PermanentChannelError("Resend is not configured");
+    return new ResendEmailAdapter({
+      apiKey,
+      ...(credentials?.webhookSecret || env.RESEND_WEBHOOK_SECRET
+        ? { webhookSecret: credentials?.webhookSecret ?? env.RESEND_WEBHOOK_SECRET }
         : {}),
     });
+  }
+  if (delivery.provider === "postmark") {
+    throw new PermanentChannelError(
+      "Legacy Postmark delivery cannot be sent; recreate it with the Resend provider",
+    );
   }
   if (!endpointId) throw new PermanentChannelError("Webhook endpoint is missing");
   const endpoint = await env.DB.prepare(

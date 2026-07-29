@@ -30,10 +30,10 @@ export interface WebhookVerification {
 }
 
 export interface ChannelAdapter {
-  readonly provider: "cloudflare" | "postmark" | "webhook";
+  readonly provider: "cloudflare" | "resend" | "webhook";
   send(message: ChannelMessage): Promise<ChannelSendResult>;
   verifyWebhook(request: Request, rawBody: string): Promise<WebhookVerification>;
-  normalizeEvents(payload: unknown, workspaceId: string): DeliveryEvent[];
+  normalizeEvents(payload: unknown, workspaceId: string, eventId?: string): DeliveryEvent[];
   healthCheck(): Promise<ChannelHealth>;
 }
 
@@ -90,84 +90,67 @@ export class CloudflareEmailAdapter implements ChannelAdapter {
   }
 }
 
-export interface PostmarkAdapterOptions {
-  serverToken: string;
-  messageStream?: string;
+export interface ResendAdapterOptions {
+  apiKey: string;
   webhookSecret?: string;
   fetcher?: typeof fetch;
 }
 
-interface PostmarkWebhook {
-  RecordType?: string;
-  MessageID?: string;
-  Recipient?: string;
-  DeliveredAt?: string;
-  ReceivedAt?: string;
-  BouncedAt?: string;
-  Tag?: string;
-  Metadata?: Record<string, string>;
-  Details?: string;
-  Type?: string;
-}
-
-export class PostmarkEmailAdapter implements ChannelAdapter {
-  public readonly provider = "postmark" as const;
+export class ResendEmailAdapter implements ChannelAdapter {
+  public readonly provider = "resend" as const;
   private readonly fetcher: typeof fetch;
 
-  public constructor(private readonly options: PostmarkAdapterOptions) {
+  public constructor(private readonly options: ResendAdapterOptions) {
     this.fetcher = options.fetcher ?? fetch;
   }
 
   public async send(message: ChannelMessage): Promise<ChannelSendResult> {
     if (message.purpose !== "marketing") {
-      throw new PermanentChannelError("Postmark Broadcast adapter only accepts marketing messages");
+      throw new PermanentChannelError("Resend adapter only accepts marketing messages");
     }
-    const response = await this.fetcher("https://api.postmarkapp.com/email", {
+    const unsubscribeUrl = message.metadata?.["unsubscribeUrl"];
+    const response = await this.fetcher("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Accept: "application/json",
+        Authorization: `Bearer ${this.options.apiKey}`,
         "Content-Type": "application/json",
-        "X-Postmark-Server-Token": this.options.serverToken,
+        "Idempotency-Key": message.idempotencyKey.slice(0, 256),
       },
       body: JSON.stringify({
-        From: formatAddress(message.from),
-        To: message.to,
-        Subject: message.subject,
-        HtmlBody: message.html,
-        TextBody: message.text,
-        MessageStream: this.options.messageStream ?? "broadcasts",
-        ReplyTo: message.replyTo,
-        Headers: message.metadata?.["unsubscribeUrl"]
-          ? [
-              {
-                Name: "List-Unsubscribe",
-                Value: `<${message.metadata["unsubscribeUrl"]}>`,
+        from: formatAddress(message.from),
+        to: [message.to],
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        ...(message.replyTo ? { reply_to: message.replyTo } : {}),
+        ...(unsubscribeUrl
+          ? {
+              headers: {
+                "List-Unsubscribe": `<${unsubscribeUrl}>`,
+                "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
               },
-              {
-                Name: "List-Unsubscribe-Post",
-                Value: "List-Unsubscribe=One-Click",
-              },
-            ]
-          : undefined,
-        Metadata: {
-          kaenma_delivery_id: message.deliveryId,
-          kaenma_workspace_id: message.workspaceId,
-          kaenma_idempotency_key: message.idempotencyKey,
-          ...message.metadata,
-        },
+            }
+          : {}),
+        tags: [
+          { name: "kaenma_delivery_id", value: message.deliveryId },
+          { name: "kaenma_workspace_id", value: message.workspaceId },
+        ],
       }),
     });
     if (!response.ok) {
       const detail = await response.text();
       if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-        throw new PermanentChannelError(`Postmark rejected the message: ${detail}`);
+        throw new PermanentChannelError(`Resend rejected the message: ${detail}`);
       }
-      throw new TransientChannelError(`Postmark is temporarily unavailable: ${detail}`);
+      throw new TransientChannelError(`Resend is temporarily unavailable: ${detail}`);
     }
-    const payload = (await response.json()) as { MessageID: string; SubmittedAt?: string };
+    const payload = (await response.json()) as { id?: string };
+    if (!payload.id) {
+      throw new TransientChannelError("Resend accepted the request without a message ID");
+    }
     return {
-      providerMessageId: payload.MessageID,
-      acceptedAt: payload.SubmittedAt ?? new Date().toISOString(),
+      providerMessageId: payload.id,
+      acceptedAt: new Date().toISOString(),
     };
   }
 
@@ -176,52 +159,66 @@ export class PostmarkEmailAdapter implements ChannelAdapter {
     rawBody: string,
   ): Promise<WebhookVerification> {
     if (!this.options.webhookSecret) return { valid: false };
-    const signature = request.headers.get("x-kaenma-postmark-signature");
-    const timestamp = request.headers.get("x-kaenma-timestamp");
-    if (!signature || !timestamp || isStale(timestamp)) return { valid: false };
-    const expected = await hmacHex(this.options.webhookSecret, `${timestamp}.${rawBody}`);
-    const eventId = request.headers.get("x-kaenma-event-id");
+    const eventId = request.headers.get("svix-id");
+    const timestamp = request.headers.get("svix-timestamp");
+    const signature = request.headers.get("svix-signature");
+    if (!eventId || !signature || !timestamp || isStale(timestamp)) {
+      return { valid: false };
+    }
     return {
-      valid: timingSafeEqual(signature, expected),
-      ...(eventId ? { eventId } : {}),
+      valid: await verifySvixSignature(
+        this.options.webhookSecret,
+        eventId,
+        timestamp,
+        rawBody,
+        signature,
+      ),
+      eventId,
     };
   }
 
-  public normalizeEvents(payload: unknown, workspaceId: string): DeliveryEvent[] {
-    if (!isRecord(payload)) return [];
-    const event = payload as PostmarkWebhook;
-    const metadata = event.Metadata ?? {};
-    const deliveryId = metadata["kaenma_delivery_id"];
-    const messageId = event.MessageID;
-    if (!deliveryId || !messageId) return [];
-    const type = normalizePostmarkType(event.RecordType, event.Type);
+  public normalizeEvents(
+    payload: unknown,
+    workspaceId: string,
+    eventId?: string,
+  ): DeliveryEvent[] {
+    if (!isRecord(payload) || !isRecord(payload["data"])) return [];
+    const data = payload["data"];
+    const tags = isRecord(data["tags"]) ? data["tags"] : {};
+    const deliveryId = tags["kaenma_delivery_id"];
+    const messageId = data["email_id"];
+    const eventType = payload["type"];
+    if (
+      typeof deliveryId !== "string" ||
+      typeof messageId !== "string" ||
+      typeof eventType !== "string"
+    ) {
+      return [];
+    }
+    const type = normalizeResendType(eventType);
     if (!type) return [];
     const occurredAt =
-      event.DeliveredAt ?? event.ReceivedAt ?? event.BouncedAt ?? new Date().toISOString();
+      typeof payload["created_at"] === "string"
+        ? payload["created_at"]
+        : new Date().toISOString();
     return [
       {
-        id: `${messageId}:${event.RecordType ?? type}:${occurredAt}`,
+        id: eventId ?? `${messageId}:${eventType}:${occurredAt}`,
         workspaceId,
         deliveryId,
-        provider: "postmark",
+        provider: "resend",
         providerMessageId: messageId,
         type,
         occurredAt,
-        metadata: { ...payload },
+        metadata: payload,
       },
     ];
   }
 
   public async healthCheck(): Promise<ChannelHealth> {
-    const response = await this.fetcher("https://api.postmarkapp.com/server", {
-      headers: {
-        Accept: "application/json",
-        "X-Postmark-Server-Token": this.options.serverToken,
-      },
-    });
     return {
-      healthy: response.ok,
-      detail: response.ok ? "Postmark credentials are valid" : `Postmark returned ${response.status}`,
+      healthy: this.options.apiKey.length > 0,
+      detail: "Resend API key is configured",
     };
   }
 }
@@ -370,18 +367,14 @@ function formatAddress(from: ChannelMessage["from"]): string {
   return from.name ? `${from.name.replaceAll(/[<>"]/g, "")} <${from.email}>` : from.email;
 }
 
-function normalizePostmarkType(
-  recordType?: string,
-  bounceType?: string,
-): DeliveryEvent["type"] | null {
-  if (recordType === "Delivery") return "delivered";
-  if (recordType === "Open") return "opened";
-  if (recordType === "Click") return "clicked";
-  if (recordType === "SpamComplaint") return "complained";
-  if (recordType === "SubscriptionChange") return "unsubscribed";
-  if (recordType === "Bounce") {
-    return bounceType === "Transient" ? "failed" : "bounced";
-  }
+function normalizeResendType(value: string): DeliveryEvent["type"] | null {
+  if (value === "email.sent") return "accepted";
+  if (value === "email.delivered") return "delivered";
+  if (value === "email.opened") return "opened";
+  if (value === "email.clicked") return "clicked";
+  if (value === "email.bounced") return "bounced";
+  if (value === "email.complained") return "complained";
+  if (value === "email.failed" || value === "email.suppressed") return "failed";
   return null;
 }
 
@@ -406,6 +399,54 @@ function normalizeDeliveryType(value: string): DeliveryEvent["type"] | null {
 function isStale(timestamp: string): boolean {
   const seconds = Number(timestamp);
   return !Number.isFinite(seconds) || Math.abs(Date.now() / 1000 - seconds) > 300;
+}
+
+async function verifySvixSignature(
+  secret: string,
+  eventId: string,
+  timestamp: string,
+  rawBody: string,
+  signatureHeader: string,
+): Promise<boolean> {
+  const encodedSecret = secret.startsWith("whsec_") ? secret.slice("whsec_".length) : secret;
+  let secretBytes: Uint8Array<ArrayBuffer>;
+  try {
+    secretBytes = decodeBase64(encodedSecret);
+  } catch {
+    return false;
+  }
+  const key = await crypto.subtle.importKey(
+    "raw",
+    secretBytes.buffer,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`${eventId}.${timestamp}.${rawBody}`),
+  );
+  const expected = encodeBase64(new Uint8Array(signature));
+  return signatureHeader.split(" ").some((candidate) => {
+    const [version, value] = candidate.split(",", 2);
+    return version === "v1" && typeof value === "string" && timingSafeEqual(value, expected);
+  });
+}
+
+function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function encodeBase64(value: Uint8Array): string {
+  let binary = "";
+  for (const byte of value) binary += String.fromCharCode(byte);
+  return btoa(binary);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,6 +1,7 @@
 import { WorkspaceRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/db";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -9,6 +10,27 @@ declare module "cloudflare:workers" {
 }
 
 describe("Kaenma Worker", () => {
+  it("uses the actual localhost port for Better Auth during development", () => {
+    expect(
+      resolveAuthBaseURL(
+        { APP_URL: "http://localhost:8787", ENVIRONMENT: "development" },
+        "http://localhost:8788",
+      ),
+    ).toBe("http://localhost:8788");
+    expect(
+      resolveAuthBaseURL(
+        { APP_URL: "https://app.example.com", ENVIRONMENT: "production" },
+        "https://evil.example.com",
+      ),
+    ).toBe("https://app.example.com");
+  });
+
+  it("skips email verification only in development", () => {
+    expect(isEmailVerificationRequired("development")).toBe(false);
+    expect(isEmailVerificationRequired("test")).toBe(true);
+    expect(isEmailVerificationRequired("production")).toBe(true);
+  });
+
   it("reports a healthy migrated D1 database", async () => {
     const response = await exports.default.fetch("http://localhost:8787/api/health");
     expect(response.status).toBe(200);
@@ -64,5 +86,26 @@ describe("Kaenma Worker", () => {
     expect(
       await reserveIdempotencyKey(env.DB, workspaceId, "delivery", "same-key", expiresAt),
     ).toBe(false);
+  });
+
+  it("accepts Resend provider configuration with valid foreign keys", async () => {
+    const workspaceId = uuidv7();
+    await env.DB.prepare(
+      `INSERT INTO organization (id, name, slug, created_at, timezone)
+       VALUES (?, 'Resend Workspace', 'resend-workspace', ?, 'UTC')`,
+    )
+      .bind(workspaceId, Date.now())
+      .run();
+    await expect(
+      env.DB.prepare(
+        `INSERT INTO provider_configs
+         (id, workspace_id, provider, name, encrypted_credentials, settings, created_at, updated_at)
+         VALUES (?, ?, 'resend', 'default', 'encrypted', '{}', ?, ?)`,
+      )
+        .bind(uuidv7(), workspaceId, new Date().toISOString(), new Date().toISOString())
+        .run(),
+    ).resolves.toBeDefined();
+    const foreignKeyViolations = await env.DB.prepare("PRAGMA foreign_key_check").all();
+    expect(foreignKeyViolations.results).toEqual([]);
   });
 });

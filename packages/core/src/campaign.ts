@@ -48,11 +48,11 @@ export function validateCampaign(
       node.type === "action" &&
       node.config.action === "send_email" &&
       node.config.purpose === "marketing" &&
-      node.config.provider !== "postmark"
+      node.config.provider !== "resend"
     ) {
       issues.push({
         code: "marketing_provider_mismatch",
-        message: "Marketing email must use the Postmark adapter",
+        message: "Marketing email must use the Resend adapter",
         nodeId: node.id,
       });
     }
@@ -161,4 +161,3 @@ export function outgoingEdges(
       edge.source === nodeId && (branch === undefined || edge.branch === branch),
   );
 }
-

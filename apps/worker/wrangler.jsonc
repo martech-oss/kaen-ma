@@ -1,16 +1,10 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "kaenma",
-  "main": "src/index.ts",
+  "main": "../admin/src/server.ts",
   "compatibility_date": "2026-07-28",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
-  "assets": {
-    "directory": "../admin/dist",
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/f/*", "/p/*", "/t/*", "/u/*", "/preference/*"]
-  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -62,7 +56,7 @@
   },
   "vars": {
     "APP_NAME": "Kaenma",
-    "APP_URL": "http://localhost:8787",
+    "APP_URL": "http://localhost:5173",
     "ENVIRONMENT": "development",
     "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com",
     "TRANSACTIONAL_FROM_NAME": "Kaenma",
@@ -81,4 +75,3 @@
     }
   }
 }
-

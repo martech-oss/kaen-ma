@@ -7,6 +7,12 @@ import type {
   SegmentFilter,
 } from "@kaenma/shared";
 import {
+  Link,
+  Outlet,
+  linkOptions,
+  useNavigate,
+} from "@tanstack/react-router";
+import {
   Background,
   Controls,
   Handle,
@@ -45,21 +51,15 @@ import {
   X,
 } from "lucide-react";
 import {
+  createContext,
   type FormEvent,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useState,
 } from "react";
-import {
-  NavLink,
-  Navigate,
-  Route,
-  Routes,
-  useNavigate,
-  useParams,
-} from "react-router-dom";
 import { api, ApiClientError } from "./api";
 import { authClient } from "./auth-client";
 
@@ -70,6 +70,8 @@ interface Workspace {
   timezone: string;
   role: string;
 }
+
+const WorkspaceContext = createContext<Workspace | null>(null);
 
 interface DashboardData {
   contacts: { count: number };
@@ -116,7 +118,7 @@ function AuthenticatedApp(): ReactNode {
 
 function Shell({ workspace }: { workspace: Workspace }): ReactNode {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigation = [
+  const navigation = linkOptions([
     { to: "/dashboard", label: "ダッシュボード", icon: Gauge },
     { to: "/contacts", label: "連絡先", icon: ContactRound },
     { to: "/segments", label: "セグメント", icon: Shapes },
@@ -124,7 +126,7 @@ function Shell({ workspace }: { workspace: Workspace }): ReactNode {
     { to: "/emails", label: "メール", icon: Mail },
     { to: "/forms", label: "フォーム", icon: FileText },
     { to: "/settings", label: "設定", icon: Settings },
-  ];
+  ]);
   return (
     <div className="min-h-screen bg-cloud">
       <aside
@@ -146,21 +148,19 @@ function Shell({ workspace }: { workspace: Workspace }): ReactNode {
         </div>
         <nav className="space-y-1 p-3">
           {navigation.map((item) => (
-            <NavLink
+            <Link
               key={item.to}
               to={item.to}
               onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-white/12 text-white"
-                    : "text-slate-400 hover:bg-white/6 hover:text-white"
-                }`
-              }
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition"
+              activeProps={{ className: "bg-white/12 text-white" }}
+              inactiveProps={{
+                className: "text-slate-400 hover:bg-white/6 hover:text-white",
+              }}
             >
               <item.icon className="size-4.5" />
               {item.label}
-            </NavLink>
+            </Link>
           ))}
         </nav>
         <div className="absolute inset-x-3 bottom-4 rounded-xl border border-white/10 bg-white/5 p-3">
@@ -189,24 +189,16 @@ function Shell({ workspace }: { workspace: Workspace }): ReactNode {
           </button>
         </header>
         <main className="mx-auto max-w-[1500px] p-4 lg:p-8">
-          <Routes>
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/contacts" element={<ContactsPage />} />
-            <Route path="/segments" element={<SegmentsPage />} />
-            <Route path="/campaigns" element={<CampaignsPage />} />
-            <Route path="/campaigns/:id" element={<CampaignBuilder />} />
-            <Route path="/emails" element={<EmailsPage />} />
-            <Route path="/forms" element={<FormsPage />} />
-            <Route path="/settings" element={<SettingsPage workspace={workspace} />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          <WorkspaceContext.Provider value={workspace}>
+            <Outlet />
+          </WorkspaceContext.Provider>
         </main>
       </div>
     </div>
   );
 }
 
-function Dashboard(): ReactNode {
+export function Dashboard(): ReactNode {
   const [data, setData] = useState<DashboardData | null>(null);
   useEffect(() => {
     void api<DashboardData>("/dashboard").then((response) => setData(response.data));
@@ -275,7 +267,7 @@ function Dashboard(): ReactNode {
   );
 }
 
-function ContactsPage(): ReactNode {
+export function ContactsPage(): ReactNode {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -403,7 +395,7 @@ interface SegmentRow {
   updated_at: string;
 }
 
-function SegmentsPage(): ReactNode {
+export function SegmentsPage(): ReactNode {
   const [segments, setSegments] = useState<SegmentRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const load = useCallback(() => {
@@ -515,7 +507,7 @@ interface CampaignRow {
   updated_at: string;
 }
 
-function CampaignsPage(): ReactNode {
+export function CampaignsPage(): ReactNode {
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const navigate = useNavigate();
   const load = useCallback(() => {
@@ -528,7 +520,10 @@ function CampaignsPage(): ReactNode {
       method: "POST",
       body: JSON.stringify(definition),
     });
-    navigate(`/campaigns/${response.data.id}`);
+    await navigate({
+      to: "/campaigns/$id",
+      params: { id: response.data.id },
+    });
   }
   return (
     <Page
@@ -545,7 +540,12 @@ function CampaignsPage(): ReactNode {
           <button
             key={campaign.id}
             className="text-left"
-            onClick={() => navigate(`/campaigns/${campaign.id}`)}
+            onClick={() => {
+              void navigate({
+                to: "/campaigns/$id",
+                params: { id: campaign.id },
+              });
+            }}
           >
             <ResourceCard
               icon={<GitBranch />}
@@ -561,8 +561,7 @@ function CampaignsPage(): ReactNode {
   );
 }
 
-function CampaignBuilder(): ReactNode {
-  const { id = "" } = useParams();
+export function CampaignBuilder({ id }: { id: string }): ReactNode {
   const [definition, setDefinition] = useState<CampaignDefinition | null>(null);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -745,7 +744,7 @@ interface TemplateRow {
   updated_at: string;
 }
 
-function EmailsPage(): ReactNode {
+export function EmailsPage(): ReactNode {
   const [items, setItems] = useState<TemplateRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const load = useCallback(() => {
@@ -835,7 +834,7 @@ function EmailForm({ onSaved }: { onSaved: () => void }): ReactNode {
       <label>
         <span className="label">用途</span>
         <select className="field" name="purpose" defaultValue="marketing">
-          <option value="marketing">Marketing（Postmark）</option>
+          <option value="marketing">Marketing（Resend）</option>
           <option value="transactional">Transactional（Cloudflare）</option>
         </select>
       </label>
@@ -852,7 +851,7 @@ interface FormRow {
   updated_at: string;
 }
 
-function FormsPage(): ReactNode {
+export function FormsPage(): ReactNode {
   const [items, setItems] = useState<FormRow[]>([]);
   const [showForm, setShowForm] = useState(false);
   const load = useCallback(() => {
@@ -912,7 +911,9 @@ function FormsPage(): ReactNode {
   );
 }
 
-function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode {
+export function SettingsPage(): ReactNode {
+  const workspace = useContext(WorkspaceContext);
+  if (!workspace) throw new Error("Workspace context is missing");
   const [apiKey, setApiKey] = useState("");
   const [providerSaved, setProviderSaved] = useState(false);
   async function createKey() {
@@ -922,15 +923,14 @@ function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode {
     });
     setApiKey(response.data.token);
   }
-  async function savePostmark(event: FormEvent<HTMLFormElement>) {
+  async function saveResend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    await api("/providers/postmark", {
+    await api("/providers/resend", {
       method: "POST",
       body: JSON.stringify({
-        serverToken: form.get("serverToken"),
+        apiKey: form.get("apiKey"),
         webhookSecret: form.get("webhookSecret"),
-        messageStream: form.get("messageStream"),
       }),
     });
     setProviderSaved(true);
@@ -942,12 +942,15 @@ function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode {
         <section className="card p-6">
           <div className="mb-5 flex items-center gap-3">
             <Mail className="size-5 text-brand" />
-            <h2 className="font-semibold">Postmark Broadcast</h2>
+            <h2 className="font-semibold">Resend Marketing Email</h2>
           </div>
-          <form onSubmit={(event) => void savePostmark(event)} className="space-y-4">
-            <Field label="Server token" name="serverToken" type="password" required />
+          <p className="mb-5 text-sm text-slate-500">
+            Webhook URL:{" "}
+            <code className="break-all">{`/api/webhooks/resend/${workspace.id}`}</code>
+          </p>
+          <form onSubmit={(event) => void saveResend(event)} className="space-y-4">
+            <Field label="API key" name="apiKey" type="password" required />
             <Field label="Webhook signing secret" name="webhookSecret" type="password" required />
-            <Field label="Message stream" name="messageStream" defaultValue="broadcasts" required />
             {providerSaved && <SuccessMessage>保存しました</SuccessMessage>}
             <button className="button-primary">暗号化して保存</button>
           </form>
@@ -1027,6 +1030,7 @@ function TwoFactorSettings(): ReactNode {
 function AuthScreen(): ReactNode {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [twoFactorPending, setTwoFactorPending] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -1034,6 +1038,7 @@ function AuthScreen(): ReactNode {
     const form = new FormData(event.currentTarget);
     setBusy(true);
     setError("");
+    setNotice("");
     const email = String(form.get("email"));
     const password = String(form.get("password"));
     const result =
@@ -1054,6 +1059,11 @@ function AuthScreen(): ReactNode {
       setTwoFactorPending(true);
     } else if (result.error) {
       setError(result.error.message ?? "認証できませんでした");
+    } else if (mode === "signup" && result.data?.token) {
+      window.location.reload();
+    } else if (mode === "signup") {
+      setMode("signin");
+      setNotice("アカウントを作成しました。確認メールのリンクを開いてからログインしてください。");
     } else {
       window.location.reload();
     }
@@ -1091,7 +1101,7 @@ function AuthScreen(): ReactNode {
             {mode === "signin" ? "おかえりなさい" : "アカウントを作成"}
           </h2>
           <p className="mt-2 text-slate-500">
-            {mode === "signin" ? "ワークスペースへログインします。" : "確認メールを送信します。"}
+            {mode === "signin" ? "ワークスペースへログインします。" : "アカウントを作成します。"}
           </p>
           {twoFactorPending ? (
             <form
@@ -1117,6 +1127,7 @@ function AuthScreen(): ReactNode {
             {mode === "signup" && <Field label="名前" name="name" required />}
             <Field label="メールアドレス" name="email" type="email" required />
             <Field label="パスワード（12文字以上）" name="password" type="password" minLength={12} required />
+            {notice && <SuccessMessage>{notice}</SuccessMessage>}
             {error && <ErrorMessage>{error}</ErrorMessage>}
             <button className="button-primary w-full py-3" disabled={busy}>
               {busy ? "処理中…" : mode === "signin" ? "ログイン" : "登録"}
@@ -1124,7 +1135,11 @@ function AuthScreen(): ReactNode {
           </form>}
           <button
             className="mt-6 text-sm font-medium text-brand"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
+            onClick={() => {
+              setMode(mode === "signin" ? "signup" : "signin");
+              setError("");
+              setNotice("");
+            }}
           >
             {mode === "signin" ? "新しいアカウントを作成" : "ログインへ戻る"}
           </button>
