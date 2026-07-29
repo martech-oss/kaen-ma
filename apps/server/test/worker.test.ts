@@ -1,6 +1,8 @@
-import { WorkspaceRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/database";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+
+import { WorkspaceRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/database";
+
 import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth";
 import { sha256Hex } from "../src/crypto";
 
@@ -116,12 +118,14 @@ describe("Kaenma Worker", () => {
          (id, workspace_id, name, domain, custom_fields, created_at, updated_at)
          VALUES (?, ?, 'Acme', 'acme.example', '{}', ?, ?)`,
       ).bind(accountId, workspaceId, now, now),
-      env.DB.prepare(
-        "UPDATE contacts SET score = 80 WHERE workspace_id = ? AND id = ?",
-      ).bind(workspaceId, highScore.id),
-      env.DB.prepare(
-        "UPDATE contacts SET score = 10 WHERE workspace_id = ? AND id = ?",
-      ).bind(workspaceId, lowScore.id),
+      env.DB.prepare("UPDATE contacts SET score = 80 WHERE workspace_id = ? AND id = ?").bind(
+        workspaceId,
+        highScore.id,
+      ),
+      env.DB.prepare("UPDATE contacts SET score = 10 WHERE workspace_id = ? AND id = ?").bind(
+        workspaceId,
+        lowScore.id,
+      ),
     ]);
     await env.DB.batch([
       env.DB.prepare(
@@ -200,17 +204,17 @@ describe("Kaenma Worker", () => {
          VALUES (?, ?, ?, 'Contacts test', ?, ?, 'owner', ?)`,
       ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
     ]);
-    const call = (path: string, init?: RequestInit) =>
-      exports.default.fetch(
+    const call = (path: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
+      if (!headers.has("content-type")) headers.set("content-type", "application/json");
+      return exports.default.fetch(
         new Request(`http://localhost:8787/api/v1${path}`, {
           ...init,
-          headers: {
-            authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-            ...init?.headers,
-          },
+          headers,
         }),
       );
+    };
 
     const tagResponse = await call("/tags", {
       method: "POST",
@@ -354,26 +358,21 @@ describe("Kaenma Worker", () => {
     const template = (await templateResponse.json()) as {
       data: { id: string; versionId: string };
     };
-    const templateUpdateResponse = await call(
-      `/email-templates/${template.data.id}`,
-      {
-        method: "PUT",
-        body: JSON.stringify({
-          name: "Welcome updated",
-          purpose: "marketing",
-          subject: "{{ message.brand_name }} update",
-          previewText: "Updated news",
-          content,
-        }),
-      },
-    );
+    const templateUpdateResponse = await call(`/email-templates/${template.data.id}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        name: "Welcome updated",
+        purpose: "marketing",
+        subject: "{{ message.brand_name }} update",
+        previewText: "Updated news",
+        content,
+      }),
+    });
     expect(templateUpdateResponse.status).toBe(200);
     const templateUpdate = (await templateUpdateResponse.json()) as {
       data: { versionId: string };
     };
-    const templateDetailResponse = await call(
-      `/email-templates/${template.data.id}`,
-    );
+    const templateDetailResponse = await call(`/email-templates/${template.data.id}`);
     expect(templateDetailResponse.status).toBe(200);
     const templateDetail = (await templateDetailResponse.json()) as {
       data: { version: number; subject: string; content_document: unknown };
@@ -431,12 +430,10 @@ describe("Kaenma Worker", () => {
         })
       ).status,
     ).toBe(200);
-    const archivedBroadcasts = (await (
-      await call("/broadcasts?archived=true")
-    ).json()) as { data: Array<{ id: string }> };
-    expect(archivedBroadcasts.data).toEqual([
-      expect.objectContaining({ id: broadcast.data.id }),
-    ]);
+    const archivedBroadcasts = (await (await call("/broadcasts?archived=true")).json()) as {
+      data: Array<{ id: string }>;
+    };
+    expect(archivedBroadcasts.data).toEqual([expect.objectContaining({ id: broadcast.data.id })]);
     expect(
       (
         await call(`/email-templates/${template.data.id}/archive`, {
@@ -520,9 +517,9 @@ describe("Kaenma Worker", () => {
         })
       ).status,
     ).toBe(409);
-    expect(
-      (await call(`/contacts/${contact.data.id}/restore`, { method: "POST" })).status,
-    ).toBe(200);
+    expect((await call(`/contacts/${contact.data.id}/restore`, { method: "POST" })).status).toBe(
+      200,
+    );
     expect(
       (
         await call(`/contacts/${contact.data.id}/tags/${tag.data.id}`, {
@@ -548,5 +545,4 @@ describe("Kaenma Worker", () => {
       await reserveIdempotencyKey(env.DB, workspaceId, "delivery", "same-key", expiresAt),
     ).toBe(false);
   });
-
 });

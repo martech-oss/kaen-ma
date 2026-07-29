@@ -84,9 +84,7 @@ export interface SiteTrackingData {
   updatedAt: string | null;
 }
 
-export async function loadSignupForms(
-  signal?: AbortSignal,
-): Promise<SignupFormRow[]> {
+export async function loadSignupForms(signal?: AbortSignal): Promise<SignupFormRow[]> {
   return (
     await rpc<SignupFormRow[]>("/forms", {
       signal: signal ?? null,
@@ -94,9 +92,7 @@ export async function loadSignupForms(
   ).data;
 }
 
-export async function loadLandingPages(
-  signal?: AbortSignal,
-): Promise<LandingPageRow[]> {
+export async function loadLandingPages(signal?: AbortSignal): Promise<LandingPageRow[]> {
   return (
     await rpc<LandingPageRow[]>("/pages", {
       signal: signal ?? null,
@@ -104,9 +100,7 @@ export async function loadLandingPages(
   ).data;
 }
 
-export async function loadSiteMessages(
-  signal?: AbortSignal,
-): Promise<SiteMessageRow[]> {
+export async function loadSiteMessages(signal?: AbortSignal): Promise<SiteMessageRow[]> {
   return (
     await rpc<SiteMessageRow[]>("/site-messages", {
       signal: signal ?? null,
@@ -114,9 +108,7 @@ export async function loadSiteMessages(
   ).data;
 }
 
-export async function loadSiteTracking(
-  signal?: AbortSignal,
-): Promise<SiteTrackingData> {
+export async function loadSiteTracking(signal?: AbortSignal): Promise<SiteTrackingData> {
   return (
     await rpc<SiteTrackingData>("/site-tracking", {
       signal: signal ?? null,

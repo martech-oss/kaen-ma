@@ -1,14 +1,13 @@
-import { createDatabase, uuidv7 } from "@kaenma/database";
 import PostalMime from "postal-mime";
+
+import { createDatabase, uuidv7 } from "@kaenma/database";
+
 import { verifySignedToken } from "./crypto";
 import type { RuntimeEnv } from "./env";
 
 const maximumInboundSize = 5 * 1024 * 1024;
 
-export async function email(
-  message: ForwardableEmailMessage,
-  env: RuntimeEnv,
-): Promise<void> {
+export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): Promise<void> {
   if (message.rawSize > maximumInboundSize) {
     message.setReject("Message exceeds Kaenma's 5 MB inbound limit");
     return;
@@ -18,19 +17,16 @@ export async function email(
     message.setReject("Unknown reply address");
     return;
   }
-  const payload = await verifySignedToken(
-    env.TRACKING_SIGNING_SECRET,
-    localPart.slice(2),
-    "reply",
-  );
+  const payload = await verifySignedToken(env.TRACKING_SIGNING_SECRET, localPart.slice(2), "reply");
   if (!payload?.contactId) {
     message.setReject("Reply address is invalid or expired");
     return;
   }
-  const delivery = await createDatabase(env.DB).prepare(
-    `SELECT id FROM deliveries
+  const delivery = await createDatabase(env.DB)
+    .prepare(
+      `SELECT id FROM deliveries
      WHERE workspace_id = ? AND id = ? AND contact_id = ?`,
-  )
+    )
     .bind(payload.workspaceId, payload.resourceId, payload.contactId)
     .first<{ id: string }>();
   if (!delivery) {
@@ -69,53 +65,59 @@ export async function email(
   }
   const eventId = uuidv7();
   await createDatabase(env.DB).batch([
-    createDatabase(env.DB).prepare(
-      `INSERT INTO inbound_emails
+    createDatabase(env.DB)
+      .prepare(
+        `INSERT INTO inbound_emails
        (id, workspace_id, contact_id, delivery_id, message_id, sender, recipient,
         subject, text_body, html_body, attachment_manifest, received_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(
-      inboundId,
-      payload.workspaceId,
-      payload.contactId,
-      delivery.id,
-      parsed.messageId ?? null,
-      message.from,
-      message.to,
-      parsed.subject?.slice(0, 998) ?? null,
-      parsed.text?.slice(0, 1_000_000) ?? null,
-      parsed.html?.slice(0, 1_000_000) ?? null,
-      JSON.stringify(attachments),
-      receivedAt,
-    ),
-    createDatabase(env.DB).prepare(
-      `INSERT OR IGNORE INTO delivery_events
+      )
+      .bind(
+        inboundId,
+        payload.workspaceId,
+        payload.contactId,
+        delivery.id,
+        parsed.messageId ?? null,
+        message.from,
+        message.to,
+        parsed.subject?.slice(0, 998) ?? null,
+        parsed.text?.slice(0, 1_000_000) ?? null,
+        parsed.html?.slice(0, 1_000_000) ?? null,
+        JSON.stringify(attachments),
+        receivedAt,
+      ),
+    createDatabase(env.DB)
+      .prepare(
+        `INSERT OR IGNORE INTO delivery_events
        (id, workspace_id, delivery_id, provider, provider_event_id,
         type, occurred_at, metadata, created_at)
        VALUES (?, ?, ?, 'cloudflare', ?, 'replied', ?, ?, ?)`,
-    ).bind(
-      eventId,
-      payload.workspaceId,
-      delivery.id,
-      parsed.messageId ?? `reply:${inboundId}`,
-      receivedAt,
-      JSON.stringify({ inboundId, subject: parsed.subject ?? "" }),
-      receivedAt,
-    ),
-    createDatabase(env.DB).prepare(
-      `INSERT INTO contact_events
+      )
+      .bind(
+        eventId,
+        payload.workspaceId,
+        delivery.id,
+        parsed.messageId ?? `reply:${inboundId}`,
+        receivedAt,
+        JSON.stringify({ inboundId, subject: parsed.subject ?? "" }),
+        receivedAt,
+      ),
+    createDatabase(env.DB)
+      .prepare(
+        `INSERT INTO contact_events
        (id, workspace_id, contact_id, type, resource_type, resource_id,
         properties, occurred_at, created_at)
        VALUES (?, ?, ?, 'email_replied', 'delivery', ?, ?, ?, ?)`,
-    ).bind(
-      uuidv7(),
-      payload.workspaceId,
-      payload.contactId,
-      delivery.id,
-      JSON.stringify({ inboundId }),
-      receivedAt,
-      receivedAt,
-    ),
+      )
+      .bind(
+        uuidv7(),
+        payload.workspaceId,
+        payload.contactId,
+        delivery.id,
+        JSON.stringify({ inboundId }),
+        receivedAt,
+        receivedAt,
+      ),
   ]);
 }
 

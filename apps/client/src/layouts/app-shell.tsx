@@ -1,3 +1,31 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { Link, Outlet, linkOptions, useNavigate, useRouter } from "@tanstack/react-router";
+import {
+  Archive,
+  Blocks,
+  Braces,
+  Building2,
+  ChevronsUpDown,
+  ContactRound,
+  ChartNoAxesCombined,
+  FileText,
+  Gauge,
+  GitBranch,
+  Globe2,
+  LayoutTemplate,
+  ListChecks,
+  LogOut,
+  Mail,
+  MessageSquareText,
+  PanelsTopLeft,
+  Send,
+  Settings,
+  Shapes,
+  Tags,
+  UsersRound,
+} from "lucide-react";
+import type { ReactNode } from "react";
+
 import { authClient } from "@/auth-client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -28,39 +56,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  Link,
-  Outlet,
-  linkOptions,
-  useNavigate,
-  useRouter,
-} from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
-import {
-  Archive,
-  Blocks,
-  Braces,
-  Building2,
-  ChevronsUpDown,
-  ContactRound,
-  ChartNoAxesCombined,
-  FileText,
-  Gauge,
-  GitBranch,
-  Globe2,
-  LayoutTemplate,
-  ListChecks,
-  LogOut,
-  Mail,
-  MessageSquareText,
-  PanelsTopLeft,
-  Send,
-  Settings,
-  Shapes,
-  Tags,
-  UsersRound,
-} from "lucide-react";
-import type { ReactNode } from "react";
 
 const dashboardNavigation = linkOptions([
   { to: "/dashboard", label: "ダッシュボード", icon: Gauge },
@@ -104,15 +99,9 @@ const websiteNavigation = linkOptions([
   },
 ]);
 
-const utilityNavigation = linkOptions([
-  { to: "/settings", label: "設定", icon: Settings },
-]);
+const utilityNavigation = linkOptions([{ to: "/settings", label: "設定", icon: Settings }]);
 
-export function AppShell({
-  user,
-}: {
-  user: { name: string; email: string };
-}): ReactNode {
+export function AppShell({ user }: { user: { name: string; email: string } }): ReactNode {
   const navigate = useNavigate();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -132,7 +121,7 @@ export function AppShell({
     <SidebarProvider>
       <a
         href="#main-content"
-        className="sr-only z-[100] rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:outline-none focus:ring-3 focus:ring-ring/50"
+        className="sr-only z-[100] rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:ring-3 focus:ring-ring/50 focus:outline-none"
       >
         メインコンテンツへ移動
       </a>
@@ -153,10 +142,7 @@ export function AppShell({
                   <span className="truncate font-semibold">Kaenma</span>
                 </div>
               </SidebarMenuButton>
-              <SidebarTrigger
-                className="shrink-0"
-                aria-label="ナビゲーションを開閉"
-              />
+              <SidebarTrigger className="shrink-0" aria-label="ナビゲーションを開閉" />
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
@@ -168,12 +154,7 @@ export function AppShell({
                 <PrimaryNavigation items={dashboardNavigation} />
                 <ContactNavigation />
                 <PrimaryNavigation items={automationNavigation} />
-                <NestedNavigation
-                  to="/emails"
-                  label="メール"
-                  icon={Mail}
-                  items={emailNavigation}
-                />
+                <NestedNavigation to="/emails" label="メール" icon={Mail} items={emailNavigation} />
                 <NestedNavigation
                   to="/website"
                   label="Website"
@@ -231,17 +212,11 @@ function AccountMenu({
             </Avatar>
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium">{displayName}</span>
-              <span className="truncate text-xs text-muted-foreground">
-                {user.email}
-              </span>
+              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
             </div>
             <ChevronsUpDown className="ml-auto" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent
-            side={isMobile ? "top" : "right"}
-            align="end"
-            className="min-w-56"
-          >
+          <DropdownMenuContent side={isMobile ? "top" : "right"} align="end" className="min-w-56">
             <DropdownMenuGroup>
               <DropdownMenuLabel>アカウント</DropdownMenuLabel>
               <DropdownMenuItem onClick={() => void onSignOut()}>
@@ -262,11 +237,7 @@ type NavigationItem = {
   icon: typeof Gauge;
 };
 
-function PrimaryNavigation({
-  items,
-}: {
-  items: readonly NavigationItem[];
-}): ReactNode {
+function PrimaryNavigation({ items }: { items: readonly NavigationItem[] }): ReactNode {
   return items.map((item) => (
     <SidebarMenuItem key={item.to}>
       <SidebarMenuButton

@@ -1,20 +1,16 @@
-import type { ContentDocument, EmailBlock } from "@kaenma/shared";
 import {
-  loadEmailArchive,
-  loadEmailCampaigns,
-  loadEmailTemplates,
-  loadEmailVariables,
-  type EmailArchiveData,
-  type EmailCampaignRow,
-  type EmailCampaignsData,
-  type EmailTemplateDetail,
-  type EmailTemplateRow,
-  type EmailTemplatesData,
-  type EmailVariablesData,
-  type MessageVariableRow,
-  type SegmentOption,
-  type TopicOption,
-} from "@/features/emails/email-api";
+  Archive,
+  CalendarClock,
+  Copy,
+  FileText,
+  Pencil,
+  Plus,
+  Send,
+  UsersRound,
+} from "lucide-react";
+import { type FormEvent, type ReactNode, useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
+
 import {
   AppDialog,
   EmptyState,
@@ -40,13 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldGroup } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -57,57 +47,41 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  loadEmailArchive,
+  loadEmailCampaigns,
+  loadEmailTemplates,
+  loadEmailVariables,
+  type EmailArchiveData,
+  type EmailCampaignRow,
+  type EmailCampaignsData,
+  type EmailTemplateDetail,
+  type EmailTemplateRow,
+  type EmailTemplatesData,
+  type EmailVariablesData,
+  type MessageVariableRow,
+  type SegmentOption,
+  type TopicOption,
+} from "@/features/emails/email-api";
+import { getFormString } from "@/lib/utils";
 import { rpc } from "@/rpc";
-import {
-  Archive,
-  CalendarClock,
-  Copy,
-  FileText,
-  Pencil,
-  Plus,
-  Send,
-  UsersRound,
-} from "lucide-react";
-import {
-  type FormEvent,
-  type ReactNode,
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
-import { toast } from "sonner";
+import type { ContentDocument, EmailBlock } from "@kaenma/shared";
 
 type EmailSection = "campaigns" | "templates" | "variables" | "archive";
 
-export function EmailCampaignsPage({
-  data,
-}: {
-  data: EmailCampaignsData;
-}): ReactNode {
+export function EmailCampaignsPage({ data }: { data: EmailCampaignsData }): ReactNode {
   return <EmailCenterPage view="campaigns" data={data} />;
 }
 
-export function EmailTemplatesPage({
-  data,
-}: {
-  data: EmailTemplatesData;
-}): ReactNode {
+export function EmailTemplatesPage({ data }: { data: EmailTemplatesData }): ReactNode {
   return <EmailCenterPage view="templates" data={data} />;
 }
 
-export function EmailVariablesPage({
-  data,
-}: {
-  data: EmailVariablesData;
-}): ReactNode {
+export function EmailVariablesPage({ data }: { data: EmailVariablesData }): ReactNode {
   return <EmailCenterPage view="variables" data={data} />;
 }
 
-export function EmailArchivePage({
-  data,
-}: {
-  data: EmailArchiveData;
-}): ReactNode {
+export function EmailArchivePage({ data }: { data: EmailArchiveData }): ReactNode {
   return <EmailCenterPage view="archive" data={data} />;
 }
 
@@ -117,13 +91,7 @@ type EmailPageData =
   | EmailVariablesData
   | EmailArchiveData;
 
-function EmailCenterPage({
-  view,
-  data,
-}: {
-  view: EmailSection;
-  data: EmailPageData;
-}): ReactNode {
+function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageData }): ReactNode {
   const [campaigns, setCampaigns] = useState<EmailCampaignRow[]>(
     view === "campaigns" ? (data as EmailCampaignsData).campaigns : [],
   );
@@ -141,12 +109,12 @@ function EmailCenterPage({
         ? (data as EmailVariablesData).variables
         : [],
   );
-  const [archivedCampaigns, setArchivedCampaigns] = useState<
-    EmailCampaignRow[]
-  >(view === "archive" ? (data as EmailArchiveData).campaigns : []);
-  const [archivedTemplates, setArchivedTemplates] = useState<
-    EmailTemplateRow[]
-  >(view === "archive" ? (data as EmailArchiveData).templates : []);
+  const [archivedCampaigns, setArchivedCampaigns] = useState<EmailCampaignRow[]>(
+    view === "archive" ? (data as EmailArchiveData).campaigns : [],
+  );
+  const [archivedTemplates, setArchivedTemplates] = useState<EmailTemplateRow[]>(
+    view === "archive" ? (data as EmailArchiveData).templates : [],
+  );
   const [segments, setSegments] = useState<SegmentOption[]>(
     view === "campaigns" ? (data as EmailCampaignsData).segments : [],
   );
@@ -158,12 +126,9 @@ function EmailCenterPage({
   const [showCampaignForm, setShowCampaignForm] = useState(false);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [showVariableForm, setShowVariableForm] = useState(false);
-  const [editingCampaign, setEditingCampaign] =
-    useState<EmailCampaignRow | null>(null);
-  const [editingTemplate, setEditingTemplate] =
-    useState<EmailTemplateDetail | null>(null);
-  const [editingVariable, setEditingVariable] =
-    useState<MessageVariableRow | null>(null);
+  const [editingCampaign, setEditingCampaign] = useState<EmailCampaignRow | null>(null);
+  const [editingTemplate, setEditingTemplate] = useState<EmailTemplateDetail | null>(null);
+  const [editingVariable, setEditingVariable] = useState<MessageVariableRow | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -188,11 +153,7 @@ function EmailCenterPage({
         setArchivedTemplates(result.templates);
       }
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "メール情報を読み込めませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "メール情報を読み込めませんでした");
     } finally {
       setLoading(false);
     }
@@ -200,17 +161,11 @@ function EmailCenterPage({
 
   async function editTemplate(template: EmailTemplateRow): Promise<void> {
     try {
-      const response = await rpc<EmailTemplateDetail>(
-        `/email-templates/${template.id}`,
-      );
+      const response = await rpc<EmailTemplateDetail>(`/email-templates/${template.id}`);
       setEditingTemplate(response.data);
       setShowTemplateForm(true);
     } catch (caught) {
-      toast.error(
-        caught instanceof Error
-          ? caught.message
-          : "テンプレートを読み込めませんでした",
-      );
+      toast.error(caught instanceof Error ? caught.message : "テンプレートを読み込めませんでした");
     }
   }
 
@@ -255,10 +210,7 @@ function EmailCenterPage({
     ) : undefined;
 
   return (
-    <PageLayout
-      title={pageTitle}
-      action={action}
-    >
+    <PageLayout title={pageTitle} action={action}>
       {error ? <ErrorAlert>{error}</ErrorAlert> : null}
 
       {view === "campaigns" ? (
@@ -313,20 +265,14 @@ function EmailCenterPage({
       <AppDialog
         open={showCampaignForm}
         onOpenChange={setShowCampaignForm}
-        title={
-          editingCampaign
-            ? "メールキャンペーンを編集"
-            : "メールキャンペーンを作成"
-        }
+        title={editingCampaign ? "メールキャンペーンを編集" : "メールキャンペーンを作成"}
         description="配信対象、テンプレート、送信タイミングを設定します。"
         className="sm:max-w-xl"
       >
         <CampaignForm
           campaign={editingCampaign}
           segments={segments}
-          templates={templates.filter(
-            (template) => template.purpose === "marketing",
-          )}
+          templates={templates.filter((template) => template.purpose === "marketing")}
           topics={topics}
           onSaved={async () => {
             setShowCampaignForm(false);
@@ -357,9 +303,7 @@ function EmailCenterPage({
       <AppDialog
         open={showVariableForm}
         onOpenChange={setShowVariableForm}
-        title={
-          editingVariable ? "メッセージ変数を編集" : "メッセージ変数を作成"
-        }
+        title={editingVariable ? "メッセージ変数を編集" : "メッセージ変数を作成"}
         description="テンプレート内では {{ message.key }} の形式で使用します。"
       >
         <VariableForm
@@ -382,20 +326,13 @@ function EmailSummary({
   campaigns: EmailCampaignRow[];
   templates: EmailTemplateRow[];
 }): ReactNode {
-  const scheduled = campaigns.filter(
-    (item) => item.status === "scheduled",
-  ).length;
+  const scheduled = campaigns.filter((item) => item.status === "scheduled").length;
   const sent = campaigns.reduce((total, item) => total + item.sent_count, 0);
-  const delivered = campaigns.reduce(
-    (total, item) => total + item.delivered_count,
-    0,
-  );
+  const delivered = campaigns.reduce((total, item) => total + item.delivered_count, 0);
   const cards = [
     {
       label: "稼働中・予約",
-      value:
-        scheduled +
-        campaigns.filter((item) => item.status === "sending").length,
+      value: scheduled + campaigns.filter((item) => item.status === "sending").length,
       description: "予約済みまたは送信中",
       icon: CalendarClock,
     },
@@ -408,10 +345,7 @@ function EmailSummary({
     {
       label: "到達",
       value: delivered,
-      description:
-        sent > 0
-          ? `到達率 ${Math.round((delivered / sent) * 100)}%`
-          : "配信後に集計",
+      description: sent > 0 ? `到達率 ${Math.round((delivered / sent) * 100)}%` : "配信後に集計",
       icon: UsersRound,
     },
     {
@@ -427,9 +361,7 @@ function EmailSummary({
         <Card key={card.label}>
           <CardHeader>
             <CardDescription>{card.label}</CardDescription>
-            <CardTitle className="text-2xl">
-              {card.value.toLocaleString()}
-            </CardTitle>
+            <CardTitle className="text-2xl">{card.value.toLocaleString()}</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
             <card.icon />
@@ -458,9 +390,7 @@ function CampaignTable({
       toast.success("メールキャンペーンの送信を開始しました");
       await onChanged();
     } catch (caught) {
-      toast.error(
-        caught instanceof Error ? caught.message : "送信を開始できませんでした",
-      );
+      toast.error(caught instanceof Error ? caught.message : "送信を開始できませんでした");
     }
   }
 
@@ -470,9 +400,7 @@ function CampaignTable({
       toast.success("メールキャンペーンをアーカイブしました");
       await onChanged();
     } catch (caught) {
-      toast.error(
-        caught instanceof Error ? caught.message : "アーカイブできませんでした",
-      );
+      toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
     }
   }
 
@@ -543,14 +471,9 @@ function CampaignTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      {campaign.status === "draft" ||
-                      campaign.status === "scheduled" ? (
+                      {campaign.status === "draft" || campaign.status === "scheduled" ? (
                         <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => onEdit(campaign)}
-                          >
+                          <Button size="sm" variant="outline" onClick={() => onEdit(campaign)}>
                             <Pencil data-icon="inline-start" />
                             編集
                           </Button>
@@ -564,22 +487,15 @@ function CampaignTable({
                                 <AlertDialogMedia>
                                   <Send />
                                 </AlertDialogMedia>
-                                <AlertDialogTitle>
-                                  配信を開始しますか？
-                                </AlertDialogTitle>
+                                <AlertDialogTitle>配信を開始しますか？</AlertDialogTitle>
                                 <AlertDialogDescription>
                                   「{campaign.segment_name}
-                                  」の現在の対象者を確定し、
-                                  Resendから送信します。
+                                  」の現在の対象者を確定し、 Resendから送信します。
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>
-                                  キャンセル
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => void start(campaign)}
-                                >
+                                <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => void start(campaign)}>
                                   送信を開始
                                 </AlertDialogAction>
                               </AlertDialogFooter>
@@ -622,9 +538,7 @@ function TemplateTable({
       toast.success("テンプレートをアーカイブしました");
       await onChanged();
     } catch (caught) {
-      toast.error(
-        caught instanceof Error ? caught.message : "アーカイブできませんでした",
-      );
+      toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
     }
   }
 
@@ -663,25 +577,17 @@ function TemplateTable({
             : items.map((template) => (
                 <TableRow key={template.id}>
                   <TableCell className="font-medium">{template.name}</TableCell>
-                  <TableCell className="max-w-80 truncate">
-                    {template.subject}
-                  </TableCell>
+                  <TableCell className="max-w-80 truncate">{template.subject}</TableCell>
                   <TableCell>
                     <Badge variant="outline">
-                      {template.purpose === "marketing"
-                        ? "Marketing · Resend"
-                        : "Transactional"}
+                      {template.purpose === "marketing" ? "Marketing · Resend" : "Transactional"}
                     </Badge>
                   </TableCell>
                   <TableCell>v{template.version}</TableCell>
                   <TableCell>{formatDate(template.updated_at)}</TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onEdit(template)}
-                      >
+                      <Button size="sm" variant="outline" onClick={() => onEdit(template)}>
                         <Pencil data-icon="inline-start" />
                         編集
                       </Button>
@@ -710,9 +616,7 @@ function VariableReference(): ReactNode {
     <Card>
       <CardHeader>
         <CardTitle>利用できる変数</CardTitle>
-        <CardDescription>
-          件名、本文、CTAラベル・URLに差し込めます。
-        </CardDescription>
+        <CardDescription>件名、本文、CTAラベル・URLに差し込めます。</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
         {variables.map(([token, label]) => (
@@ -751,9 +655,7 @@ function VariableTable({
       toast.success("メッセージ変数をアーカイブしました");
       await onChanged();
     } catch (caught) {
-      toast.error(
-        caught instanceof Error ? caught.message : "アーカイブできませんでした",
-      );
+      toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
     }
   }
   if (!loading && items.length === 0) {
@@ -813,11 +715,7 @@ function VariableTable({
                     <TableCell>{formatDate(variable.updated_at)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onEdit(variable)}
-                        >
+                        <Button size="sm" variant="outline" onClick={() => onEdit(variable)}>
                           <Pencil data-icon="inline-start" />
                           編集
                         </Button>
@@ -898,9 +796,7 @@ function ArchivedResources({
             >
               <div className="min-w-0">
                 <p className="truncate font-medium">{template.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {template.subject}
-                </p>
+                <p className="truncate text-xs text-muted-foreground">{template.subject}</p>
               </div>
               <Badge variant="secondary">v{template.version}</Badge>
             </div>
@@ -931,7 +827,7 @@ function CampaignForm({
     setBusy(true);
     setError("");
     const form = new FormData(event.currentTarget);
-    const scheduledAt = String(form.get("scheduledAt") ?? "").trim();
+    const scheduledAt = getFormString(form, "scheduledAt").trim();
     try {
       await rpc(campaign ? `/broadcasts/${campaign.id}` : "/broadcasts", {
         method: campaign ? "PATCH" : "POST",
@@ -944,16 +840,12 @@ function CampaignForm({
         }),
       });
       toast.success(
-        campaign
-          ? "メールキャンペーンを更新しました"
-          : "メールキャンペーンを作成しました",
+        campaign ? "メールキャンペーンを更新しました" : "メールキャンペーンを作成しました",
       );
       await onSaved();
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : "メールキャンペーンを保存できませんでした",
+        caught instanceof Error ? caught.message : "メールキャンペーンを保存できませんでした",
       );
     } finally {
       setBusy(false);
@@ -991,10 +883,7 @@ function CampaignForm({
         >
           <FormSelectOption value="">選択してください</FormSelectOption>
           {templates.map((template) => (
-            <FormSelectOption
-              key={template.current_version_id}
-              value={template.current_version_id}
-            >
+            <FormSelectOption key={template.current_version_id} value={template.current_version_id}>
               {template.name} · v{template.version}
             </FormSelectOption>
           ))}
@@ -1049,11 +938,11 @@ function TemplateForm({
       {
         id: crypto.randomUUID(),
         type: "text",
-        html: String(form.get("body") ?? ""),
+        html: getFormString(form, "body"),
       },
     ];
-    const ctaLabel = String(form.get("ctaLabel") ?? "").trim();
-    const ctaUrl = String(form.get("ctaUrl") ?? "").trim();
+    const ctaLabel = getFormString(form, "ctaLabel").trim();
+    const ctaUrl = getFormString(form, "ctaUrl").trim();
     if (ctaLabel && ctaUrl) {
       blocks.push({
         id: crypto.randomUUID(),
@@ -1071,31 +960,22 @@ function TemplateForm({
       blocks,
     };
     try {
-      await rpc(
-        template ? `/email-templates/${template.id}` : "/email-templates",
-        {
-          method: template ? "PUT" : "POST",
-          body: JSON.stringify({
-            name: form.get("name"),
-            purpose: form.get("purpose"),
-            subject: form.get("subject"),
-            previewText: form.get("previewText"),
-            content,
-          }),
-        },
-      );
+      await rpc(template ? `/email-templates/${template.id}` : "/email-templates", {
+        method: template ? "PUT" : "POST",
+        body: JSON.stringify({
+          name: form.get("name"),
+          purpose: form.get("purpose"),
+          subject: form.get("subject"),
+          previewText: form.get("previewText"),
+          content,
+        }),
+      });
       toast.success(
-        template
-          ? "テンプレートの新しいバージョンを保存しました"
-          : "テンプレートを作成しました",
+        template ? "テンプレートの新しいバージョンを保存しました" : "テンプレートを作成しました",
       );
       await onSaved();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "テンプレートを保存できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "テンプレートを保存できませんでした");
     } finally {
       setBusy(false);
     }
@@ -1104,23 +984,14 @@ function TemplateForm({
     <form onSubmit={(event) => void submit(event)}>
       <FieldGroup>
         {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <FormInput
-          label="テンプレート名"
-          name="name"
-          defaultValue={template?.name}
-          required
-        />
+        <FormInput label="テンプレート名" name="name" defaultValue={template?.name} required />
         <FormNativeSelect
           label="用途"
           name="purpose"
           defaultValue={template?.purpose ?? "marketing"}
         >
-          <FormSelectOption value="marketing">
-            Marketing（Resend）
-          </FormSelectOption>
-          <FormSelectOption value="transactional">
-            Transactional（Cloudflare）
-          </FormSelectOption>
+          <FormSelectOption value="marketing">Marketing（Resend）</FormSelectOption>
+          <FormSelectOption value="transactional">Transactional（Cloudflare）</FormSelectOption>
         </FormNativeSelect>
         <FormInput
           label="件名"
@@ -1161,9 +1032,7 @@ function TemplateForm({
           <Card>
             <CardHeader>
               <CardTitle>メッセージ変数</CardTitle>
-              <CardDescription>
-                クリックしてクリップボードへコピーできます。
-              </CardDescription>
+              <CardDescription>クリックしてクリップボードへコピーできます。</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {variables.map((variable) => {
@@ -1185,9 +1054,7 @@ function TemplateForm({
           </Card>
         ) : null}
         <LoadingButton busy={busy} type="submit" className="w-full">
-          {template
-            ? `v${template.version + 1}として保存`
-            : "テンプレートを作成"}
+          {template ? `v${template.version + 1}として保存` : "テンプレートを作成"}
         </LoadingButton>
       </FieldGroup>
     </form>
@@ -1209,30 +1076,19 @@ function VariableForm({
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await rpc(
-        variable ? `/message-variables/${variable.id}` : "/message-variables",
-        {
-          method: variable ? "PATCH" : "POST",
-          body: JSON.stringify({
-            key: form.get("key"),
-            name: form.get("name"),
-            value: form.get("value"),
-            description: form.get("description"),
-          }),
-        },
-      );
-      toast.success(
-        variable
-          ? "メッセージ変数を更新しました"
-          : "メッセージ変数を作成しました",
-      );
+      await rpc(variable ? `/message-variables/${variable.id}` : "/message-variables", {
+        method: variable ? "PATCH" : "POST",
+        body: JSON.stringify({
+          key: form.get("key"),
+          name: form.get("name"),
+          value: form.get("value"),
+          description: form.get("description"),
+        }),
+      });
+      toast.success(variable ? "メッセージ変数を更新しました" : "メッセージ変数を作成しました");
       await onSaved();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "メッセージ変数を保存できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "メッセージ変数を保存できませんでした");
     } finally {
       setBusy(false);
     }
@@ -1257,13 +1113,7 @@ function VariableForm({
           description="英小文字で始まり、英小文字・数字・_のみ使用できます。"
           required
         />
-        <FormTextarea
-          label="値"
-          name="value"
-          defaultValue={variable?.value}
-          rows={5}
-          required
-        />
+        <FormTextarea label="値" name="value" defaultValue={variable?.value} rows={5} required />
         <FormTextarea
           label="説明"
           name="description"
@@ -1278,23 +1128,11 @@ function VariableForm({
   );
 }
 
-function ArchiveConfirm({
-  label,
-  onConfirm,
-}: {
-  label: string;
-  onConfirm: () => void;
-}): ReactNode {
+function ArchiveConfirm({ label, onConfirm }: { label: string; onConfirm: () => void }): ReactNode {
   return (
     <AlertDialog>
       <AlertDialogTrigger
-        render={
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={`${label}をアーカイブ`}
-          />
-        }
+        render={<Button size="sm" variant="ghost" aria-label={`${label}をアーカイブ`} />}
       >
         <Archive />
       </AlertDialogTrigger>
@@ -1319,11 +1157,7 @@ function ArchiveConfirm({
   );
 }
 
-function CampaignStatusBadge({
-  status,
-}: {
-  status: EmailCampaignRow["status"];
-}): ReactNode {
+function CampaignStatusBadge({ status }: { status: EmailCampaignRow["status"] }): ReactNode {
   const labels: Record<EmailCampaignRow["status"], string> = {
     draft: "下書き",
     scheduled: "予約済み",
@@ -1368,12 +1202,10 @@ function extractTemplateFields(template: EmailTemplateDetail | null): {
 } {
   const blocks = template?.content_document.blocks ?? [];
   const text = blocks.find(
-    (block): block is Extract<EmailBlock, { type: "text" }> =>
-      block.type === "text",
+    (block): block is Extract<EmailBlock, { type: "text" }> => block.type === "text",
   );
   const button = blocks.find(
-    (block): block is Extract<EmailBlock, { type: "button" }> =>
-      block.type === "button",
+    (block): block is Extract<EmailBlock, { type: "button" }> => block.type === "button",
   );
   return {
     body:

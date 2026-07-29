@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+import { access, cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, resolve } from "node:path";
+import process from "node:process";
+
 import {
   cancel,
   confirm,
@@ -11,15 +15,6 @@ import {
   text,
 } from "@clack/prompts";
 import { execa } from "execa";
-import {
-  access,
-  cp,
-  mkdir,
-  readFile,
-  writeFile,
-} from "node:fs/promises";
-import { basename, resolve } from "node:path";
-import process from "node:process";
 import pc from "picocolors";
 
 const command = process.argv[2] ?? "create";
@@ -72,8 +67,7 @@ async function create(): Promise<void> {
       await cp(resolve(source), projectDirectory, { recursive: true });
     } else {
       const repository =
-        process.env["KAENMA_TEMPLATE_REPOSITORY"] ??
-        "https://github.com/kaenma/kaenma.git";
+        process.env["KAENMA_TEMPLATE_REPOSITORY"] ?? "https://github.com/kaenma/kaenma.git";
       await execa("git", ["clone", "--depth=1", repository, projectDirectory]);
     }
   }
@@ -90,15 +84,17 @@ async function create(): Promise<void> {
 async function provision(projectDirectory: string, appUrl: string): Promise<void> {
   const projectName = slugify(basename(projectDirectory));
   await execa("pnpm", ["wrangler", "whoami"], { cwd: projectDirectory });
-  const d1 = await execa(
-    "pnpm",
-    ["wrangler", "d1", "create", `${projectName}-db`, "--json"],
-    { cwd: projectDirectory },
-  );
+  const d1 = await execa("pnpm", ["wrangler", "d1", "create", `${projectName}-db`, "--json"], {
+    cwd: projectDirectory,
+  });
   const d1Payload = JSON.parse(d1.stdout) as { uuid?: string } | Array<{ uuid?: string }>;
   const databaseId = Array.isArray(d1Payload) ? d1Payload[0]?.uuid : d1Payload.uuid;
   if (!databaseId) throw new Error("Wrangler did not return a D1 database ID");
-  await runAllowExisting("pnpm", ["wrangler", "r2", "bucket", "create", `${projectName}-assets`], projectDirectory);
+  await runAllowExisting(
+    "pnpm",
+    ["wrangler", "r2", "bucket", "create", `${projectName}-assets`],
+    projectDirectory,
+  );
   for (const queueName of ["campaign", "delivery", "dead-letter"]) {
     await runAllowExisting(
       "pnpm",
@@ -141,17 +137,23 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
     mask: "•",
   });
   if (!isCancel(resendWebhookSecret) && resendWebhookSecret) {
-    await putSecret(
-      projectDirectory,
-      "RESEND_WEBHOOK_SECRET",
-      String(resendWebhookSecret),
-    );
+    await putSecret(projectDirectory, "RESEND_WEBHOOK_SECRET", String(resendWebhookSecret));
   }
   const progress = spinner();
   progress.start("Applying migrations and deploying");
   await execa(
     "pnpm",
-    ["--filter", "@kaenma/server", "exec", "wrangler", "d1", "migrations", "apply", `${projectName}-db`, "--remote"],
+    [
+      "--filter",
+      "@kaenma/server",
+      "exec",
+      "wrangler",
+      "d1",
+      "migrations",
+      "apply",
+      `${projectName}-db`,
+      "--remote",
+    ],
     { cwd: projectDirectory, input: "y\n" },
   );
   await execa("pnpm", ["deploy"], { cwd: projectDirectory });
@@ -161,12 +163,50 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
 async function doctor(): Promise<void> {
   const projectDirectory = process.cwd();
   const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
-  checks.push(await commandCheck("Cloudflare login", "pnpm", ["wrangler", "whoami"], projectDirectory));
-  checks.push(await commandCheck("Worker bindings", "pnpm", ["--filter", "@kaenma/server", "cf:types"], projectDirectory));
-  checks.push(await commandCheck("D1 schema", "pnpm", ["--filter", "@kaenma/server", "exec", "wrangler", "d1", "execute", "kaenma", "--remote", "--command", "SELECT COUNT(*) FROM d1_migrations"], projectDirectory));
-  checks.push(await commandCheck("Queues", "pnpm", ["wrangler", "queues", "list"], projectDirectory));
-  checks.push(await commandCheck("R2", "pnpm", ["wrangler", "r2", "bucket", "list"], projectDirectory));
-  checks.push(await commandCheck("Secrets", "pnpm", ["--filter", "@kaenma/server", "exec", "wrangler", "secret", "list"], projectDirectory));
+  checks.push(
+    await commandCheck("Cloudflare login", "pnpm", ["wrangler", "whoami"], projectDirectory),
+  );
+  checks.push(
+    await commandCheck(
+      "Worker bindings",
+      "pnpm",
+      ["--filter", "@kaenma/server", "cf:types"],
+      projectDirectory,
+    ),
+  );
+  checks.push(
+    await commandCheck(
+      "D1 schema",
+      "pnpm",
+      [
+        "--filter",
+        "@kaenma/server",
+        "exec",
+        "wrangler",
+        "d1",
+        "execute",
+        "kaenma",
+        "--remote",
+        "--command",
+        "SELECT COUNT(*) FROM d1_migrations",
+      ],
+      projectDirectory,
+    ),
+  );
+  checks.push(
+    await commandCheck("Queues", "pnpm", ["wrangler", "queues", "list"], projectDirectory),
+  );
+  checks.push(
+    await commandCheck("R2", "pnpm", ["wrangler", "r2", "bucket", "list"], projectDirectory),
+  );
+  checks.push(
+    await commandCheck(
+      "Secrets",
+      "pnpm",
+      ["--filter", "@kaenma/server", "exec", "wrangler", "secret", "list"],
+      projectDirectory,
+    ),
+  );
   const config = await readFile(resolve(projectDirectory, "apps/server/wrangler.jsonc"), "utf8");
   checks.push({
     name: "D1 database ID",
@@ -193,7 +233,11 @@ async function update(): Promise<void> {
   if (isCancel(approved) || !approved) return abort();
   await execa("git", ["pull", "--ff-only"], { cwd: process.cwd(), stdio: "inherit" });
   await execa("pnpm", ["install"], { cwd: process.cwd(), stdio: "inherit" });
-  await execa("pnpm", ["db:migrate:remote"], { cwd: process.cwd(), input: "y\n", stdio: ["pipe", "inherit", "inherit"] });
+  await execa("pnpm", ["db:migrate:remote"], {
+    cwd: process.cwd(),
+    input: "y\n",
+    stdio: ["pipe", "inherit", "inherit"],
+  });
   await execa("pnpm", ["deploy"], { cwd: process.cwd(), stdio: "inherit" });
   outro("Kaenma updated");
 }
@@ -208,7 +252,18 @@ async function backup(): Promise<void> {
   await mkdir(resolve(output, ".."), { recursive: true });
   await execa(
     "pnpm",
-    ["--filter", "@kaenma/server", "exec", "wrangler", "d1", "export", "kaenma", "--remote", "--output", output],
+    [
+      "--filter",
+      "@kaenma/server",
+      "exec",
+      "wrangler",
+      "d1",
+      "export",
+      "kaenma",
+      "--remote",
+      "--output",
+      output,
+    ],
     { cwd: process.cwd(), stdio: "inherit" },
   );
   outro(`D1 backup written to ${pc.cyan(output)}. R2 objects remain versioned in the bucket.`);
@@ -218,7 +273,8 @@ async function addDomain(): Promise<void> {
   const domainAnswer = await text({
     message: "Custom domain",
     placeholder: "ma.example.com",
-    validate: (value) => (/^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(value) ? undefined : "Enter a hostname"),
+    validate: (value) =>
+      /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(value) ? undefined : "Enter a hostname",
   });
   if (isCancel(domainAnswer)) return abort();
   const configPath = resolve(process.cwd(), "apps/server/wrangler.jsonc");
@@ -235,18 +291,13 @@ async function addDomain(): Promise<void> {
 }
 
 async function putSecret(directory: string, name: string, value: string): Promise<void> {
-  await execa(
-    "pnpm",
-    ["--filter", "@kaenma/server", "exec", "wrangler", "secret", "put", name],
-    { cwd: directory, input: value },
-  );
+  await execa("pnpm", ["--filter", "@kaenma/server", "exec", "wrangler", "secret", "put", name], {
+    cwd: directory,
+    input: value,
+  });
 }
 
-async function runAllowExisting(
-  file: string,
-  args: string[],
-  cwd: string,
-): Promise<void> {
+async function runAllowExisting(file: string, args: string[], cwd: string): Promise<void> {
   try {
     await execa(file, args, { cwd });
   } catch (error) {
@@ -268,7 +319,7 @@ async function commandCheck(
     return {
       name,
       ok: false,
-      detail: error instanceof Error ? error.message.split("\n")[0] ?? "failed" : String(error),
+      detail: error instanceof Error ? (error.message.split("\n")[0] ?? "failed") : String(error),
     };
   }
 }
@@ -287,7 +338,12 @@ function randomSecret(): string {
 }
 
 function slugify(value: string): string {
-  return value.toLowerCase().replaceAll(/[^a-z0-9-]+/g, "-").replaceAll(/^-|-$/g, "") || "kaenma";
+  return (
+    value
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9-]+/g, "-")
+      .replaceAll(/^-|-$/g, "") || "kaenma"
+  );
 }
 
 function abort(): never {

@@ -1,3 +1,7 @@
+import { Archive, Copy } from "lucide-react";
+import type { ReactNode } from "react";
+import { toast } from "sonner";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,15 +17,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { PublishStatus } from "@/features/website/website-api";
-import { Archive, Copy } from "lucide-react";
-import type { ReactNode } from "react";
-import { toast } from "sonner";
 
-export function PublishStatusBadge({
-  status,
-}: {
-  status: PublishStatus;
-}): ReactNode {
+export function PublishStatusBadge({ status }: { status: PublishStatus }): ReactNode {
   return (
     <Badge variant={status === "published" ? "default" : "secondary"}>
       {status === "published" ? "公開中" : "下書き"}
@@ -39,13 +36,7 @@ export function ArchiveConfirm({
   return (
     <AlertDialog>
       <AlertDialogTrigger
-        render={
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={`${label}をアーカイブ`}
-          />
-        }
+        render={<Button size="sm" variant="ghost" aria-label={`${label}をアーカイブ`} />}
       >
         <Archive />
       </AlertDialogTrigger>
@@ -61,10 +52,7 @@ export function ArchiveConfirm({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>キャンセル</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            onClick={() => void onConfirm()}
-          >
+          <AlertDialogAction variant="destructive" onClick={() => void onConfirm()}>
             アーカイブ
           </AlertDialogAction>
         </AlertDialogFooter>

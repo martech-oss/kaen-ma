@@ -1,12 +1,6 @@
 import { z } from "zod";
 
-export const workspaceRoleSchema = z.enum([
-  "owner",
-  "admin",
-  "marketer",
-  "analyst",
-  "viewer",
-]);
+export const workspaceRoleSchema = z.enum(["owner", "admin", "marketer", "analyst", "viewer"]);
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
 
 export const messagePurposeSchema = z.enum(["transactional", "marketing"]);
@@ -46,16 +40,14 @@ export const contactCreateSchema = contactFieldsSchema.refine(
 );
 export type ContactCreate = z.infer<typeof contactCreateSchema>;
 
-export const contactUpdateSchema = contactFieldsSchema
-  .partial()
-  .extend({
-    email: z.email().nullable().optional(),
-    firstName: z.string().trim().max(120).nullable().optional(),
-    lastName: z.string().trim().max(120).nullable().optional(),
-    phone: z.string().trim().max(40).nullable().optional(),
-    externalId: z.string().trim().max(191).nullable().optional(),
-    customFields: z.record(z.string(), z.unknown()).optional(),
-  });
+export const contactUpdateSchema = contactFieldsSchema.partial().extend({
+  email: z.email().nullable().optional(),
+  firstName: z.string().trim().max(120).nullable().optional(),
+  lastName: z.string().trim().max(120).nullable().optional(),
+  phone: z.string().trim().max(40).nullable().optional(),
+  externalId: z.string().trim().max(191).nullable().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
+});
 export type ContactUpdate = z.infer<typeof contactUpdateSchema>;
 
 export const contactSchema = z.object({
@@ -89,8 +81,7 @@ export const contactAttributeDefinitions = [
   { key: "created_at", label: "作成日時", dataType: "date" },
   { key: "updated_at", label: "更新日時", dataType: "date" },
 ] as const;
-export type ContactAttributeKey =
-  (typeof contactAttributeDefinitions)[number]["key"];
+export type ContactAttributeKey = (typeof contactAttributeDefinitions)[number]["key"];
 
 const accountFieldsSchema = z.object({
   name: z.string().trim().min(1).max(191),
@@ -245,13 +236,7 @@ export const decisionNodeSchema = z.object({
   type: z.literal("decision"),
   position: z.object({ x: z.number(), y: z.number() }),
   config: z.object({
-    event: z.enum([
-      "opened",
-      "clicked",
-      "replied",
-      "page_viewed",
-      "form_submitted",
-    ]),
+    event: z.enum(["opened", "clicked", "replied", "page_viewed", "form_submitted"]),
     resourceId: z.string().optional(),
     withinMinutes: z.number().int().positive().max(525_600),
   }),
@@ -349,8 +334,14 @@ export const emailBlockSchema: z.ZodType<EmailBlock> = z.lazy(() =>
 
 export const contentDocumentSchema = z.object({
   schemaVersion: z.literal(1),
-  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#f4f5f7"),
-  contentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).default("#ffffff"),
+  backgroundColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#f4f5f7"),
+  contentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#ffffff"),
   width: z.number().int().min(320).max(720).default(600),
   blocks: z.array(emailBlockSchema).max(200),
 });

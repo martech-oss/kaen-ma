@@ -1,20 +1,13 @@
-import { contract } from "@kaenma/contract";
-import {
-  writeAuditLog,
-  type KaenmaDatabase,
-} from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/shared";
 import { implement } from "@orpc/server";
+
+import { contract } from "@kaenma/contract";
+import { writeAuditLog, type KaenmaDatabase } from "@kaenma/database";
+import type { WorkspaceContext } from "@kaenma/shared";
+
 import { hasWorkspaceRole } from "../authorization";
 import type { RuntimeEnv, SessionValue } from "../env";
-import {
-  resolveWorkspaceAccess,
-  WorkspaceAccessError,
-} from "../middleware";
-import {
-  createContact,
-  listContacts,
-} from "../services/contact-service";
+import { resolveWorkspaceAccess, WorkspaceAccessError } from "../middleware";
+import { createContact, listContacts } from "../services/contact-service";
 import { getWorkspace } from "../services/workspace-service";
 
 export interface OrpcInitialContext {
@@ -36,75 +29,63 @@ export interface OrpcContext extends OrpcInitialContext {
 
 const os = implement(contract).$context<OrpcInitialContext>();
 
-const requireWorkspace = os.middleware(
-  async ({ context, next, errors }) => {
-    try {
-      const access = await resolveWorkspaceAccess({
-        database: context.database,
-        env: context.env,
-        headers: context.headers,
-        method: context.method,
-        executionContext: context.executionContext,
-      });
-      return next({ context: access });
-    } catch (error) {
-      if (!(error instanceof WorkspaceAccessError)) throw error;
-      switch (error.code) {
-        case "invalid_api_key":
-          throw errors.INVALID_API_KEY();
-        case "origin_mismatch":
-          throw errors.ORIGIN_MISMATCH();
-        case "workspace_required":
-          throw errors.WORKSPACE_REQUIRED();
-        case "unauthorized":
-          throw errors.UNAUTHORIZED();
-      }
+const requireWorkspace = os.middleware(async ({ context, next, errors }) => {
+  try {
+    const access = await resolveWorkspaceAccess({
+      database: context.database,
+      env: context.env,
+      headers: context.headers,
+      method: context.method,
+      executionContext: context.executionContext,
+    });
+    return next({ context: access });
+  } catch (error) {
+    if (!(error instanceof WorkspaceAccessError)) throw error;
+    switch (error.code) {
+      case "invalid_api_key":
+        throw errors.INVALID_API_KEY();
+      case "origin_mismatch":
+        throw errors.ORIGIN_MISMATCH();
+      case "workspace_required":
+        throw errors.WORKSPACE_REQUIRED();
+      case "unauthorized":
+        throw errors.UNAUTHORIZED();
     }
-  },
-);
+  }
+});
 
 const authed = os.use(requireWorkspace);
 
-const adminRequestProcedure = os.admin.request.handler(
-  async ({ context, input }) => {
-    const headers = new Headers();
-    for (const name of [
-      "authorization",
-      "cf-ray",
-      "cookie",
-      "origin",
-      "x-kaenma-workspace",
-    ]) {
-      const value = context.headers.get(name);
-      if (value) headers.set(name, value);
-    }
-    if (input.body !== undefined) {
-      headers.set("content-type", "application/json");
-    }
+const adminRequestProcedure = os.admin.request.handler(async ({ context, input }) => {
+  const headers = new Headers();
+  for (const name of ["authorization", "cf-ray", "cookie", "origin", "x-kaenma-workspace"]) {
+    const value = context.headers.get(name);
+    if (value) headers.set(name, value);
+  }
+  if (input.body !== undefined) {
+    headers.set("content-type", "application/json");
+  }
 
-    const response = await context.adminApiFetch(
-      new Request(new URL(input.path, "http://kaenma.internal"), {
-        method: input.method,
-        headers,
-        ...(input.body === undefined ? {} : { body: input.body }),
-      }),
-    );
-    const payload = await response.json().catch(() => null);
-    return {
-      status: response.status,
-      payload,
-    };
-  },
+  const response = await context.adminApiFetch(
+    new Request(new URL(input.path, "http://kaenma.internal"), {
+      method: input.method,
+      headers,
+      ...(input.body === undefined ? {} : { body: input.body }),
+    }),
+  );
+  const payload = await response.json().catch(() => null);
+  return {
+    status: response.status,
+    payload,
+  };
+});
+
+const getWorkspaceProcedure = authed.workspace.get.handler(async ({ context }) =>
+  getWorkspace(context.database, context.workspace),
 );
 
-const getWorkspaceProcedure = authed.workspace.get.handler(
-  async ({ context }) =>
-    getWorkspace(context.database, context.workspace),
-);
-
-const listContactsProcedure = authed.contacts.list.handler(
-  async ({ context, input }) =>
-    listContacts(context.database, context.workspace, input),
+const listContactsProcedure = authed.contacts.list.handler(async ({ context, input }) =>
+  listContacts(context.database, context.workspace, input),
 );
 
 const createContactProcedure = authed.contacts.create.handler(
@@ -114,11 +95,7 @@ const createContactProcedure = authed.contacts.create.handler(
     }
 
     try {
-      const contact = await createContact(
-        context.database,
-        context.workspace,
-        input,
-      );
+      const contact = await createContact(context.database, context.workspace, input);
       context.executionContext.waitUntil(
         writeAuditLog(context.database, context.workspace, {
           action: "contact.create",

@@ -9,9 +9,7 @@ export async function getWorkspace(
   workspace: WorkspaceContext,
 ): Promise<Workspace> {
   const organization = await database
-    .prepare(
-      "SELECT id, name, slug, logo, timezone, created_at FROM organization WHERE id = ?",
-    )
+    .prepare("SELECT id, name, slug, logo, timezone, created_at FROM organization WHERE id = ?")
     .bind(workspace.workspaceId)
     .first<WorkspaceRow>();
 

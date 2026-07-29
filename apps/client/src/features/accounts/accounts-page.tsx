@@ -1,3 +1,17 @@
+import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  ArrowLeft,
+  Building2,
+  ExternalLink,
+  Pencil,
+  Plus,
+  Search,
+  UserMinus,
+  UsersRound,
+} from "lucide-react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+
 import {
   AppDialog,
   EmptyState,
@@ -27,11 +41,7 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@/components/ui/field";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
   Table,
   TableBody,
@@ -41,17 +51,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  ArrowLeft,
-  Building2,
-  ExternalLink,
-  Pencil,
-  Plus,
-  Search,
-  UserMinus,
-  UsersRound,
-} from "lucide-react";
 import {
   loadAccountDetail,
   type AccountContact,
@@ -60,14 +59,7 @@ import {
   type AccountSummary,
   type ContactOption,
 } from "@/features/accounts/account-api";
-import {
-  type FormEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
-import { toast } from "sonner";
+import { getFormString } from "@/lib/utils";
 import { rpc } from "@/rpc";
 
 export function AccountsPage({
@@ -123,9 +115,7 @@ export function AccountsPage({
       <Card>
         <CardHeader className="border-b">
           <CardTitle>すべてのアカウント</CardTitle>
-          <CardDescription>
-            会社情報と所属する連絡先数を確認できます。
-          </CardDescription>
+          <CardDescription>会社情報と所属する連絡先数を確認できます。</CardDescription>
           <CardAction>
             <Badge variant="secondary">{accounts.length}社</Badge>
           </CardAction>
@@ -149,12 +139,7 @@ export function AccountsPage({
                       variant="link"
                       className="h-auto p-0"
                       nativeButton={false}
-                      render={
-                        <Link
-                          to="/contacts/accounts/$id"
-                          params={{ id: account.id }}
-                        />
-                      }
+                      render={<Link to="/contacts/accounts/$id" params={{ id: account.id }} />}
                     >
                       {account.name}
                     </Button>
@@ -177,11 +162,7 @@ export function AccountsPage({
           {accounts.length === 0 ? (
             <EmptyState
               compact
-              title={
-                query
-                  ? "条件に一致する会社がありません"
-                  : "会社がまだありません"
-              }
+              title={query ? "条件に一致する会社がありません" : "会社がまだありません"}
               description={
                 query
                   ? "検索条件を変更してください。"
@@ -232,12 +213,8 @@ export function AccountDetailPage({
   accountId: string;
   initialData: AccountDetailData;
 }): ReactNode {
-  const [account, setAccount] = useState<AccountDetail | null>(
-    initialData.account,
-  );
-  const [contacts, setContacts] = useState<ContactOption[]>(
-    initialData.contacts,
-  );
+  const [account, setAccount] = useState<AccountDetail | null>(initialData.account);
+  const [contacts, setContacts] = useState<ContactOption[]>(initialData.contacts);
   const [error, setError] = useState("");
   const [showEdit, setShowEdit] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
@@ -249,11 +226,7 @@ export function AccountDetailPage({
       setAccount(result.account);
       setContacts(result.contacts);
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "アカウントを読み込めませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "アカウントを読み込めませんでした");
     }
   }, [accountId]);
 
@@ -280,11 +253,7 @@ export function AccountDetailPage({
       title={account.name}
       action={
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={<Link to="/contacts/accounts" />}
-          >
+          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/accounts" />}>
             <ArrowLeft data-icon="inline-start" />
             一覧
           </Button>
@@ -347,9 +316,7 @@ export function AccountDetailPage({
         </CardHeader>
         <CardContent className="px-0">
           <Table>
-            <TableCaption className="sr-only">
-              {account.name}に所属する連絡先
-            </TableCaption>
+            <TableCaption className="sr-only">{account.name}に所属する連絡先</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead className="px-4">連絡先</TableHead>
@@ -383,18 +350,15 @@ export function AccountDetailPage({
                   <TableCell>
                     <Badge variant="secondary">{contact.stage}</Badge>
                   </TableCell>
-                  <TableCell className="tabular-nums">
-                    {contact.score}
-                  </TableCell>
+                  <TableCell className="tabular-nums">{contact.score}</TableCell>
                   <TableCell className="px-4 text-right">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        void rpc(
-                          `/accounts/${account.id}/contacts/${contact.id}`,
-                          { method: "DELETE" },
-                        ).then(async () => {
+                        void rpc(`/accounts/${account.id}/contacts/${contact.id}`, {
+                          method: "DELETE",
+                        }).then(async () => {
                           toast.success("アカウントとの関連を解除しました");
                           await load();
                         });
@@ -414,10 +378,7 @@ export function AccountDetailPage({
               title="所属する連絡先がありません"
               description="既存の連絡先をこの会社へ関連付けてください。"
               action={
-                <Button
-                  variant="outline"
-                  onClick={() => setShowAddContact(true)}
-                >
+                <Button variant="outline" onClick={() => setShowAddContact(true)}>
                   <UsersRound data-icon="inline-start" />
                   連絡先を追加
                 </Button>
@@ -493,19 +454,13 @@ function AccountForm({
     setBusy(true);
     setError("");
     try {
-      const domain = String(form.get("domain") ?? "")
-        .trim()
-        .toLowerCase();
+      const domain = getFormString(form, "domain").trim().toLowerCase();
       await onSubmit({
-        name: String(form.get("name") ?? "").trim(),
+        name: getFormString(form, "name").trim(),
         ...(domain ? { domain } : {}),
       });
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "アカウントを保存できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "アカウントを保存できませんでした");
     } finally {
       setBusy(false);
     }
@@ -519,7 +474,6 @@ function AccountForm({
           name="name"
           defaultValue={initialName}
           placeholder="例：Acme株式会社"
-          autoFocus
           required
         />
         <FormInput
@@ -544,11 +498,7 @@ function AddAccountContactForm({
   onSubmit,
 }: {
   contacts: ContactOption[];
-  onSubmit: (values: {
-    contactId: string;
-    title?: string;
-    isPrimary: boolean;
-  }) => Promise<void>;
+  onSubmit: (values: { contactId: string; title?: string; isPrimary: boolean }) => Promise<void>;
 }): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -560,18 +510,14 @@ function AddAccountContactForm({
     setBusy(true);
     setError("");
     try {
-      const title = String(form.get("title") ?? "").trim();
+      const title = getFormString(form, "title").trim();
       await onSubmit({
-        contactId: String(form.get("contactId") ?? ""),
+        contactId: getFormString(form, "contactId"),
         ...(title ? { title } : {}),
         isPrimary,
       });
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "連絡先を追加できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "連絡先を追加できませんでした");
     } finally {
       setBusy(false);
     }
@@ -598,11 +544,7 @@ function AddAccountContactForm({
             </FormSelectOption>
           ))}
         </FormNativeSelect>
-        <FormInput
-          label="役職"
-          name="title"
-          placeholder="例：マーケティング責任者"
-        />
+        <FormInput label="役職" name="title" placeholder="例：マーケティング責任者" />
         <Field orientation="horizontal">
           <Checkbox
             id="account-primary-contact"
@@ -628,9 +570,7 @@ function AddAccountContactForm({
 }
 
 function contactName(contact: AccountContact): string {
-  const name = [contact.last_name, contact.first_name]
-    .filter(Boolean)
-    .join(" ");
+  const name = [contact.last_name, contact.first_name].filter(Boolean).join(" ");
   return name || contact.email || "名前未設定";
 }
 

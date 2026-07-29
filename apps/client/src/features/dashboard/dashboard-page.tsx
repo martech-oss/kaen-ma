@@ -1,3 +1,6 @@
+import { Activity, Gauge, Send, UsersRound } from "lucide-react";
+import type { ReactNode } from "react";
+
 import { PageLayout, SimpleEmpty } from "@/components/app-ui";
 import {
   Card,
@@ -9,8 +12,6 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatDateTime } from "@/lib/format";
-import { Activity, Gauge, Send, UsersRound } from "lucide-react";
-import type { ReactNode } from "react";
 
 export interface DashboardData {
   contacts: { count: number };
@@ -22,8 +23,7 @@ export interface DashboardData {
 export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
   const deliveredRate =
     data.deliveries.sent > 0
-      ? Math.round((data.deliveries.delivered / data.deliveries.sent) * 1000) /
-        10
+      ? Math.round((data.deliveries.delivered / data.deliveries.sent) * 1000) / 10
       : 0;
   const cards = [
     {
@@ -56,9 +56,7 @@ export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
                   <card.icon className="size-4" />
                 </div>
               </CardAction>
-              <CardTitle className="text-3xl font-semibold tabular-nums">
-                {card.value}
-              </CardTitle>
+              <CardTitle className="text-3xl font-semibold tabular-nums">{card.value}</CardTitle>
             </CardHeader>
           </Card>
         ))}
@@ -71,34 +69,25 @@ export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
           </CardHeader>
           <CardContent>
             <div className="flex h-44 items-end gap-3">
-              {[45, 56, 38, 70, 62, 83, Math.max(12, deliveredRate)].map(
-                (height, index) => (
+              {[45, 56, 38, 70, 62, 83, Math.max(12, deliveredRate)].map((height, index) => (
+                <div key={index} className="flex flex-1 flex-col items-center gap-2">
                   <div
-                    key={index}
-                    className="flex flex-1 flex-col items-center gap-2"
-                  >
-                    <div
-                      className="w-full rounded-t-md bg-primary"
-                      style={{
-                        height: `${height}%`,
-                        opacity: 0.45 + index * 0.08,
-                      }}
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {index + 1}
-                    </span>
-                  </div>
-                ),
-              )}
+                    className="w-full rounded-t-md bg-primary"
+                    style={{
+                      height: `${height}%`,
+                      opacity: 0.45 + index * 0.08,
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">{index + 1}</span>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle>最近のイベント</CardTitle>
-            <CardDescription>
-              ワークスペースの最新アクティビティ
-            </CardDescription>
+            <CardDescription>ワークスペースの最新アクティビティ</CardDescription>
           </CardHeader>
           <CardContent>
             {data.recentEvents.length === 0 ? (

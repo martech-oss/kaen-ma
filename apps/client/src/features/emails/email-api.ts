@@ -1,5 +1,5 @@
-import type { ContentDocument } from "@kaenma/shared";
 import { rpc } from "@/rpc";
+import type { ContentDocument } from "@kaenma/shared";
 
 export interface EmailCampaignRow {
   id: string;
@@ -84,9 +84,7 @@ export interface EmailArchiveData {
   templates: EmailTemplateRow[];
 }
 
-export async function loadEmailCampaigns(
-  signal?: AbortSignal,
-): Promise<EmailCampaignsData> {
+export async function loadEmailCampaigns(signal?: AbortSignal): Promise<EmailCampaignsData> {
   const [campaigns, templates, segments, topics] = await Promise.all([
     rpc<EmailCampaignRow[]>("/broadcasts", { signal: signal ?? null }),
     rpc<EmailTemplateRow[]>("/email-templates", {
@@ -105,9 +103,7 @@ export async function loadEmailCampaigns(
   };
 }
 
-export async function loadEmailTemplates(
-  signal?: AbortSignal,
-): Promise<EmailTemplatesData> {
+export async function loadEmailTemplates(signal?: AbortSignal): Promise<EmailTemplatesData> {
   const [templates, variables] = await Promise.all([
     rpc<EmailTemplateRow[]>("/email-templates", {
       signal: signal ?? null,
@@ -119,18 +115,14 @@ export async function loadEmailTemplates(
   return { templates: templates.data, variables: variables.data };
 }
 
-export async function loadEmailVariables(
-  signal?: AbortSignal,
-): Promise<EmailVariablesData> {
+export async function loadEmailVariables(signal?: AbortSignal): Promise<EmailVariablesData> {
   const variables = await rpc<MessageVariableRow[]>("/message-variables", {
     signal: signal ?? null,
   });
   return { variables: variables.data };
 }
 
-export async function loadEmailArchive(
-  signal?: AbortSignal,
-): Promise<EmailArchiveData> {
+export async function loadEmailArchive(signal?: AbortSignal): Promise<EmailArchiveData> {
   const [campaigns, templates] = await Promise.all([
     rpc<EmailCampaignRow[]>("/broadcasts?archived=true", {
       signal: signal ?? null,

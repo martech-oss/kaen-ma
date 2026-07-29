@@ -36,4 +36,3 @@ export function retryDelaySeconds(attempt: number, maxSeconds = 3_600): number {
   const safeAttempt = Math.max(1, Math.min(attempt, 20));
   return Math.min(maxSeconds, 2 ** safeAttempt * 5);
 }
-

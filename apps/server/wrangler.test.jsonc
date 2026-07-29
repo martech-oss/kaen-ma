@@ -9,8 +9,8 @@
       "binding": "DB",
       "database_name": "kaenma-test",
       "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "../../packages/database/migrations"
-    }
+      "migrations_dir": "../../packages/database/migrations",
+    },
   ],
   "vars": {
     "APP_NAME": "Kaenma",
@@ -19,6 +19,6 @@
     "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com",
     "TRANSACTIONAL_FROM_NAME": "Kaenma",
     "REPLY_DOMAIN": "reply.example.com",
-    "RAW_EVENT_RETENTION_DAYS": "90"
-  }
+    "RAW_EVENT_RETENTION_DAYS": "90",
+  },
 }

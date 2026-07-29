@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
   CloudflareEmailAdapter,
   OutboundWebhookAdapter,
@@ -31,21 +32,21 @@ describe("channel policy", () => {
     expect(() => assertSafeWebhookUrl("http://example.com/hook")).toThrow();
     expect(() => assertSafeWebhookUrl("https://127.0.0.1/hook")).toThrow();
     expect(() => assertSafeWebhookUrl("https://169.254.169.254/latest")).toThrow();
-    expect(() => new OutboundWebhookAdapter({ url: "https://hooks.example.com/a", secret: "x" }))
-      .not.toThrow();
+    expect(
+      () => new OutboundWebhookAdapter({ url: "https://hooks.example.com/a", secret: "x" }),
+    ).not.toThrow();
   });
 
   it("sends marketing email through Resend with idempotency and unsubscribe headers", async () => {
-    let request:
-      | { input: string; headers: Headers; body: string }
-      | undefined;
+    let request: { input: string; headers: Headers; body: string } | undefined;
     const adapter = new ResendEmailAdapter({
       apiKey: "re_test_key",
       fetcher: (async (input, init) => {
         request = {
-          input: String(input),
+          input:
+            typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url,
           headers: new Headers(init?.headers),
-          body: String(init?.body),
+          body: typeof init?.body === "string" ? init.body : "",
         };
         return new Response(JSON.stringify({ id: "resend-message-id" }), {
           status: 200,

@@ -2,11 +2,7 @@ import type { CampaignNode } from "@kaenma/shared";
 
 type DelayNode = Extract<CampaignNode, { type: "delay" }>;
 
-export function computeDueAt(
-  node: DelayNode,
-  now: Date,
-  timezone: string,
-): Date {
+export function computeDueAt(node: DelayNode, now: Date, timezone: string): Date {
   const config = node.config;
   if (config.mode === "relative") {
     return new Date(now.getTime() + config.minutes * 60_000);
@@ -15,10 +11,7 @@ export function computeDueAt(
 
   const candidate = new Date(now.getTime() + config.minutes * 60_000);
   for (let dayOffset = 0; dayOffset <= 14; dayOffset += 1) {
-    const parts = zonedParts(
-      new Date(candidate.getTime() + dayOffset * 86_400_000),
-      timezone,
-    );
+    const parts = zonedParts(new Date(candidate.getTime() + dayOffset * 86_400_000), timezone);
     if (!config.weekdays.includes(parts.weekday)) continue;
     if (parts.hour < config.startHour) {
       return shiftToZonedHour(
@@ -34,10 +27,7 @@ export function computeDueAt(
   throw new Error("Unable to find a delivery window within 14 days");
 }
 
-function zonedParts(
-  date: Date,
-  timezone: string,
-): { weekday: number; hour: number } {
+function zonedParts(date: Date, timezone: string): { weekday: number; hour: number } {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     weekday: "short",
@@ -72,4 +62,3 @@ function shiftToZonedHour(date: Date, timezone: string, targetHour: number): Dat
   shifted.setUTCMinutes(0, 0, 0);
   return shifted;
 }
-

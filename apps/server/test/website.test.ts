@@ -1,6 +1,8 @@
-import { uuidv7 } from "@kaenma/database";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+
+import { uuidv7 } from "@kaenma/database";
+
 import { sha256Hex } from "../src/crypto";
 
 declare module "cloudflare:workers" {
@@ -34,28 +36,28 @@ describe("Website center", () => {
          VALUES (?, ?, ?, 'Website test', ?, ?, 'owner', ?)`,
       ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
     ]);
-    const call = (path: string, init?: RequestInit) =>
-      exports.default.fetch(
+    const call = (path: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
+      if (!headers.has("content-type")) headers.set("content-type", "application/json");
+      return exports.default.fetch(
         new Request(`http://localhost:8787/api/v1${path}`, {
           ...init,
-          headers: {
-            authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-            ...init?.headers,
-          },
+          headers,
         }),
       );
-    const publicCall = (path: string, init?: RequestInit) =>
-      exports.default.fetch(
+    };
+    const publicCall = (path: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      if (!headers.has("content-type")) headers.set("content-type", "application/json");
+      if (!headers.has("origin")) headers.set("origin", "https://example.com");
+      return exports.default.fetch(
         new Request(`http://localhost:8787${path}`, {
           ...init,
-          headers: {
-            "content-type": "application/json",
-            origin: "https://example.com",
-            ...init?.headers,
-          },
+          headers,
         }),
       );
+    };
 
     expect(
       (
@@ -99,10 +101,9 @@ describe("Website center", () => {
     });
     expect(hostedForm.status).toBe(200);
     expect(await hostedForm.text()).toContain("Newsletter");
-    const formEmbed = await publicCall(
-      `/api/public/forms/${workspaceSlug}/newsletter/embed.js`,
-      { headers: { origin: "" } },
-    );
+    const formEmbed = await publicCall(`/api/public/forms/${workspaceSlug}/newsletter/embed.js`, {
+      headers: { origin: "" },
+    });
     expect(formEmbed.status).toBe(200);
     expect(await formEmbed.text()).toContain('style === "inline"');
     const formSubmit = await publicCall(`/f/${workspaceSlug}/newsletter`, {
@@ -208,18 +209,13 @@ describe("Website center", () => {
           `&url=${encodeURIComponent("https://example.com/pricing/pro")}`,
       )
     ).json()) as { data: Array<{ id: string }> };
-    expect(messages.data).toEqual([
-      expect.objectContaining({ id: message.data.id }),
-    ]);
+    expect(messages.data).toEqual([expect.objectContaining({ id: message.data.id })]);
     expect(
       (
-        await publicCall(
-          `/api/public/site-messages/${workspaceSlug}/${message.data.id}/events`,
-          {
-            method: "POST",
-            body: JSON.stringify({ visitorId, type: "impression" }),
-          },
-        )
+        await publicCall(`/api/public/site-messages/${workspaceSlug}/${message.data.id}/events`, {
+          method: "POST",
+          body: JSON.stringify({ visitorId, type: "impression" }),
+        })
       ).status,
     ).toBe(202);
     const siteMessages = (await (await call("/site-messages")).json()) as {
@@ -245,10 +241,9 @@ describe("Website center", () => {
         views: 1,
       },
     ]);
-    const script = await publicCall(
-      `/api/public/site-tracking/${workspaceSlug}/script.js`,
-      { headers: { origin: "" } },
-    );
+    const script = await publicCall(`/api/public/site-tracking/${workspaceSlug}/script.js`, {
+      headers: { origin: "" },
+    });
     expect(script.status).toBe(200);
     expect(script.headers.get("content-type")).toContain("application/javascript");
     expect(await script.text()).toContain("window.kaenma");

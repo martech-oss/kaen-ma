@@ -1,4 +1,5 @@
 import startHandler from "@tanstack/react-start/server-entry";
+
 import { app } from "../../server/src/app";
 import { email } from "../../server/src/email";
 import type { RuntimeEnv } from "../../server/src/env";
@@ -8,9 +9,7 @@ const backendPrefixes = ["/api", "/f", "/p", "/t", "/u", "/preference"] as const
 
 function isBackendRequest(request: Request): boolean {
   const pathname = new URL(request.url).pathname;
-  return backendPrefixes.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  return backendPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 export default {

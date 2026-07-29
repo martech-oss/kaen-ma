@@ -1,7 +1,8 @@
-import { AuthPage } from "@/features/auth/auth-pages";
-import { RouteError, RoutePending } from "@/components/route-status";
-import { getCurrentSession, safeRedirectTarget } from "@/lib/auth-session";
 import { createFileRoute, redirect } from "@tanstack/react-router";
+
+import { RouteError, RoutePending } from "@/components/route-status";
+import { AuthPage } from "@/features/auth/auth-pages";
+import { getCurrentSession, safeRedirectTarget } from "@/lib/auth-session";
 
 export const Route = createFileRoute("/login")({
   ssr: false,

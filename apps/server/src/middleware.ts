@@ -1,11 +1,9 @@
-import { timingSafeEqual } from "@kaenma/channels";
-import {
-  createDatabase,
-  resolveMemberContext,
-  type KaenmaDatabase,
-} from "@kaenma/database";
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/shared";
 import { createMiddleware } from "hono/factory";
+
+import { timingSafeEqual } from "@kaenma/channels";
+import { createDatabase, resolveMemberContext, type KaenmaDatabase } from "@kaenma/database";
+import type { WorkspaceContext, WorkspaceRole } from "@kaenma/shared";
+
 import { createAuth } from "./auth";
 import { hasWorkspaceRole } from "./authorization";
 import { sha256Hex } from "./crypto";
@@ -91,11 +89,7 @@ export async function resolveWorkspaceAccess({
   if (bearer?.startsWith("Bearer ")) {
     const apiContext = await resolveApiKey(database, bearer.slice(7));
     if (!apiContext) {
-      throw new WorkspaceAccessError(
-        401,
-        "invalid_api_key",
-        "APIキーが無効です",
-      );
+      throw new WorkspaceAccessError(401, "invalid_api_key", "APIキーが無効です");
     }
     executionContext.waitUntil(
       database
@@ -112,33 +106,19 @@ export async function resolveWorkspaceAccess({
     headers,
   })) as SessionValue | null;
   if (!session) {
-    throw new WorkspaceAccessError(
-      401,
-      "unauthorized",
-      "ログインが必要です",
-    );
+    throw new WorkspaceAccessError(401, "unauthorized", "ログインが必要です");
   }
 
   if (isMutation(method)) {
     const origin = headers.get("origin");
     if (origin && origin !== new URL(env.APP_URL).origin) {
-      throw new WorkspaceAccessError(
-        403,
-        "origin_mismatch",
-        "許可されていないOriginです",
-      );
+      throw new WorkspaceAccessError(403, "origin_mismatch", "許可されていないOriginです");
     }
   }
 
   const requestedOrganizationId =
-    headers.get("x-kaenma-workspace") ??
-    session.session.activeOrganizationId ??
-    null;
-  const workspace = await resolveMemberContext(
-    database,
-    session.user.id,
-    requestedOrganizationId,
-  );
+    headers.get("x-kaenma-workspace") ?? session.session.activeOrganizationId ?? null;
+  const workspace = await resolveMemberContext(database, session.user.id, requestedOrganizationId);
   if (!workspace) {
     throw new WorkspaceAccessError(
       403,

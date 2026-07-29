@@ -1,25 +1,3 @@
-import type {
-  CampaignDefinition,
-  CampaignEdge,
-  CampaignNode,
-} from "@kaenma/shared";
-import { rpc } from "@/rpc";
-import {
-  PageLayout,
-  ResourceCard,
-  ResourceGrid,
-  SimpleEmpty,
-} from "@/components/app-ui";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { formatDateTime } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Background,
@@ -42,6 +20,15 @@ import { GitBranch, Plus, Save, Send } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import { PageLayout, ResourceCard, ResourceGrid, SimpleEmpty } from "@/components/app-ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import { rpc } from "@/rpc";
+import type { CampaignDefinition, CampaignEdge, CampaignNode } from "@kaenma/shared";
+
 export interface CampaignRow {
   id: string;
   name: string;
@@ -50,17 +37,11 @@ export interface CampaignRow {
   updated_at: string;
 }
 
-export function CampaignsPage({
-  campaigns,
-}: {
-  campaigns: CampaignRow[];
-}): ReactNode {
+export function CampaignsPage({ campaigns }: { campaigns: CampaignRow[] }): ReactNode {
   const navigate = useNavigate();
 
   async function createCampaign(): Promise<void> {
-    const definition = createStarterCampaign(
-      `New campaign ${campaigns.length + 1}`,
-    );
+    const definition = createStarterCampaign(`New campaign ${campaigns.length + 1}`);
     const response = await rpc<{ id: string }>("/campaigns", {
       method: "POST",
       body: JSON.stringify(definition),
@@ -103,9 +84,7 @@ export function CampaignsPage({
           </Button>
         ))}
       </ResourceGrid>
-      {campaigns.length === 0 ? (
-        <SimpleEmpty label="最初のキャンペーンを作成しましょう" />
-      ) : null}
+      {campaigns.length === 0 ? <SimpleEmpty label="最初のキャンペーンを作成しましょう" /> : null}
     </PageLayout>
   );
 }
@@ -117,8 +96,7 @@ export function CampaignBuilder({
   id: string;
   initialDefinition: CampaignDefinition;
 }): ReactNode {
-  const [definition, setDefinition] =
-    useState<CampaignDefinition>(initialDefinition);
+  const [definition, setDefinition] = useState<CampaignDefinition>(initialDefinition);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -168,9 +146,7 @@ export function CampaignBuilder({
           id: edge.id,
           source: edge.source,
           target: edge.target,
-          branch:
-            (edge.data?.["branch"] as CampaignEdge["branch"] | undefined) ??
-            "next",
+          branch: (edge.data?.["branch"] as CampaignEdge["branch"] | undefined) ?? "next",
         })),
       }));
     },
@@ -180,13 +156,9 @@ export function CampaignBuilder({
     (connection: Connection) => {
       if (!connection.source || !connection.target) return;
       setDefinition((current) => {
-        const source = current.nodes.find(
-          (node) => node.id === connection.source,
-        );
+        const source = current.nodes.find((node) => node.id === connection.source);
         const branch: CampaignEdge["branch"] =
-          source?.type === "condition" || source?.type === "decision"
-            ? "yes"
-            : "next";
+          source?.type === "condition" || source?.type === "decision" ? "yes" : "next";
         const added = addEdge(
           {
             ...connection,
@@ -201,9 +173,7 @@ export function CampaignBuilder({
             id: edge.id,
             source: edge.source,
             target: edge.target,
-            branch:
-              (edge.data?.["branch"] as CampaignEdge["branch"] | undefined) ??
-              "next",
+            branch: (edge.data?.["branch"] as CampaignEdge["branch"] | undefined) ?? "next",
           })),
         };
       });
@@ -228,9 +198,7 @@ export function CampaignBuilder({
         toast.success("下書きを保存しました");
       }
     } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : "保存できませんでした",
-      );
+      setNotice(error instanceof Error ? error.message : "保存できませんでした");
     } finally {
       setSaving(false);
     }
@@ -251,19 +219,11 @@ export function CampaignBuilder({
               }))
             }
           />
-          <div className="text-xs text-muted-foreground">
-            Draft · {definition.timezone}
-          </div>
+          <div className="text-xs text-muted-foreground">Draft · {definition.timezone}</div>
         </div>
         <div className="flex items-center gap-2">
-          {notice ? (
-            <span className="text-sm text-muted-foreground">{notice}</span>
-          ) : null}
-          <Button
-            variant="outline"
-            disabled={saving}
-            onClick={() => void save()}
-          >
+          {notice ? <span className="text-sm text-muted-foreground">{notice}</span> : null}
+          <Button variant="outline" disabled={saving} onClick={() => void save()}>
             <Save data-icon="inline-start" />
             保存
           </Button>
@@ -292,9 +252,7 @@ export function CampaignBuilder({
   );
 }
 
-function CampaignFlowNode({
-  data,
-}: NodeProps<Node<{ node: CampaignNode }>>): ReactNode {
+function CampaignFlowNode({ data }: NodeProps<Node<{ node: CampaignNode }>>): ReactNode {
   const node = data.node;
   const colors: Record<CampaignNode["type"], string> = {
     source: "border-success",
@@ -311,15 +269,10 @@ function CampaignFlowNode({
         : node.type;
 
   return (
-    <Card
-      size="sm"
-      className={cn("min-w-40 border-2 py-3 shadow-md", colors[node.type])}
-    >
-      {node.type !== "source" ? (
-        <Handle type="target" position={Position.Left} />
-      ) : null}
+    <Card size="sm" className={cn("min-w-40 border-2 py-3 shadow-md", colors[node.type])}>
+      {node.type !== "source" ? <Handle type="target" position={Position.Left} /> : null}
       <CardHeader>
-        <CardDescription className="text-[10px] font-semibold uppercase tracking-widest">
+        <CardDescription className="text-[10px] font-semibold tracking-widest uppercase">
           {node.type}
         </CardDescription>
         <CardTitle className="capitalize">{label}</CardTitle>
@@ -350,8 +303,6 @@ function createStarterCampaign(name: string): CampaignDefinition {
         config: { action: "change_score", amount: 5 },
       },
     ],
-    edges: [
-      { id: "source-score", source: "source", target: "score", branch: "next" },
-    ],
+    edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
   };
 }

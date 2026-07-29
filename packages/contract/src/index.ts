@@ -1,10 +1,7 @@
-import {
-  contactCreateSchema,
-  contactSchema,
-  workspaceRoleSchema,
-} from "@kaenma/shared";
 import { oc } from "@orpc/contract";
 import { z } from "zod";
+
+import { contactCreateSchema, contactSchema, workspaceRoleSchema } from "@kaenma/shared";
 
 export const workspaceSchema = z.object({
   id: z.string(),
@@ -47,9 +44,7 @@ export const contactListInputSchema = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).optional(),
   query: z.string().trim().optional(),
-  status: z
-    .enum(["active", "archived", "anonymous", "all"])
-    .optional(),
+  status: z.enum(["active", "archived", "anonymous", "all"]).optional(),
   stage: z.string().optional(),
   tagId: z.string().optional(),
   listId: z.string().optional(),
@@ -57,9 +52,7 @@ export const contactListInputSchema = z.object({
   segmentId: z.string().optional(),
   scoreMin: z.number().optional(),
   scoreMax: z.number().optional(),
-  sort: z
-    .enum(["createdAt", "updatedAt", "score", "name", "email"])
-    .optional(),
+  sort: z.enum(["createdAt", "updatedAt", "score", "name", "email"]).optional(),
   direction: z.enum(["asc", "desc"]).optional(),
 });
 
@@ -74,11 +67,7 @@ export const contactListResultSchema = z.object({
 export type ContactListResult = z.infer<typeof contactListResultSchema>;
 
 function isAdminRequestPath(path: string): boolean {
-  if (
-    !path.startsWith("/") ||
-    path.startsWith("//") ||
-    path.includes("\\")
-  ) {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) {
     return false;
   }
   try {
@@ -163,8 +152,7 @@ export const contract = {
         },
         CONTACT_CONFLICT: {
           status: 409,
-          message:
-            "同じメールアドレスまたは外部IDの連絡先が既に存在します",
+          message: "同じメールアドレスまたは外部IDの連絡先が既に存在します",
         },
       })
       .input(contactCreateSchema)

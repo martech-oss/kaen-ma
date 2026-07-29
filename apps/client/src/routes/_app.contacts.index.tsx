@@ -1,3 +1,5 @@
+import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
+
 import { RouteError, RoutePending } from "@/components/route-status";
 import {
   contactOptionsQueryOptions,
@@ -5,17 +7,11 @@ import {
   contactsQueryOptions,
   parseContactSearch,
 } from "@/features/contacts/contact-api";
-import {
-  createFileRoute,
-  type SearchSchemaInput,
-  stripSearchParams,
-} from "@tanstack/react-router";
 import { ContactsPage } from "@/features/contacts/contacts-page";
 
 export const Route = createFileRoute("/_app/contacts/")({
-  validateSearch: (
-    search: Partial<ReturnType<typeof parseContactSearch>> & SearchSchemaInput,
-  ) => parseContactSearch(search),
+  validateSearch: (search: Partial<ReturnType<typeof parseContactSearch>> & SearchSchemaInput) =>
+    parseContactSearch(search),
   search: {
     middlewares: [stripSearchParams(contactSearchDefaults)],
   },

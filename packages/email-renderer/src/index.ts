@@ -13,10 +13,7 @@ export interface RenderedContent {
   text: string;
 }
 
-export function renderContent(
-  document: ContentDocument,
-  context: RenderContext,
-): RenderedContent {
+export function renderContent(document: ContentDocument, context: RenderContext): RenderedContent {
   const body = document.blocks
     .map((block) => renderBlock(block, context))
     .filter(Boolean)
@@ -39,21 +36,15 @@ export function renderContent(
 }
 
 export function renderSubject(template: string, context: RenderContext): string {
-  return interpolate(template, context, false).replaceAll(/[\r\n]+/g, " ").trim();
+  return interpolate(template, context, false)
+    .replaceAll(/[\r\n]+/g, " ")
+    .trim();
 }
 
-export function interpolate(
-  template: string,
-  context: RenderContext,
-  escape = true,
-): string {
+export function interpolate(template: string, context: RenderContext, escape = true): string {
   return template.replace(
     /\{\{\s*(contact|workspace|message)\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g,
-    (
-      _match,
-      namespace: "contact" | "workspace" | "message",
-      path: string,
-    ) => {
+    (_match, namespace: "contact" | "workspace" | "message", path: string) => {
       const value = readPath(context[namespace] ?? {}, path);
       const rendered =
         typeof value === "string" || typeof value === "number" || typeof value === "boolean"
@@ -99,9 +90,7 @@ function sanitizeLimitedHtml(value: string, context: RenderContext): string {
     .split(/(<[^>]*>)/g)
     .map((part) => {
       if (!part.startsWith("<")) return escapeHtml(interpolate(part, context, false));
-      const allowed = part.match(
-        /^<(\/?)(p|strong|b|em|i|u|s|ul|ol|li|h1|h2|h3|blockquote)>$/i,
-      );
+      const allowed = part.match(/^<(\/?)(p|strong|b|em|i|u|s|ul|ol|li|h1|h2|h3|blockquote)>$/i);
       if (allowed) return `<${allowed[1] ?? ""}${allowed[2]?.toLowerCase()}>`;
       return /^<br\s*\/?>$/i.test(part) ? "<br>" : "";
     })

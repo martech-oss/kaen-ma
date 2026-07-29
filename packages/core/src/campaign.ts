@@ -1,8 +1,4 @@
-import type {
-  CampaignDefinition,
-  CampaignEdge,
-  CampaignNode,
-} from "@kaenma/shared";
+import type { CampaignDefinition, CampaignEdge, CampaignNode } from "@kaenma/shared";
 
 export interface CampaignValidationIssue {
   code:
@@ -28,9 +24,7 @@ const branchesByNodeType: Record<CampaignNode["type"], ReadonlySet<CampaignEdge[
   decision: new Set(["yes", "no", "timeout"]),
 };
 
-export function validateCampaign(
-  definition: CampaignDefinition,
-): CampaignValidationIssue[] {
+export function validateCampaign(definition: CampaignDefinition): CampaignValidationIssue[] {
   const issues: CampaignValidationIssue[] = [];
   const nodes = new Map<string, CampaignNode>();
   const edgeIds = new Set<string>();
@@ -139,9 +133,7 @@ export function validateCampaign(
   return deduplicateIssues(issues);
 }
 
-function deduplicateIssues(
-  issues: CampaignValidationIssue[],
-): CampaignValidationIssue[] {
+function deduplicateIssues(issues: CampaignValidationIssue[]): CampaignValidationIssue[] {
   const seen = new Set<string>();
   return issues.filter((issue) => {
     const key = `${issue.code}:${issue.nodeId ?? ""}:${issue.edgeId ?? ""}`;
@@ -157,7 +149,6 @@ export function outgoingEdges(
   branch?: CampaignEdge["branch"],
 ): CampaignEdge[] {
   return definition.edges.filter(
-    (edge) =>
-      edge.source === nodeId && (branch === undefined || edge.branch === branch),
+    (edge) => edge.source === nodeId && (branch === undefined || edge.branch === branch),
   );
 }

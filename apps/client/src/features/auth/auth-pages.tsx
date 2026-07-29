@@ -1,30 +1,16 @@
-import {
-  ErrorAlert,
-  FormInput,
-  LoadingButton,
-  SuccessAlert,
-} from "@/components/app-ui";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { authClient } from "@/auth-client";
-import { slugify } from "@/lib/utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { Blocks, UsersRound } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 
-export function AuthPage({
-  redirectTo = "/dashboard",
-}: {
-  redirectTo?: string;
-}): ReactNode {
+import { authClient } from "@/auth-client";
+import { ErrorAlert, FormInput, LoadingButton, SuccessAlert } from "@/components/app-ui";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getFormString, slugify } from "@/lib/utils";
+
+export function AuthPage({ redirectTo = "/dashboard" }: { redirectTo?: string }): ReactNode {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -45,15 +31,15 @@ export function AuthPage({
     setBusy(true);
     setError("");
     setNotice("");
-    const email = String(form.get("email"));
-    const password = String(form.get("password"));
+    const email = getFormString(form, "email");
+    const password = getFormString(form, "password");
     const result =
       mode === "signin"
         ? await authClient.signIn.email({ email, password })
         : await authClient.signUp.email({
             email,
             password,
-            name: String(form.get("name")),
+            name: getFormString(form, "name"),
           });
     setBusy(false);
 
@@ -72,9 +58,7 @@ export function AuthPage({
     }
     if (mode === "signup" && !result.data?.token) {
       setMode("signin");
-      setNotice(
-        "アカウントを作成しました。確認メールのリンクを開いてからログインしてください。",
-      );
+      setNotice("アカウントを作成しました。確認メールのリンクを開いてからログインしてください。");
       return;
     }
     await finishAuthentication();
@@ -90,10 +74,8 @@ export function AuthPage({
           <span className="font-heading text-xl font-semibold">Kaenma</span>
         </div>
         <div className="flex flex-col items-start gap-6">
-          <Badge variant="outline">
-            Cloudflare-native marketing automation
-          </Badge>
-          <h1 className="max-w-2xl font-heading text-5xl font-semibold leading-[1.08] tracking-tight">
+          <Badge variant="outline">Cloudflare-native marketing automation</Badge>
+          <h1 className="max-w-2xl font-heading text-5xl leading-[1.08] font-semibold tracking-tight">
             獲得から配信まで、エッジで自動化。
           </h1>
           <p className="max-w-xl text-lg leading-8 text-muted-foreground">
@@ -120,9 +102,7 @@ export function AuthPage({
               {mode === "signin" ? "おかえりなさい" : "アカウントを作成"}
             </CardTitle>
             <CardDescription>
-              {mode === "signin"
-                ? "ワークスペースへログインします。"
-                : "アカウントを作成します。"}
+              {mode === "signin" ? "ワークスペースへログインします。" : "アカウントを作成します。"}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-6">
@@ -131,9 +111,7 @@ export function AuthPage({
                 className="flex flex-col gap-5"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  const code = String(
-                    new FormData(event.currentTarget).get("code"),
-                  );
+                  const code = getFormString(new FormData(event.currentTarget), "code");
                   setBusy(true);
                   void authClient.twoFactor
                     .verifyTotp({ code, trustDevice: true })
@@ -154,19 +132,9 @@ export function AuthPage({
                 </LoadingButton>
               </form>
             ) : (
-              <form
-                onSubmit={(event) => void submit(event)}
-                className="flex flex-col gap-5"
-              >
-                {mode === "signup" ? (
-                  <FormInput label="名前" name="name" required />
-                ) : null}
-                <FormInput
-                  label="メールアドレス"
-                  name="email"
-                  type="email"
-                  required
-                />
+              <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
+                {mode === "signup" ? <FormInput label="名前" name="name" required /> : null}
+                <FormInput label="メールアドレス" name="email" type="email" required />
                 <FormInput
                   label="パスワード（12文字以上）"
                   name="password"
@@ -207,7 +175,7 @@ export function WorkspaceSetupPage(): ReactNode {
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const name = String(new FormData(event.currentTarget).get("name"));
+    const name = getFormString(new FormData(event.currentTarget), "name");
     setBusy(true);
     setError("");
     const result = await authClient.organization.create({
@@ -237,15 +205,10 @@ export function WorkspaceSetupPage(): ReactNode {
             <UsersRound />
           </div>
           <CardTitle className="text-2xl">ワークスペースを作成</CardTitle>
-          <CardDescription>
-            OrganizationがKaenmaのWorkspaceになります。
-          </CardDescription>
+          <CardDescription>OrganizationがKaenmaのWorkspaceになります。</CardDescription>
         </CardHeader>
         <CardContent>
-          <form
-            onSubmit={(event) => void submit(event)}
-            className="flex flex-col gap-5"
-          >
+          <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
             <FormInput label="ワークスペース名" name="name" required />
             {error ? <ErrorAlert>{error}</ErrorAlert> : null}
             <LoadingButton busy={busy} className="w-full" type="submit">

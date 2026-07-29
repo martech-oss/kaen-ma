@@ -8,9 +8,6 @@ const roleRank: Record<WorkspaceRole, number> = {
   owner: 4,
 };
 
-export function hasWorkspaceRole(
-  role: WorkspaceRole,
-  minimum: WorkspaceRole,
-): boolean {
+export function hasWorkspaceRole(role: WorkspaceRole, minimum: WorkspaceRole): boolean {
   return roleRank[role] >= roleRank[minimum];
 }

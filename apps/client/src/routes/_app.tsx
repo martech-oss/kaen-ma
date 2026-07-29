@@ -1,9 +1,10 @@
+import { ORPCError } from "@orpc/client";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+
 import { RouteError, RoutePending } from "@/components/route-status";
 import { AppShell } from "@/layouts/app-shell";
 import { getCurrentSession } from "@/lib/auth-session";
 import { workspaceQueryOptions } from "@/lib/workspace";
-import { ORPCError } from "@orpc/client";
-import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_app")({
   ssr: false,
@@ -18,24 +19,16 @@ export const Route = createFileRoute("/_app")({
     }
 
     try {
-      const workspace = await context.queryClient.ensureQueryData(
-        workspaceQueryOptions(),
-      );
+      const workspace = await context.queryClient.ensureQueryData(workspaceQueryOptions());
       return { session, workspace };
     } catch (error) {
-      if (
-        error instanceof ORPCError &&
-        error.defined &&
-        error.code === "WORKSPACE_REQUIRED"
-      ) {
+      if (error instanceof ORPCError && error.defined && error.code === "WORKSPACE_REQUIRED") {
         throw redirect({ to: "/onboarding", replace: true });
       }
       throw error;
     }
   },
-  pendingComponent: () => (
-    <RoutePending label="ワークスペースを読み込んでいます…" />
-  ),
+  pendingComponent: () => <RoutePending label="ワークスペースを読み込んでいます…" />,
   errorComponent: RouteError,
   component: ProtectedLayout,
 });

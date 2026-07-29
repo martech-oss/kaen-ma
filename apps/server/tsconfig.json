@@ -2,8 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "types": ["./worker-configuration.d.ts"],
-    "noEmit": true,
-    "baseUrl": "."
+    "noEmit": true
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "worker-configuration.d.ts", "vitest.config.ts"]
 }

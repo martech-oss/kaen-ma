@@ -1,10 +1,8 @@
-import { rpc } from "@/rpc";
-import { RouteError, RoutePending } from "@/components/route-status";
-import {
-  SegmentsPage,
-  type SegmentRow,
-} from "@/features/segments/segments-page";
 import { createFileRoute } from "@tanstack/react-router";
+
+import { RouteError, RoutePending } from "@/components/route-status";
+import { SegmentsPage, type SegmentRow } from "@/features/segments/segments-page";
+import { rpc } from "@/rpc";
 
 export const Route = createFileRoute("/_app/contacts/segments")({
   loader: async ({ abortController }) => {

@@ -1,10 +1,9 @@
-import { rpc } from "@/rpc";
-import {
-  ErrorAlert,
-  FormTextarea,
-  LoadingButton,
-  PageLayout,
-} from "@/components/app-ui";
+import { useRouter } from "@tanstack/react-router";
+import { Activity, ChartNoAxesCombined, ContactRound, Eye, Info } from "lucide-react";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { toast } from "sonner";
+
+import { ErrorAlert, FormTextarea, LoadingButton, PageLayout } from "@/components/app-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,22 +35,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { SiteTrackingData } from "@/features/website/website-api";
 import { CopyButton } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { useRouter } from "@tanstack/react-router";
-import {
-  Activity,
-  ChartNoAxesCombined,
-  ContactRound,
-  Eye,
-  Info,
-} from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
-import { toast } from "sonner";
+import { getFormString } from "@/lib/utils";
+import { rpc } from "@/rpc";
 
-export function SiteTrackingPage({
-  data,
-}: {
-  data: SiteTrackingData;
-}): ReactNode {
+export function SiteTrackingPage({ data }: { data: SiteTrackingData }): ReactNode {
   const router = useRouter();
   const [enabled, setEnabled] = useState(data.enabled);
   const [busy, setBusy] = useState(false);
@@ -61,7 +48,7 @@ export function SiteTrackingPage({
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const allowedDomains = String(formData.get("allowedDomains") ?? "")
+    const allowedDomains = getFormString(formData, "allowedDomains")
       .split(/[\n,]+/)
       .map((value) => value.trim())
       .filter(Boolean);
@@ -94,9 +81,7 @@ export function SiteTrackingPage({
             <Card>
               <CardHeader>
                 <CardTitle>トラッキング設定</CardTitle>
-                <CardDescription>
-                  有効化するサイトをホワイトリストで制限します。
-                </CardDescription>
+                <CardDescription>有効化するサイトをホワイトリストで制限します。</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={(event) => void save(event)}>
@@ -154,8 +139,9 @@ export function SiteTrackingPage({
             <Info />
             <AlertTitle>訪問者の同意が必須です</AlertTitle>
             <AlertDescription>
-              サンプルコードの consent: true は、Cookieバナー等で同意を得た後にだけ設定してください。
-              既知の連絡先は kaenma.identify(email) で識別でき、サイトメッセージの対象になります。
+              サンプルコードの consent: true
+              は、Cookieバナー等で同意を得た後にだけ設定してください。 既知の連絡先は
+              kaenma.identify(email) で識別でき、サイトメッセージの対象になります。
             </AlertDescription>
           </Alert>
         </TabsContent>
@@ -204,9 +190,7 @@ function TrackingSummary({ data }: { data: SiteTrackingData }): ReactNode {
           <CardHeader>
             <CardDescription>{card.label}</CardDescription>
             <CardTitle className="text-2xl">
-              {typeof card.value === "number"
-                ? card.value.toLocaleString()
-                : card.value}
+              {typeof card.value === "number" ? card.value.toLocaleString() : card.value}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -219,11 +203,7 @@ function TrackingSummary({ data }: { data: SiteTrackingData }): ReactNode {
   );
 }
 
-function TopPages({
-  items,
-}: {
-  items: SiteTrackingData["topPages"];
-}): ReactNode {
+function TopPages({ items }: { items: SiteTrackingData["topPages"] }): ReactNode {
   return (
     <Card>
       <CardHeader>
@@ -245,9 +225,7 @@ function TopPages({
                   <TableCell>
                     <span className="block max-w-96 truncate">{item.url}</span>
                   </TableCell>
-                  <TableCell className="text-right">
-                    {item.views.toLocaleString()}
-                  </TableCell>
+                  <TableCell className="text-right">{item.views.toLocaleString()}</TableCell>
                 </TableRow>
               ))
             ) : (
@@ -264,11 +242,7 @@ function TopPages({
   );
 }
 
-function RecentEvents({
-  items,
-}: {
-  items: SiteTrackingData["recentEvents"];
-}): ReactNode {
+function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): ReactNode {
   return (
     <Card>
       <CardHeader>
@@ -289,9 +263,7 @@ function RecentEvents({
               items.map((item, index) => (
                 <TableRow key={`${item.visitor_id}-${item.occurred_at}-${index}`}>
                   <TableCell>
-                    <span className="block max-w-64 truncate">
-                      {item.resource_id}
-                    </span>
+                    <span className="block max-w-64 truncate">{item.resource_id}</span>
                   </TableCell>
                   <TableCell>
                     <Badge variant={item.contact_id ? "default" : "secondary"}>

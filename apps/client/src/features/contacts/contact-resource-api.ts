@@ -22,9 +22,7 @@ export interface ContactResources {
   lists: ListResource[];
 }
 
-export async function loadContactResources(
-  signal?: AbortSignal,
-): Promise<ContactResources> {
+export async function loadContactResources(signal?: AbortSignal): Promise<ContactResources> {
   const response = await rpc<ContactResources>("/contact-options", {
     signal: signal ?? null,
   });

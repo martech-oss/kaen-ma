@@ -19,9 +19,7 @@ export type SendBlockReason =
   | "contact_archived"
   | "frequency_cap";
 
-export type SendEligibility =
-  | { allowed: true }
-  | { allowed: false; reason: SendBlockReason };
+export type SendEligibility = { allowed: true } | { allowed: false; reason: SendBlockReason };
 
 export function evaluateSendEligibility(
   purpose: MessagePurpose,

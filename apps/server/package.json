@@ -16,8 +16,8 @@
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.25",
     "@hono/zod-validator": "^0.7.6",
-    "@kaenma/contract": "workspace:*",
     "@kaenma/channels": "workspace:*",
+    "@kaenma/contract": "workspace:*",
     "@kaenma/core": "workspace:*",
     "@kaenma/database": "workspace:*",
     "@kaenma/email-renderer": "workspace:*",
@@ -33,7 +33,7 @@
     "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^5.20260728.1",
     "@orpc/client": "1.14.13",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "vitest": "^4.0.17",
     "wrangler": "^4.114.0"
   }

@@ -99,7 +99,7 @@
   }
 
   body {
-    @apply min-w-80 min-h-screen bg-background text-foreground antialiased;
+    @apply min-h-screen min-w-80 bg-background text-foreground antialiased;
   }
 
   button:not(:disabled),

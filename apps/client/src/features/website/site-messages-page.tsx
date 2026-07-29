@@ -1,4 +1,15 @@
-import { rpc } from "@/rpc";
+import { useRouter } from "@tanstack/react-router";
+import {
+  Eye,
+  Link as LinkIcon,
+  MessageSquareText,
+  MousePointerClick,
+  Pencil,
+  Plus,
+} from "lucide-react";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { toast } from "sonner";
+
 import {
   AppDialog,
   EmptyState,
@@ -12,13 +23,7 @@ import {
 } from "@/components/app-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldGroup } from "@/components/ui/field";
 import {
   Table,
@@ -29,28 +34,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { SiteMessageRow } from "@/features/website/website-api";
-import {
-  ArchiveConfirm,
-  PublishStatusBadge,
-} from "@/features/website/website-shared";
+import { ArchiveConfirm, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { useRouter } from "@tanstack/react-router";
-import {
-  Eye,
-  Link as LinkIcon,
-  MessageSquareText,
-  MousePointerClick,
-  Pencil,
-  Plus,
-} from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
-import { toast } from "sonner";
+import { getFormString } from "@/lib/utils";
+import { rpc } from "@/rpc";
 
-export function SiteMessagesPage({
-  items,
-}: {
-  items: SiteMessageRow[];
-}): ReactNode {
+export function SiteMessagesPage({ items }: { items: SiteMessageRow[] }): ReactNode {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SiteMessageRow | null>(null);
@@ -157,10 +146,7 @@ export function SiteMessagesPage({
                         >
                           <Pencil />
                         </Button>
-                        <ArchiveConfirm
-                          label={item.name}
-                          onConfirm={() => archive(item)}
-                        />
+                        <ArchiveConfirm label={item.name} onConfirm={() => archive(item)} />
                       </div>
                     </TableCell>
                   </TableRow>
@@ -178,21 +164,14 @@ export function SiteMessagesPage({
         description="サイト右下に表示する内容と対象ページを設定します。"
         className="sm:max-w-2xl"
       >
-        <SiteMessageEditor
-          key={editing?.id ?? "new"}
-          item={editing}
-          onSaved={refresh}
-        />
+        <SiteMessageEditor key={editing?.id ?? "new"} item={editing} onSaved={refresh} />
       </AppDialog>
     </PageLayout>
   );
 }
 
 function MessageSummary({ items }: { items: SiteMessageRow[] }): ReactNode {
-  const impressions = items.reduce(
-    (total, item) => total + item.impression_count,
-    0,
-  );
+  const impressions = items.reduce((total, item) => total + item.impression_count, 0);
   const clicks = items.reduce((total, item) => total + item.click_count, 0);
   const clickRate = impressions > 0 ? (clicks / impressions) * 100 : 0;
   return (
@@ -206,9 +185,7 @@ function MessageSummary({ items }: { items: SiteMessageRow[] }): ReactNode {
         },
         {
           label: "公開中",
-          value: items
-            .filter((item) => item.status === "published")
-            .length.toLocaleString(),
+          value: items.filter((item) => item.status === "published").length.toLocaleString(),
           description: "配信条件の評価対象",
           icon: LinkIcon,
         },
@@ -253,7 +230,7 @@ function SiteMessageEditor({
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const ctaUrl = String(formData.get("ctaUrl") ?? "").trim();
+    const ctaUrl = getFormString(formData, "ctaUrl").trim();
     const startsAt = dateTimeValue(formData.get("startsAt"));
     const endsAt = dateTimeValue(formData.get("endsAt"));
     if (startsAt && endsAt && startsAt >= endsAt) {
@@ -277,9 +254,7 @@ function SiteMessageEditor({
           endsAt,
         }),
       });
-      toast.success(
-        item ? "サイトメッセージを更新しました" : "サイトメッセージを作成しました",
-      );
+      toast.success(item ? "サイトメッセージを更新しました" : "サイトメッセージを作成しました");
       await onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存できませんでした");
@@ -299,11 +274,7 @@ function SiteMessageEditor({
             placeholder="料金ページの案内"
             required
           />
-          <FormNativeSelect
-            label="公開状態"
-            name="status"
-            defaultValue={item?.status ?? "draft"}
-          >
+          <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
             <FormSelectOption value="draft">下書き</FormSelectOption>
             <FormSelectOption value="published">公開</FormSelectOption>
           </FormNativeSelect>
@@ -315,12 +286,7 @@ function SiteMessageEditor({
           placeholder="ご不明な点はありませんか？"
           required
         />
-        <FormTextarea
-          label="本文"
-          name="body"
-          defaultValue={item?.body}
-          rows={3}
-        />
+        <FormTextarea label="本文" name="body" defaultValue={item?.body} rows={3} />
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput
             label="CTAラベル"
@@ -368,7 +334,7 @@ function SiteMessageEditor({
 }
 
 function dateTimeValue(value: FormDataEntryValue | null): string | null {
-  const raw = String(value ?? "").trim();
+  const raw = typeof value === "string" ? value.trim() : "";
   return raw ? new Date(raw).toISOString() : null;
 }
 

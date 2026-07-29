@@ -1,4 +1,8 @@
-import { rpc } from "@/rpc";
+import { useRouter } from "@tanstack/react-router";
+import { Code2, ExternalLink, Pencil, Plus, Rows3 } from "lucide-react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
+import { toast } from "sonner";
+
 import {
   AppDialog,
   EmptyState,
@@ -11,13 +15,7 @@ import {
   PageLayout,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
@@ -38,26 +36,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type {
-  SignupFormDefinition,
-  SignupFormRow,
-} from "@/features/website/website-api";
-import {
-  ArchiveConfirm,
-  CopyButton,
-  PublishStatusBadge,
-} from "@/features/website/website-shared";
+import type { SignupFormDefinition, SignupFormRow } from "@/features/website/website-api";
+import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { slugify } from "@/lib/utils";
-import { useRouter } from "@tanstack/react-router";
-import { Code2, ExternalLink, Pencil, Plus, Rows3 } from "lucide-react";
-import {
-  type FormEvent,
-  type ReactNode,
-  useMemo,
-  useState,
-} from "react";
-import { toast } from "sonner";
+import { getFormString, slugify } from "@/lib/utils";
+import { rpc } from "@/rpc";
 
 export function SignupFormsPage({
   items,
@@ -111,9 +94,7 @@ export function SignupFormsPage({
         <Card>
           <CardHeader>
             <CardTitle>フォーム一覧</CardTitle>
-            <CardDescription>
-              公開状態、フォーム形式、送信数を確認できます。
-            </CardDescription>
+            <CardDescription>公開状態、フォーム形式、送信数を確認できます。</CardDescription>
           </CardHeader>
           <CardContent className="px-0">
             <Table>
@@ -161,6 +142,7 @@ export function SignupFormsPage({
                                   href={publicUrl}
                                   target="_blank"
                                   rel="noreferrer"
+                                  aria-label={`${item.name}を表示`}
                                 />
                               }
                             >
@@ -179,10 +161,7 @@ export function SignupFormsPage({
                           >
                             <Pencil />
                           </Button>
-                          <ArchiveConfirm
-                            label={item.name}
-                            onConfirm={() => archive(item)}
-                          />
+                          <ArchiveConfirm label={item.name} onConfirm={() => archive(item)} />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -201,11 +180,7 @@ export function SignupFormsPage({
         description="メールアドレスはすべてのフォームで必須です。"
         className="sm:max-w-2xl"
       >
-        <SignupFormEditor
-          key={editing?.id ?? "new"}
-          item={editing}
-          onSaved={refresh}
-        />
+        <SignupFormEditor key={editing?.id ?? "new"} item={editing} onSaved={refresh} />
       </AppDialog>
     </PageLayout>
   );
@@ -213,10 +188,7 @@ export function SignupFormsPage({
 
 function FormSummary({ items }: { items: SignupFormRow[] }): ReactNode {
   const published = items.filter((item) => item.status === "published").length;
-  const submissions = items.reduce(
-    (total, item) => total + item.submission_count,
-    0,
-  );
+  const submissions = items.reduce((total, item) => total + item.submission_count, 0);
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       {[
@@ -242,9 +214,7 @@ function FormSummary({ items }: { items: SignupFormRow[] }): ReactNode {
         <Card key={item.label}>
           <CardHeader>
             <CardDescription>{item.label}</CardDescription>
-            <CardTitle className="text-2xl">
-              {item.value.toLocaleString()}
-            </CardTitle>
+            <CardTitle className="text-2xl">{item.value.toLocaleString()}</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
             <item.icon />
@@ -292,7 +262,7 @@ function SignupFormEditor({
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const name = String(formData.get("name") ?? "").trim();
+    const name = getFormString(formData, "name").trim();
     const fields: NonNullable<SignupFormDefinition["fields"]> = [
       { key: "email", type: "email", required: true },
     ];
@@ -305,7 +275,7 @@ function SignupFormEditor({
     if (optionalFields.has("phone")) {
       fields.push({ key: "phone", type: "tel", required: false });
     }
-    const allowedDomains = String(formData.get("allowedDomains") ?? "")
+    const allowedDomains = getFormString(formData, "allowedDomains")
       .split(/[\n,]+/)
       .map((value) => value.trim())
       .filter(Boolean);
@@ -316,7 +286,7 @@ function SignupFormEditor({
         method: item ? "PATCH" : "POST",
         body: JSON.stringify({
           name,
-          slug: String(formData.get("slug") ?? "").trim() || slugify(name),
+          slug: getFormString(formData, "slug").trim() || slugify(name),
           status: formData.get("status"),
           definition: {
             style: formData.get("style"),
@@ -360,19 +330,11 @@ function SignupFormEditor({
             defaultValue={item?.definition.style ?? "inline"}
           >
             <FormSelectOption value="inline">インライン</FormSelectOption>
-            <FormSelectOption value="floating-bar">
-              フローティングバー
-            </FormSelectOption>
-            <FormSelectOption value="floating-box">
-              フローティングボックス
-            </FormSelectOption>
+            <FormSelectOption value="floating-bar">フローティングバー</FormSelectOption>
+            <FormSelectOption value="floating-box">フローティングボックス</FormSelectOption>
             <FormSelectOption value="modal">モーダル</FormSelectOption>
           </FormNativeSelect>
-          <FormNativeSelect
-            label="公開状態"
-            name="status"
-            defaultValue={item?.status ?? "draft"}
-          >
+          <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
             <FormSelectOption value="draft">下書き</FormSelectOption>
             <FormSelectOption value="published">公開</FormSelectOption>
           </FormNativeSelect>
@@ -399,9 +361,7 @@ function SignupFormEditor({
                 <Checkbox
                   id={`field-${key}`}
                   checked={optionalFields.has(key)}
-                  onCheckedChange={(checked) =>
-                    toggleField(key, Boolean(checked))
-                  }
+                  onCheckedChange={(checked) => toggleField(key, Boolean(checked))}
                 />
                 <FieldLabel htmlFor={`field-${key}`}>{label}</FieldLabel>
               </Field>

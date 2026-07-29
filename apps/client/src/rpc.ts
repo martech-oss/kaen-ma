@@ -1,5 +1,5 @@
-import type { AdminRequestInput } from "@kaenma/contract";
 import { orpc } from "@/lib/orpc";
+import type { AdminRequestInput } from "@kaenma/contract";
 
 export class RpcClientError extends Error {
   public constructor(
@@ -32,11 +32,7 @@ function resolveMethod(method: string | undefined): AdminMethod {
     case "DELETE":
       return "DELETE";
     default:
-      throw new RpcClientError(
-        `Unsupported request method (${method})`,
-        0,
-        "unsupported_method",
-      );
+      throw new RpcClientError(`Unsupported request method (${method})`, 0, "unsupported_method");
   }
 }
 
@@ -49,34 +45,17 @@ function readError(payload: unknown): {
   message?: string;
 } {
   if (!isRecord(payload) || !isRecord(payload.error)) return {};
-  const code =
-    typeof payload.error.code === "string"
-      ? payload.error.code
-      : undefined;
-  const message =
-    typeof payload.error.message === "string"
-      ? payload.error.message
-      : undefined;
+  const code = typeof payload.error.code === "string" ? payload.error.code : undefined;
+  const message = typeof payload.error.message === "string" ? payload.error.message : undefined;
   return {
     ...(code === undefined ? {} : { code }),
     ...(message === undefined ? {} : { message }),
   };
 }
 
-export async function rpc<T>(
-  path: string,
-  init?: RequestInit,
-): Promise<Envelope<T>> {
-  if (
-    init?.body !== undefined &&
-    init.body !== null &&
-    typeof init.body !== "string"
-  ) {
-    throw new RpcClientError(
-      "The admin RPC body must be JSON text",
-      0,
-      "unsupported_body",
-    );
+export async function rpc<T>(path: string, init?: RequestInit): Promise<Envelope<T>> {
+  if (init?.body !== undefined && init.body !== null && typeof init.body !== "string") {
+    throw new RpcClientError("The admin RPC body must be JSON text", 0, "unsupported_body");
   }
 
   const result = await orpc.admin.request(
@@ -98,11 +77,7 @@ export async function rpc<T>(
   }
 
   if (!isRecord(result.payload) || !("data" in result.payload)) {
-    throw new RpcClientError(
-      "Malformed admin RPC response",
-      result.status,
-      "invalid_response",
-    );
+    throw new RpcClientError("Malformed admin RPC response", result.status, "invalid_response");
   }
 
   return result.payload as unknown as Envelope<T>;

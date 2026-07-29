@@ -1,12 +1,10 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { authSchema, createDatabase } from "@kaenma/database";
 import { betterAuth } from "better-auth/minimal";
 import { organization, twoFactor } from "better-auth/plugins";
-import {
-  adminAc,
-  memberAc,
-  ownerAc,
-} from "better-auth/plugins/organization/access";
+import { adminAc, memberAc, ownerAc } from "better-auth/plugins/organization/access";
+
+import { authSchema, createDatabase } from "@kaenma/database";
+
 import type { RuntimeEnv } from "./env";
 
 export function createAuth(env: RuntimeEnv, requestOrigin?: string) {

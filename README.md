@@ -24,10 +24,10 @@ Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」と
 
 Kaenmaはメールの用途を型と実行時検証の両方で分離します。
 
-| 用途 | 既定プロバイダー | 使用例 |
-| --- | --- | --- |
+| 用途            | 既定プロバイダー         | 使用例                                       |
+| --------------- | ------------------------ | -------------------------------------------- |
 | `transactional` | Cloudflare Email Service | メール確認、招待、パスワード再設定、申込確認 |
-| `marketing` | Resend | Campaign、Segment配信、Broadcast |
+| `marketing`     | Resend                   | Campaign、Segment配信、Broadcast             |
 
 Cloudflare Email ServiceをMarketing用途で選択すると、キャンペーン公開時と送信時の両方で拒否されます。
 
@@ -142,6 +142,18 @@ pnpm dev
 pnpm dev:client
 ```
 
+### 品質チェック
+
+OxlintはTypeScript 7を利用したtype-aware lint、OxfmtはimportとTailwind CSS v4クラスの整列を有効にしています。
+
+```bash
+pnpm format        # コードを整形
+pnpm format:check  # 整形差分を検査
+pnpm lint          # Oxlintを実行
+pnpm lint:fix      # 安全に自動修正できるlintを反映
+pnpm check         # format・lint・型・テスト・ビルドを一括検証
+```
+
 ## Cloudflareへのデプロイ
 
 ### Wrangler設定
@@ -194,13 +206,13 @@ Worker build時にTanStack StartのSSR bundleとクライアントアセット�
 
 Better AuthのOrganizationをKaenmaのWorkspaceとして扱います。
 
-| Role | 主な権限 |
-| --- | --- |
-| Owner | Workspace全体、メンバー、設定 |
-| Admin | 設定、APIキー、Webhook、運用 |
+| Role     | 主な権限                         |
+| -------- | -------------------------------- |
+| Owner    | Workspace全体、メンバー、設定    |
+| Admin    | 設定、APIキー、Webhook、運用     |
 | Marketer | Contact、Content、Campaign、配信 |
-| Analyst | 閲覧、分析、Export |
-| Viewer | 閲覧 |
+| Analyst  | 閲覧、分析、Export               |
+| Viewer   | 閲覧                             |
 
 ## キャンペーン
 

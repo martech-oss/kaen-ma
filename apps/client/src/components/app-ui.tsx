@@ -1,3 +1,6 @@
+import { BlocksIcon, CircleAlertIcon, CircleCheckIcon } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
+
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,34 +25,16 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import {
-  Field,
-  FieldDescription,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { BlocksIcon, CircleAlertIcon, CircleCheckIcon } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
 
-export function PageHeader({
-  title,
-  action,
-}: {
-  title: string;
-  action?: ReactNode;
-}): ReactNode {
+export function PageHeader({ title, action }: { title: string; action?: ReactNode }): ReactNode {
   return (
     <header className="flex flex-wrap items-center justify-between gap-4">
-      <h1 className="font-heading text-2xl font-semibold tracking-tight lg:text-3xl">
-        {title}
-      </h1>
+      <h1 className="font-heading text-2xl font-semibold tracking-tight lg:text-3xl">{title}</h1>
       {action}
     </header>
   );
@@ -92,9 +77,7 @@ export function AppDialog({
       <DialogContent className={className ?? "sm:max-w-lg"}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          {description ? (
-            <DialogDescription>{description}</DialogDescription>
-          ) : null}
+          {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
         {children}
       </DialogContent>
@@ -206,9 +189,7 @@ export function FormNativeSelect({
 export { NativeSelectOption as FormSelectOption };
 
 export function ResourceGrid({ children }: { children: ReactNode }): ReactNode {
-  return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>
-  );
+  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>;
 }
 
 export function ResourceCard({
@@ -238,9 +219,7 @@ export function ResourceCard({
         </div>
         {action ? <CardAction>{action}</CardAction> : null}
       </CardHeader>
-      <CardFooter className="text-xs text-muted-foreground">
-        {footer}
-      </CardFooter>
+      <CardFooter className="text-xs text-muted-foreground">{footer}</CardFooter>
     </Card>
   );
 }
@@ -263,9 +242,7 @@ export function EmptyState({
           <BlocksIcon />
         </EmptyMedia>
         <EmptyTitle>{title}</EmptyTitle>
-        {description ? (
-          <EmptyDescription>{description}</EmptyDescription>
-        ) : null}
+        {description ? <EmptyDescription>{description}</EmptyDescription> : null}
       </EmptyHeader>
       {action}
     </Empty>
@@ -282,11 +259,7 @@ export function SimpleEmpty({
   return <EmptyState title={label} compact={compact} />;
 }
 
-export function PageLoading({
-  label = "読み込み中…",
-}: {
-  label?: string;
-}): ReactNode {
+export function PageLoading({ label = "読み込み中…" }: { label?: string }): ReactNode {
   return (
     <div className="flex min-h-72 items-center justify-center gap-2 text-sm text-muted-foreground">
       <Spinner />

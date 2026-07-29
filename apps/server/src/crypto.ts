@@ -73,9 +73,7 @@ export async function decryptCredentials<T extends Record<string, unknown>>(
 
 export async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function base64UrlEncode(value: Uint8Array): string {
@@ -85,20 +83,17 @@ function base64UrlEncode(value: Uint8Array): string {
 }
 
 function base64UrlDecode(value: string): Uint8Array<ArrayBuffer> {
-  const padded = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(
-    Math.ceil(value.length / 4) * 4,
-    "=",
-  );
+  const padded = value
+    .replaceAll("-", "+")
+    .replaceAll("_", "/")
+    .padEnd(Math.ceil(value.length / 4) * 4, "=");
   const binary = atob(padded);
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
 async function importAesKey(masterKey: string): Promise<CryptoKey> {
-  const raw =
-    /^[A-Za-z0-9_-]{43}$/.test(masterKey)
-      ? base64UrlDecode(masterKey)
-      : new Uint8Array(
-          await crypto.subtle.digest("SHA-256", new TextEncoder().encode(masterKey)),
-        );
+  const raw = /^[A-Za-z0-9_-]{43}$/.test(masterKey)
+    ? base64UrlDecode(masterKey)
+    : new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(masterKey)));
   return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
 }

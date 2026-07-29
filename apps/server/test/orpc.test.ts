@@ -1,10 +1,12 @@
-import { contract } from "@kaenma/contract";
-import { uuidv7 } from "@kaenma/database";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+
+import { contract } from "@kaenma/contract";
+import { uuidv7 } from "@kaenma/database";
+
 import { sha256Hex } from "../src/crypto";
 
 declare module "cloudflare:workers" {
@@ -16,9 +18,7 @@ declare module "cloudflare:workers" {
 function createClient(token?: string): ContractRouterClient<typeof contract> {
   const link = new RPCLink({
     url: "http://localhost:8787/api/rpc",
-    ...(token
-      ? { headers: { authorization: `Bearer ${token}` } }
-      : {}),
+    ...(token ? { headers: { authorization: `Bearer ${token}` } } : {}),
     fetch: (request) => exports.default.fetch(request),
   });
   return createORPCClient(link);
@@ -70,14 +70,7 @@ describe("oRPC API", () => {
         `INSERT INTO api_keys
          (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
          VALUES (?, ?, ?, 'oRPC test', ?, ?, 'owner', ?)`,
-      ).bind(
-        apiKeyId,
-        workspaceId,
-        userId,
-        prefix,
-        await sha256Hex(token),
-        now,
-      ),
+      ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
     ]);
 
     const client = createClient(token);

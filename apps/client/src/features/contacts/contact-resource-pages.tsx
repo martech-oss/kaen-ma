@@ -1,3 +1,7 @@
+import { ListChecks, Plus, Tags } from "lucide-react";
+import { type FormEvent, type ReactNode, useCallback, useState } from "react";
+import { toast } from "sonner";
+
 import {
   AppDialog,
   EmptyState,
@@ -32,9 +36,6 @@ import {
   loadContactResources,
   type ContactResources,
 } from "@/features/contacts/contact-resource-api";
-import { ListChecks, Plus, Tags } from "lucide-react";
-import { type FormEvent, type ReactNode, useCallback, useState } from "react";
-import { toast } from "sonner";
 import { rpc } from "@/rpc";
 
 function useContactResources(initialResources: ContactResources): {
@@ -43,8 +44,7 @@ function useContactResources(initialResources: ContactResources): {
   error: string;
   load: () => Promise<void>;
 } {
-  const [resources, setResources] =
-    useState<ContactResources>(initialResources);
+  const [resources, setResources] = useState<ContactResources>(initialResources);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -54,11 +54,7 @@ function useContactResources(initialResources: ContactResources): {
     try {
       setResources(await loadContactResources());
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "コンタクト設定を読み込めませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "コンタクト設定を読み込めませんでした");
     } finally {
       setLoading(false);
     }
@@ -72,8 +68,7 @@ export function ContactListsPage({
 }: {
   initialResources: ContactResources;
 }): ReactNode {
-  const { resources, loading, error, load } =
-    useContactResources(initialResources);
+  const { resources, loading, error, load } = useContactResources(initialResources);
   const [showCreate, setShowCreate] = useState(false);
 
   return (
@@ -90,9 +85,7 @@ export function ContactListsPage({
       <Card>
         <CardHeader className="border-b">
           <CardTitle>すべてのリスト</CardTitle>
-          <CardDescription>
-            リスト名、説明、登録されている連絡先数を確認できます。
-          </CardDescription>
+          <CardDescription>リスト名、説明、登録されている連絡先数を確認できます。</CardDescription>
           <CardAction>
             {loading ? (
               <Skeleton className="h-5 w-12 rounded-full" />
@@ -103,9 +96,7 @@ export function ContactListsPage({
         </CardHeader>
         <CardContent className="px-0">
           <Table>
-            <TableCaption className="sr-only">
-              コンタクトリスト一覧
-            </TableCaption>
+            <TableCaption className="sr-only">コンタクトリスト一覧</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead className="px-4">リスト</TableHead>
@@ -134,9 +125,7 @@ export function ContactListsPage({
                       {list.description || "説明なし"}
                     </TableCell>
                     <TableCell>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {list.slug}
-                      </span>
+                      <span className="font-mono text-xs text-muted-foreground">{list.slug}</span>
                     </TableCell>
                     <TableCell className="px-4 text-right">
                       <Badge variant="secondary">
@@ -185,8 +174,7 @@ export function ContactTagsPage({
 }: {
   initialResources: ContactResources;
 }): ReactNode {
-  const { resources, loading, error, load } =
-    useContactResources(initialResources);
+  const { resources, loading, error, load } = useContactResources(initialResources);
   const [showCreate, setShowCreate] = useState(false);
 
   return (
@@ -203,9 +191,7 @@ export function ContactTagsPage({
       <Card>
         <CardHeader className="border-b">
           <CardTitle>すべてのタグ</CardTitle>
-          <CardDescription>
-            タグごとの利用数と識別用スラッグを確認できます。
-          </CardDescription>
+          <CardDescription>タグごとの利用数と識別用スラッグを確認できます。</CardDescription>
           <CardAction>
             {loading ? (
               <Skeleton className="h-5 w-12 rounded-full" />
@@ -247,9 +233,7 @@ export function ContactTagsPage({
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {tag.slug}
-                      </span>
+                      <span className="font-mono text-xs text-muted-foreground">{tag.slug}</span>
                     </TableCell>
                     <TableCell className="px-4 text-right">
                       <Badge variant="secondary">
@@ -303,11 +287,7 @@ function ResourceLoadError({
   return (
     <div className="flex flex-col gap-3">
       <ErrorAlert>{message}</ErrorAlert>
-      <Button
-        className="self-start"
-        variant="outline"
-        onClick={() => void onRetry()}
-      >
+      <Button className="self-start" variant="outline" onClick={() => void onRetry()}>
         再読み込み
       </Button>
     </div>
@@ -318,10 +298,7 @@ function ResourceTableSkeleton({ columns }: { columns: number }): ReactNode {
   return Array.from({ length: 4 }, (_, rowIndex) => (
     <TableRow key={rowIndex}>
       {Array.from({ length: columns }, (_, columnIndex) => (
-        <TableCell
-          key={columnIndex}
-          className={columnIndex === 0 ? "px-4" : undefined}
-        >
+        <TableCell key={columnIndex} className={columnIndex === 0 ? "px-4" : undefined}>
           <Skeleton className={columnIndex === 0 ? "h-4 w-32" : "h-4 w-20"} />
         </TableCell>
       ))}
@@ -329,11 +306,7 @@ function ResourceTableSkeleton({ columns }: { columns: number }): ReactNode {
   ));
 }
 
-function CreateListForm({
-  onSaved,
-}: {
-  onSaved: () => Promise<void>;
-}): ReactNode {
+function CreateListForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -354,11 +327,7 @@ function CreateListForm({
       await onSaved();
       toast.success("リストを作成しました");
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "リストを作成できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "リストを作成できませんでした");
     } finally {
       setBusy(false);
     }
@@ -367,13 +336,7 @@ function CreateListForm({
   return (
     <form onSubmit={(event) => void submit(event)}>
       <FieldGroup>
-        <FormInput
-          label="名前"
-          name="name"
-          placeholder="例：ニュースレター購読者"
-          autoFocus
-          required
-        />
+        <FormInput label="名前" name="name" placeholder="例：ニュースレター購読者" required />
         <FormTextarea
           label="説明"
           name="description"
@@ -397,11 +360,7 @@ function CreateListForm({
   );
 }
 
-function CreateTagForm({
-  onSaved,
-}: {
-  onSaved: () => Promise<void>;
-}): ReactNode {
+function CreateTagForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -421,9 +380,7 @@ function CreateTagForm({
       await onSaved();
       toast.success("タグを作成しました");
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "タグを作成できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "タグを作成できませんでした");
     } finally {
       setBusy(false);
     }
@@ -432,13 +389,7 @@ function CreateTagForm({
   return (
     <form onSubmit={(event) => void submit(event)}>
       <FieldGroup>
-        <FormInput
-          label="名前"
-          name="name"
-          placeholder="例：ホットリード"
-          autoFocus
-          required
-        />
+        <FormInput label="名前" name="name" placeholder="例：ホットリード" required />
         <FormInput
           label="カラー"
           name="color"

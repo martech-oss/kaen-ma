@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { safeRedirectTarget } from "@/lib/auth-session";
 
 describe("safeRedirectTarget", () => {

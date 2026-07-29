@@ -8,11 +8,8 @@ import type {
   WorkspaceContext,
   WorkspaceRole,
 } from "@kaenma/shared";
-import {
-  createDatabase,
-  type DatabaseSource,
-  type KaenmaDatabase,
-} from "./client";
+
+import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "./client";
 
 export interface CursorPage<T> {
   items: T[];
@@ -73,13 +70,7 @@ export class WorkspaceRepository {
     segmentId?: string | undefined;
     scoreMin?: number | undefined;
     scoreMax?: number | undefined;
-    sort?:
-      | "createdAt"
-      | "updatedAt"
-      | "score"
-      | "name"
-      | "email"
-      | undefined;
+    sort?: "createdAt" | "updatedAt" | "score" | "name" | "email" | undefined;
     direction?: "asc" | "desc" | undefined;
   }): Promise<CursorPage<Contact>> {
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
@@ -243,14 +234,13 @@ export class WorkspaceRepository {
     const existing = await this.getContact(id);
     if (!existing) return null;
     const fields = {
-      email: input.email === undefined ? existing.email : input.email?.toLowerCase() ?? null,
-      firstName: input.firstName === undefined ? existing.firstName : input.firstName ?? null,
-      lastName: input.lastName === undefined ? existing.lastName : input.lastName ?? null,
-      phone: input.phone === undefined ? existing.phone : input.phone ?? null,
-      externalId: input.externalId === undefined ? existing.externalId : input.externalId ?? null,
+      email: input.email === undefined ? existing.email : (input.email?.toLowerCase() ?? null),
+      firstName: input.firstName === undefined ? existing.firstName : (input.firstName ?? null),
+      lastName: input.lastName === undefined ? existing.lastName : (input.lastName ?? null),
+      phone: input.phone === undefined ? existing.phone : (input.phone ?? null),
+      externalId: input.externalId === undefined ? existing.externalId : (input.externalId ?? null),
       stage: input.stage === undefined ? existing.stage : input.stage,
-      customFields:
-        input.customFields === undefined ? existing.customFields : input.customFields,
+      customFields: input.customFields === undefined ? existing.customFields : input.customFields,
     };
     await this.database
       .prepare(
@@ -280,12 +270,7 @@ export class WorkspaceRepository {
         `UPDATE contacts SET status = 'archived', archived_at = ?, updated_at = ?
          WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
       )
-      .bind(
-        new Date().toISOString(),
-        new Date().toISOString(),
-        this.context.workspaceId,
-        id,
-      )
+      .bind(new Date().toISOString(), new Date().toISOString(), this.context.workspaceId, id)
       .run();
     return result.meta.changes > 0;
   }
@@ -301,18 +286,13 @@ export class WorkspaceRepository {
     return result.meta.changes > 0;
   }
 
-  public async listAccounts(input: {
-    query?: string;
-    limit?: number;
-  }): Promise<AccountSummary[]> {
+  public async listAccounts(input: { query?: string; limit?: number }): Promise<AccountSummary[]> {
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 200);
     const params: Array<string | number> = [this.context.workspaceId];
     const conditions = ["co.workspace_id = ?"];
     if (input.query) {
       const query = `%${escapeLike(input.query)}%`;
-      conditions.push(
-        "(co.name LIKE ? ESCAPE '\\' OR co.domain LIKE ? ESCAPE '\\')",
-      );
+      conditions.push("(co.name LIKE ? ESCAPE '\\' OR co.domain LIKE ? ESCAPE '\\')");
       params.push(query, query);
     }
     params.push(limit);
@@ -359,24 +339,14 @@ export class WorkspaceRepository {
          (id, workspace_id, name, domain, custom_fields, created_at, updated_at)
          VALUES (?, ?, ?, ?, '{}', ?, ?)`,
       )
-      .bind(
-        id,
-        this.context.workspaceId,
-        input.name,
-        input.domain?.toLowerCase() ?? null,
-        now,
-        now,
-      )
+      .bind(id, this.context.workspaceId, input.name, input.domain?.toLowerCase() ?? null, now, now)
       .run();
     const account = await this.getAccount(id);
     if (!account) throw new Error("Created account could not be loaded");
     return account;
   }
 
-  public async updateAccount(
-    id: string,
-    input: AccountUpdate,
-  ): Promise<Account | null> {
+  public async updateAccount(id: string, input: AccountUpdate): Promise<Account | null> {
     const existing = await this.getAccount(id);
     if (!existing) return null;
     await this.database
@@ -386,9 +356,7 @@ export class WorkspaceRepository {
       )
       .bind(
         input.name ?? existing.name,
-        input.domain === undefined
-          ? existing.domain
-          : input.domain?.toLowerCase() ?? null,
+        input.domain === undefined ? existing.domain : (input.domain?.toLowerCase() ?? null),
         new Date().toISOString(),
         this.context.workspaceId,
         id,

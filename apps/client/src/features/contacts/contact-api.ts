@@ -1,8 +1,9 @@
+import { queryOptions } from "@tanstack/react-query";
+
+import { orpcQuery } from "@/lib/orpc";
+import { rpc } from "@/rpc";
 import type { ContactListInput } from "@kaenma/contract";
 import type { SegmentFilter } from "@kaenma/shared";
-import { rpc } from "@/rpc";
-import { orpcQuery } from "@/lib/orpc";
-import { queryOptions } from "@tanstack/react-query";
 
 export interface TagOption {
   id: string;
@@ -49,12 +50,7 @@ export interface ContactOptions {
 export const contactOptionsQueryKey = ["contacts", "options"] as const;
 
 export type ContactStatus = "active" | "archived" | "anonymous" | "all";
-export type ContactSort =
-  | "updatedAt"
-  | "createdAt"
-  | "score"
-  | "name"
-  | "email";
+export type ContactSort = "updatedAt" | "createdAt" | "score" | "name" | "email";
 
 export interface ContactSearch {
   q: string;
@@ -84,31 +80,16 @@ export const contactSearchDefaults: ContactSearch = {
   direction: "desc",
 };
 
-const contactStatuses = new Set<ContactStatus>([
-  "active",
-  "archived",
-  "anonymous",
-  "all",
-]);
-const contactSorts = new Set<ContactSort>([
-  "updatedAt",
-  "createdAt",
-  "score",
-  "name",
-  "email",
-]);
+const contactStatuses = new Set<ContactStatus>(["active", "archived", "anonymous", "all"]);
+const contactSorts = new Set<ContactSort>(["updatedAt", "createdAt", "score", "name", "email"]);
 
-export function parseContactSearch(
-  search: Record<string, unknown>,
-): ContactSearch {
+export function parseContactSearch(search: Record<string, unknown>): ContactSearch {
   const status =
-    typeof search.status === "string" &&
-    contactStatuses.has(search.status as ContactStatus)
+    typeof search.status === "string" && contactStatuses.has(search.status as ContactStatus)
       ? (search.status as ContactStatus)
       : contactSearchDefaults.status;
   const sort =
-    typeof search.sort === "string" &&
-    contactSorts.has(search.sort as ContactSort)
+    typeof search.sort === "string" && contactSorts.has(search.sort as ContactSort)
       ? (search.sort as ContactSort)
       : contactSearchDefaults.sort;
   const direction = search.direction === "asc" ? "asc" : "desc";
@@ -130,9 +111,7 @@ export function parseContactSearch(
   };
 }
 
-export function buildContactSearchInput(
-  search: ContactSearch,
-): ContactListInput {
+export function buildContactSearchInput(search: ContactSearch): ContactListInput {
   const query = search.q.trim();
   const scoreMin = optionalNumber(search.scoreMin);
   const scoreMax = optionalNumber(search.scoreMax);
@@ -166,9 +145,7 @@ export function contactOptionsQueryOptions() {
   });
 }
 
-export async function loadContactOptions(
-  signal?: AbortSignal,
-): Promise<ContactOptions> {
+export async function loadContactOptions(signal?: AbortSignal): Promise<ContactOptions> {
   const response = await rpc<ContactOptions>("/contact-options", {
     signal: signal ?? null,
   });

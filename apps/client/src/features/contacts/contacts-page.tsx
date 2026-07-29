@@ -1,4 +1,25 @@
-import type { Contact, SegmentFilter } from "@kaenma/shared";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
+import {
+  Archive,
+  Building2,
+  Check,
+  ChevronDown,
+  Filter,
+  ListPlus,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Tag,
+  Tags,
+  UserRound,
+  UsersRound,
+  X,
+  Zap,
+} from "lucide-react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+
 import {
   AppDialog,
   ErrorAlert as ErrorNotice,
@@ -22,13 +43,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Empty,
@@ -83,41 +98,10 @@ import {
   type SegmentOption,
   type TagOption,
 } from "@/features/contacts/contact-api";
-import { cn } from "@/lib/utils";
 import { orpcQuery } from "@/lib/orpc";
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  Archive,
-  Building2,
-  Check,
-  ChevronDown,
-  Filter,
-  ListPlus,
-  Plus,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  Tag,
-  Tags,
-  UserRound,
-  UsersRound,
-  X,
-  Zap,
-} from "lucide-react";
-import {
-  type FormEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { cn, getFormString } from "@/lib/utils";
 import { rpc } from "@/rpc";
+import type { Contact, SegmentFilter } from "@kaenma/shared";
 
 interface ContactProfile {
   contact: Contact;
@@ -153,13 +137,7 @@ interface ContactProfile {
   }>;
 }
 
-type BulkAction =
-  | "add_tag"
-  | "remove_tag"
-  | "add_list"
-  | "remove_list"
-  | "archive"
-  | "restore";
+type BulkAction = "add_tag" | "remove_tag" | "add_list" | "remove_list" | "archive" | "restore";
 
 function ControlledSelect({
   value,
@@ -197,11 +175,7 @@ function ControlledSelect({
   );
 }
 
-export function ContactsPage({
-  initialSearch,
-}: {
-  initialSearch: ContactSearch;
-}): ReactNode {
+export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }): ReactNode {
   const queryClient = useQueryClient();
   const contactsQuery = useSuspenseQuery(contactsQueryOptions(initialSearch));
   const optionsQuery = useSuspenseQuery(contactOptionsQueryOptions());
@@ -246,12 +220,9 @@ export function ContactsPage({
     [queryClient],
   );
 
-  const refreshContactData = useCallback(
-    async () => {
-      await Promise.all([refreshContacts(), refreshOptions()]);
-    },
-    [refreshContacts, refreshOptions],
-  );
+  const refreshContactData = useCallback(async () => {
+    await Promise.all([refreshContacts(), refreshOptions()]);
+  }, [refreshContacts, refreshOptions]);
 
   useEffect(() => {
     setQuery(initialSearch.q);
@@ -284,8 +255,7 @@ export function ContactsPage({
     if (
       Object.keys(nextSearch).every(
         (key) =>
-          nextSearch[key as keyof ContactSearch] ===
-          initialSearch[key as keyof ContactSearch],
+          nextSearch[key as keyof ContactSearch] === initialSearch[key as keyof ContactSearch],
       )
     ) {
       return;
@@ -314,12 +284,9 @@ export function ContactsPage({
     tagId,
   ]);
 
-  const selectedSegment = options.segments.find(
-    (segment) => segment.id === segmentId,
-  );
+  const selectedSegment = options.segments.find((segment) => segment.id === segmentId);
   const allVisibleSelected =
-    contacts.length > 0 &&
-    contacts.every((contact) => selected.has(contact.id));
+    contacts.length > 0 && contacts.every((contact) => selected.has(contact.id));
   const hasAdvancedFilters = Boolean(
     stage || tagId || listId || accountId || segmentId || scoreMin || scoreMax,
   );
@@ -357,9 +324,7 @@ export function ContactsPage({
       });
       await refreshContactData();
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "一括操作に失敗しました",
-      );
+      setError(caught instanceof Error ? caught.message : "一括操作に失敗しました");
     } finally {
       setBusy(false);
     }
@@ -372,11 +337,7 @@ export function ContactsPage({
       await rpc(`/segments/${segmentId}/refresh`, { method: "POST" });
       await refreshContactData();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "セグメントを更新できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "セグメントを更新できませんでした");
     } finally {
       setBusy(false);
     }
@@ -468,9 +429,7 @@ export function ContactsPage({
       });
     }
     if (children.length === 0) return null;
-    return children.length === 1
-      ? children[0]!
-      : { kind: "group", combinator: "and", children };
+    return children.length === 1 ? children[0]! : { kind: "group", combinator: "and", children };
   }
 
   return (
@@ -478,27 +437,15 @@ export function ContactsPage({
       title="連絡先"
       action={
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={<Link to="/contacts/accounts" />}
-          >
+          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/accounts" />}>
             <Building2 data-icon="inline-start" />
             アカウント
           </Button>
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={<Link to="/contacts/tags" />}
-          >
+          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/tags" />}>
             <Tags data-icon="inline-start" />
             タグ
           </Button>
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={<Link to="/contacts/lists" />}
-          >
+          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/lists" />}>
             <ListPlus data-icon="inline-start" />
             リスト
           </Button>
@@ -591,10 +538,7 @@ export function ContactsPage({
             />
             <Button
               variant="outline"
-              className={cn(
-                (advancedOpen || hasAdvancedFilters) &&
-                  "border-primary text-primary",
-              )}
+              className={cn((advancedOpen || hasAdvancedFilters) && "border-primary text-primary")}
               onClick={() => setAdvancedOpen((open) => !open)}
             >
               <Filter data-icon="inline-start" />
@@ -616,44 +560,23 @@ export function ContactsPage({
                   </NativeSelectOption>
                 ))}
               </SelectField>
-              <TextField
-                label="スコア下限"
-                type="number"
-                value={scoreMin}
-                onChange={setScoreMin}
-              />
-              <TextField
-                label="スコア上限"
-                type="number"
-                value={scoreMax}
-                onChange={setScoreMax}
-              />
+              <TextField label="スコア下限" type="number" value={scoreMin} onChange={setScoreMin} />
+              <TextField label="スコア上限" type="number" value={scoreMax} onChange={setScoreMax} />
               <SelectField
                 label="並び順"
                 value={`${sort}:${direction}`}
                 onChange={(value) => {
-                  const [nextSort = "updatedAt", nextDirection = "desc"] =
-                    value.split(":");
+                  const [nextSort = "updatedAt", nextDirection = "desc"] = value.split(":");
                   setSort(nextSort as ContactSort);
                   setDirection(nextDirection === "asc" ? "asc" : "desc");
                 }}
               >
-                <NativeSelectOption value="updatedAt:desc">
-                  更新が新しい順
-                </NativeSelectOption>
-                <NativeSelectOption value="createdAt:desc">
-                  作成が新しい順
-                </NativeSelectOption>
-                <NativeSelectOption value="score:desc">
-                  スコアが高い順
-                </NativeSelectOption>
-                <NativeSelectOption value="score:asc">
-                  スコアが低い順
-                </NativeSelectOption>
+                <NativeSelectOption value="updatedAt:desc">更新が新しい順</NativeSelectOption>
+                <NativeSelectOption value="createdAt:desc">作成が新しい順</NativeSelectOption>
+                <NativeSelectOption value="score:desc">スコアが高い順</NativeSelectOption>
+                <NativeSelectOption value="score:asc">スコアが低い順</NativeSelectOption>
                 <NativeSelectOption value="name:asc">名前順</NativeSelectOption>
-                <NativeSelectOption value="email:asc">
-                  メール順
-                </NativeSelectOption>
+                <NativeSelectOption value="email:asc">メール順</NativeSelectOption>
               </SelectField>
               <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
                 <Button variant="outline" onClick={clearFilters}>
@@ -667,11 +590,7 @@ export function ContactsPage({
                   条件をセグメント保存
                 </Button>
                 {selectedSegment && (
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void refreshSegment()}
-                  >
+                  <Button variant="outline" disabled={busy} onClick={() => void refreshSegment()}>
                     <RefreshCw data-icon="inline-start" />
                     セグメントを再評価
                   </Button>
@@ -725,11 +644,7 @@ export function ContactsPage({
             <Button disabled={busy} onClick={() => void applyBulkAction()}>
               適用
             </Button>
-            <Button
-              variant="ghost"
-              className="ml-auto"
-              onClick={() => setSelected(new Set())}
-            >
+            <Button variant="ghost" className="ml-auto" onClick={() => setSelected(new Set())}>
               選択解除
             </Button>
           </div>
@@ -756,9 +671,7 @@ export function ContactsPage({
                     checked={allVisibleSelected}
                     onCheckedChange={(checked) =>
                       setSelected(
-                        checked
-                          ? new Set(contacts.map((contact) => contact.id))
-                          : new Set(),
+                        checked ? new Set(contacts.map((contact) => contact.id)) : new Set(),
                       )
                     }
                     aria-label="表示中の連絡先をすべて選択"
@@ -798,18 +711,14 @@ export function ContactsPage({
                 : contacts.map((contact) => (
                     <TableRow
                       key={contact.id}
-                      className="cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                      className="cursor-pointer focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
                       onClick={() => setActiveContactId(contact.id)}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter")
-                          setActiveContactId(contact.id);
+                        if (event.key === "Enter") setActiveContactId(contact.id);
                       }}
                       tabIndex={0}
                     >
-                      <TableCell
-                        className="px-5"
-                        onClick={(event) => event.stopPropagation()}
-                      >
+                      <TableCell className="px-5" onClick={(event) => event.stopPropagation()}>
                         <Checkbox
                           checked={selected.has(contact.id)}
                           onCheckedChange={(checked) => {
@@ -825,9 +734,7 @@ export function ContactsPage({
                         <div className="flex items-center gap-3">
                           <ContactAvatar contact={contact} />
                           <div className="min-w-0">
-                            <div className="truncate font-medium">
-                              {contactName(contact)}
-                            </div>
+                            <div className="truncate font-medium">{contactName(contact)}</div>
                             <div className="truncate text-xs text-muted-foreground">
                               {contact.email ??
                                 contact.phone ??
@@ -859,14 +766,8 @@ export function ContactsPage({
                               {list.name}
                             </Badge>
                           ))}
-                          {contact.accounts.length +
-                            contact.tags.length +
-                            contact.lists.length ===
-                            0 && (
-                            <span className="text-xs text-muted-foreground">
-                              未分類
-                            </span>
-                          )}
+                          {contact.accounts.length + contact.tags.length + contact.lists.length ===
+                            0 && <span className="text-xs text-muted-foreground">未分類</span>}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -874,8 +775,7 @@ export function ContactsPage({
                           variant="secondary"
                           className={cn(
                             "min-w-12 justify-center tabular-nums",
-                            contact.score >= 50 &&
-                              "bg-success text-success-foreground",
+                            contact.score >= 50 && "bg-success text-success-foreground",
                             contact.score >= 20 &&
                               contact.score < 50 &&
                               "bg-warning text-warning-foreground",
@@ -955,9 +855,7 @@ function ContactCreateForm({
   options: ContactOptions;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const createContact = useMutation(
-    orpcQuery.contacts.create.mutationOptions(),
-  );
+  const createContact = useMutation(orpcQuery.contacts.create.mutationOptions());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -1003,9 +901,7 @@ function ContactCreateForm({
       ]);
       await onSaved();
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "保存できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "保存できませんでした");
     } finally {
       setBusy(false);
     }
@@ -1055,12 +951,7 @@ function ContactCreateForm({
         メールアドレスまたは外部IDのどちらかを入力してください。
       </p>
       {error && <ErrorNotice>{error}</ErrorNotice>}
-      <LoadingButton
-        busy={busy}
-        busyLabel="保存中…"
-        className="w-full"
-        type="submit"
-      >
+      <LoadingButton busy={busy} busyLabel="保存中…" className="w-full" type="submit">
         保存
       </LoadingButton>
     </form>
@@ -1079,7 +970,7 @@ function SegmentSaveForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!filter) return;
-    const name = String(new FormData(event.currentTarget).get("name"));
+    const name = getFormString(new FormData(event.currentTarget), "name");
     setBusy(true);
     try {
       await rpc("/segments", {
@@ -1093,31 +984,19 @@ function SegmentSaveForm({
       });
       await onSaved();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "セグメントを保存できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "セグメントを保存できませんでした");
     } finally {
       setBusy(false);
     }
   }
   return (
-    <form
-      onSubmit={(event) => void submit(event)}
-      className="flex flex-col gap-5"
-    >
+    <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
       <InputField label="セグメント名" name="name" required />
       <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
         現在の検索条件を動的セグメントとして保存します。連絡先の状態が変わったら再評価できます。
       </p>
       {error && <ErrorNotice>{error}</ErrorNotice>}
-      <LoadingButton
-        busy={busy}
-        className="w-full"
-        type="submit"
-        disabled={!filter}
-      >
+      <LoadingButton busy={busy} className="w-full" type="submit" disabled={!filter}>
         保存
       </LoadingButton>
     </form>
@@ -1143,16 +1022,10 @@ function ContactDrawer({
   const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await rpc<ContactProfile>(
-        `/contacts/${contactId}/profile`,
-      );
+      const response = await rpc<ContactProfile>(`/contacts/${contactId}/profile`);
       setProfile(response.data);
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "プロフィールを読み込めませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "プロフィールを読み込めませんでした");
     } finally {
       setLoading(false);
     }
@@ -1172,9 +1045,7 @@ function ContactDrawer({
       await rpc(path, init);
       await changed();
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "更新できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "更新できませんでした");
     }
   }
 
@@ -1196,9 +1067,7 @@ function ContactDrawer({
         ) : profile ? (
           <Tabs
             value={activeTab}
-            onValueChange={(value) =>
-              setActiveTab(value as "details" | "activity")
-            }
+            onValueChange={(value) => setActiveTab(value as "details" | "activity")}
             className="gap-0"
           >
             <SheetHeader className="sticky top-0 z-10 border-b bg-background/95 px-6 py-5 backdrop-blur">
@@ -1212,9 +1081,7 @@ function ContactDrawer({
                     <StatusBadge status={profile.contact.status} />
                   </div>
                   <SheetDescription>
-                    {profile.contact.email ??
-                      profile.contact.phone ??
-                      "連絡先情報なし"}
+                    {profile.contact.email ?? profile.contact.phone ?? "連絡先情報なし"}
                   </SheetDescription>
                 </div>
               </div>
@@ -1239,9 +1106,7 @@ function ContactDrawer({
                 ) : (
                   <AlertDialog>
                     <AlertDialogTrigger
-                      render={
-                        <Button variant="destructive" className="ml-auto" />
-                      }
+                      render={<Button variant="destructive" className="ml-auto" />}
                     >
                       <Archive data-icon="inline-start" />
                       アーカイブ
@@ -1251,9 +1116,7 @@ function ContactDrawer({
                         <AlertDialogMedia>
                           <Archive />
                         </AlertDialogMedia>
-                        <AlertDialogTitle>
-                          連絡先をアーカイブしますか？
-                        </AlertDialogTitle>
+                        <AlertDialogTitle>連絡先をアーカイブしますか？</AlertDialogTitle>
                         <AlertDialogDescription>
                           配信対象から外れます。必要になった場合は後から復元できます。
                         </AlertDialogDescription>
@@ -1280,26 +1143,10 @@ function ContactDrawer({
             <TabsContent value="details" className="flex flex-col gap-5 p-6">
               {error && <ErrorNotice>{error}</ErrorNotice>}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <StatCard
-                  label="スコア"
-                  value={profile.contact.score}
-                  icon={<Zap />}
-                />
-                <StatCard
-                  label="タグ"
-                  value={profile.tags.length}
-                  icon={<Tag />}
-                />
-                <StatCard
-                  label="リスト"
-                  value={profile.lists.length}
-                  icon={<ListPlus />}
-                />
-                <StatCard
-                  label="会社"
-                  value={profile.accounts.length}
-                  icon={<Building2 />}
-                />
+                <StatCard label="スコア" value={profile.contact.score} icon={<Zap />} />
+                <StatCard label="タグ" value={profile.tags.length} icon={<Tag />} />
+                <StatCard label="リスト" value={profile.lists.length} icon={<ListPlus />} />
+                <StatCard label="会社" value={profile.accounts.length} icon={<Building2 />} />
               </div>
 
               <ProfileEditForm
@@ -1423,19 +1270,14 @@ function ProfileEditForm({
       });
       await onSaved();
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "保存できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "保存できませんでした");
     } finally {
       setBusy(false);
     }
   }
   return (
     <Section title="基本情報" icon={<UserRound className="size-4" />}>
-      <form
-        onSubmit={(event) => void submit(event)}
-        className="flex flex-col gap-4"
-      >
+      <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3">
           <InputField
             label="名"
@@ -1514,10 +1356,7 @@ function RelationEditor({
       <div className="flex flex-wrap gap-2">
         {items.map((item) => (
           <Badge key={item.id} variant="outline" className="gap-1">
-            <span
-              className="size-2 rounded-full"
-              style={{ backgroundColor: item.color }}
-            />
+            <span className="size-2 rounded-full" style={{ backgroundColor: item.color }} />
             {item.name}
             {!disabled && (
               <Button
@@ -1531,9 +1370,7 @@ function RelationEditor({
             )}
           </Badge>
         ))}
-        {items.length === 0 && (
-          <span className="text-sm text-muted-foreground">未設定</span>
-        )}
+        {items.length === 0 && <span className="text-sm text-muted-foreground">未設定</span>}
       </div>
       {!disabled && (
         <div className="flex gap-2">
@@ -1596,11 +1433,7 @@ function AccountEditor({
       setSelectedId("");
       await onChanged();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "アカウントへ追加できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "アカウントへ追加できませんでした");
     } finally {
       setBusy(false);
     }
@@ -1616,9 +1449,7 @@ function AccountEditor({
       await onChanged();
     } catch (caught) {
       setError(
-        caught instanceof Error
-          ? caught.message
-          : "アカウントとの関連を解除できませんでした",
+        caught instanceof Error ? caught.message : "アカウントとの関連を解除できませんでした",
       );
     } finally {
       setBusy(false);
@@ -1730,10 +1561,7 @@ function SegmentEditor({
             placeholder="静的セグメントを選択"
             className="flex-1"
             options={options
-              .filter(
-                (segment) =>
-                  segment.kind === "static" && !assigned.has(segment.id),
-              )
+              .filter((segment) => segment.kind === "static" && !assigned.has(segment.id))
               .map((segment) => ({ value: segment.id, label: segment.name }))}
           />
           <Button
@@ -1782,11 +1610,7 @@ function ScoreForm({
       formElement.reset();
       await onSaved();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "スコアを変更できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "スコアを変更できませんでした");
     } finally {
       setBusy(false);
     }
@@ -1829,10 +1653,7 @@ function ActivityTimeline({ profile }: { profile: ContactProfile }): ReactNode {
         })),
         ...profile.scoreEvents.map((event) => ({
           id: event.id,
-          type:
-            event.delta > 0
-              ? `スコア +${event.delta}`
-              : `スコア ${event.delta}`,
+          type: event.delta > 0 ? `スコア +${event.delta}` : `スコア ${event.delta}`,
           description: `${event.reason} · 合計 ${event.total}`,
           at: event.created_at,
           tone: event.delta > 0 ? "emerald" : "amber",
@@ -1844,10 +1665,7 @@ function ActivityTimeline({ profile }: { profile: ContactProfile }): ReactNode {
     <Section title="アクティビティ" icon={<Zap className="size-4" />}>
       <div className="flex flex-col">
         {entries.map((entry) => (
-          <div
-            key={`${entry.type}-${entry.id}`}
-            className="flex gap-3 border-b py-3 last:border-0"
-          >
+          <div key={`${entry.type}-${entry.id}`} className="flex gap-3 border-b py-3 last:border-0">
             <span
               className={cn(
                 "mt-1.5 size-2.5 shrink-0 rounded-full",
@@ -1860,13 +1678,9 @@ function ActivityTimeline({ profile }: { profile: ContactProfile }): ReactNode {
             />
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">{entry.type}</div>
-              <div className="truncate text-xs text-muted-foreground">
-                {entry.description}
-              </div>
+              <div className="truncate text-xs text-muted-foreground">{entry.description}</div>
             </div>
-            <time className="shrink-0 text-xs text-muted-foreground">
-              {formatDate(entry.at)}
-            </time>
+            <time className="shrink-0 text-xs text-muted-foreground">{formatDate(entry.at)}</time>
           </div>
         ))}
         {entries.length === 0 && (
@@ -1909,9 +1723,7 @@ function StatusBadge({ status }: { status: Contact["status"] }): ReactNode {
       anonymous: "bg-warning text-warning-foreground",
     } satisfies Record<Contact["status"], string>
   )[status];
-  const label = { active: "有効", archived: "アーカイブ", anonymous: "匿名" }[
-    status
-  ];
+  const label = { active: "有効", archived: "アーカイブ", anonymous: "匿名" }[status];
   return (
     <Badge variant="secondary" className={classes}>
       {label}
@@ -1919,17 +1731,10 @@ function StatusBadge({ status }: { status: Contact["status"] }): ReactNode {
   );
 }
 
-function ColorChip({
-  item,
-}: {
-  item: { name: string; color: string };
-}): ReactNode {
+function ColorChip({ item }: { item: { name: string; color: string } }): ReactNode {
   return (
     <Badge variant="secondary" className="gap-1">
-      <span
-        className="size-1.5 rounded-full"
-        style={{ backgroundColor: item.color }}
-      />
+      <span className="size-1.5 rounded-full" style={{ backgroundColor: item.color }} />
       {item.name}
     </Badge>
   );

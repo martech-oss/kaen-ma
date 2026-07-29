@@ -44,16 +44,12 @@ export interface AccountSearch {
 
 export const accountSearchDefaults: AccountSearch = { q: "" };
 
-export async function loadAccounts(
-  query = "",
-  signal?: AbortSignal,
-): Promise<AccountSummary[]> {
+export async function loadAccounts(query = "", signal?: AbortSignal): Promise<AccountSummary[]> {
   const params = new URLSearchParams({ limit: "200" });
   if (query.trim()) params.set("q", query.trim());
-  const response = await rpc<AccountSummary[]>(
-    `/accounts?${params.toString()}`,
-    { signal: signal ?? null },
-  );
+  const response = await rpc<AccountSummary[]>(`/accounts?${params.toString()}`, {
+    signal: signal ?? null,
+  });
   return response.data;
 }
 
@@ -65,10 +61,9 @@ export async function loadAccountDetail(
     rpc<AccountDetail>(`/accounts/${accountId}`, {
       signal: signal ?? null,
     }),
-    rpc<ContactOption[]>(
-      "/contacts?limit=100&status=active&sort=name&direction=asc",
-      { signal: signal ?? null },
-    ),
+    rpc<ContactOption[]>("/contacts?limit=100&status=active&sort=name&direction=asc", {
+      signal: signal ?? null,
+    }),
   ]);
   return { account: account.data, contacts: contacts.data };
 }

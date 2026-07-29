@@ -1,6 +1,7 @@
-import type { SegmentFilter } from "@kaenma/shared";
-import { contactAttributeDefinitions } from "@kaenma/shared";
-import { rpc } from "@/rpc";
+import { useRouter } from "@tanstack/react-router";
+import { Plus, Shapes } from "lucide-react";
+import { type FormEvent, type ReactNode, useState } from "react";
+
 import {
   AppDialog,
   FormInput,
@@ -14,10 +15,10 @@ import {
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/format";
-import { slugify } from "@/lib/utils";
-import { useRouter } from "@tanstack/react-router";
-import { Plus, Shapes } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { getFormString, slugify } from "@/lib/utils";
+import { rpc } from "@/rpc";
+import type { SegmentFilter } from "@kaenma/shared";
+import { contactAttributeDefinitions } from "@kaenma/shared";
 
 export interface SegmentRow {
   id: string;
@@ -28,11 +29,7 @@ export interface SegmentRow {
   updated_at: string;
 }
 
-export function SegmentsPage({
-  segments,
-}: {
-  segments: SegmentRow[];
-}): ReactNode {
+export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNode {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
 
@@ -57,9 +54,7 @@ export function SegmentsPage({
           />
         ))}
       </ResourceGrid>
-      {segments.length === 0 ? (
-        <SimpleEmpty label="最初のセグメントを作成しましょう" />
-      ) : null}
+      {segments.length === 0 ? <SimpleEmpty label="最初のセグメントを作成しましょう" /> : null}
       <AppDialog
         open={showForm}
         onOpenChange={setShowForm}
@@ -85,15 +80,12 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const name = String(form.get("name"));
+    const name = getFormString(form, "name");
     const filter: SegmentFilter = {
       kind: "condition",
       field: field as Extract<SegmentFilter, { kind: "condition" }>["field"],
-      operator: operator as Extract<
-        SegmentFilter,
-        { kind: "condition" }
-      >["operator"],
-      value: String(form.get("value")),
+      operator: operator as Extract<SegmentFilter, { kind: "condition" }>["operator"],
+      value: getFormString(form, "value"),
     };
     setBusy(true);
     await rpc("/segments", {
@@ -110,10 +102,7 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
   }
 
   return (
-    <form
-      onSubmit={(event) => void submit(event)}
-      className="flex flex-col gap-5"
-    >
+    <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
       <FormInput label="名前" name="name" required />
       <div className="grid grid-cols-2 gap-3">
         <FormNativeSelect

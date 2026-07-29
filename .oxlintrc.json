@@ -1,0 +1,75 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "builtin": true
+  },
+  "ignorePatterns": [
+    "apps/client/src/routeTree.gen.ts",
+    "apps/server/worker-configuration.d.ts",
+    "packages/database/drizzle/**",
+    "**/coverage/**",
+    "**/dist/**"
+  ],
+  "options": {
+    "reportUnusedDisableDirectives": "error",
+    "typeAware": true
+  },
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "import",
+    "vitest",
+    "jsx-a11y",
+    "promise",
+    "node"
+  ],
+  "rules": {
+    "vitest/require-to-throw-message": "off"
+  },
+  "overrides": [
+    {
+      "files": ["apps/client/**/*.ts", "apps/client/**/*.tsx"],
+      "env": {
+        "browser": true
+      }
+    },
+    {
+      "files": [
+        "apps/server/**/*.ts",
+        "apps/server/**/*.tsx",
+        "packages/channels/**/*.ts",
+        "packages/database/**/*.ts"
+      ],
+      "env": {
+        "worker": true
+      }
+    },
+    {
+      "files": ["packages/create-kaenma/**/*.ts", "packages/mcp-server/**/*.ts"],
+      "env": {
+        "node": true
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"],
+      "env": {
+        "vitest": true
+      }
+    },
+    {
+      "files": ["apps/client/src/components/ui/**/*.tsx"],
+      "rules": {
+        "jsx-a11y/click-events-have-key-events": "off",
+        "jsx-a11y/label-has-associated-control": "off",
+        "jsx-a11y/no-noninteractive-element-interactions": "off",
+        "jsx-a11y/prefer-tag-over-role": "off"
+      }
+    }
+  ]
+}

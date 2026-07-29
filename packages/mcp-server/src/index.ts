@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { KaenmaClient } from "@kaenma/sdk";
 import { z } from "zod";
+
+import { KaenmaClient } from "@kaenma/sdk";
 
 const baseUrl = process.env["KAENMA_URL"];
 const apiKey = process.env["KAENMA_API_KEY"];
@@ -127,11 +128,10 @@ server.registerTool(
         isError: true,
       };
     }
-    const result = await client.campaigns.enroll(
-      pending.campaignId,
-      pending.contactId,
-      { idempotencyKey: confirmationToken, sourceEventId: confirmationToken },
-    );
+    const result = await client.campaigns.enroll(pending.campaignId, pending.contactId, {
+      idempotencyKey: confirmationToken,
+      sourceEventId: confirmationToken,
+    });
     return jsonResult(result.data);
   },
 );
@@ -143,8 +143,6 @@ function jsonResult(value: unknown) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
     structuredContent:
-      typeof value === "object" && value !== null
-        ? (value as Record<string, unknown>)
-        : { value },
+      typeof value === "object" && value !== null ? (value as Record<string, unknown>) : { value },
   };
 }

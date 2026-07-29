@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
   adminRequestInputSchema,
   contactListInputSchema,
@@ -24,9 +25,7 @@ describe("oRPC contract schemas", () => {
   });
 
   it("rejects invalid contact list output", () => {
-    expect(() =>
-      contactListResultSchema.parse({ items: [], total: -1 }),
-    ).toThrow();
+    expect(() => contactListResultSchema.parse({ items: [], total: -1 })).toThrow();
   });
 
   it("validates workspace roles", () => {
@@ -62,9 +61,7 @@ describe("oRPC contract schemas", () => {
       "/api/auth/session",
       "/auth/session",
     ]) {
-      expect(() =>
-        adminRequestInputSchema.parse({ path, method: "GET" }),
-      ).toThrow();
+      expect(() => adminRequestInputSchema.parse({ path, method: "GET" })).toThrow();
     }
   });
 });

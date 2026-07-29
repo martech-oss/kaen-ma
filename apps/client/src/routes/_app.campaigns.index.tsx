@@ -1,10 +1,8 @@
-import { rpc } from "@/rpc";
-import { RouteError, RoutePending } from "@/components/route-status";
-import {
-  CampaignsPage,
-  type CampaignRow,
-} from "@/features/campaigns/campaign-pages";
 import { createFileRoute } from "@tanstack/react-router";
+
+import { RouteError, RoutePending } from "@/components/route-status";
+import { CampaignsPage, type CampaignRow } from "@/features/campaigns/campaign-pages";
+import { rpc } from "@/rpc";
 
 export const Route = createFileRoute("/_app/campaigns/")({
   loader: async ({ abortController }) => {

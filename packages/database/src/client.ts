@@ -1,5 +1,6 @@
-import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import { sql, type SQL } from "drizzle-orm";
+import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
+
 import { schema } from "./schema";
 
 export type Database = DrizzleD1Database<typeof schema>;
@@ -24,12 +25,8 @@ export class KaenmaDatabase {
     return new DrizzleRawStatement(this, query);
   }
 
-  public async batch<T extends readonly DrizzleRawStatement[]>(
-    statements: T,
-  ): Promise<D1Result[]> {
-    return this.binding.batch(
-      statements.map((statement) => statement.toD1Statement()),
-    );
+  public async batch<T extends readonly DrizzleRawStatement[]>(statements: T): Promise<D1Result[]> {
+    return this.binding.batch(statements.map((statement) => statement.toD1Statement()));
   }
 
   public async all<T>(query: SQL): Promise<D1Result<T>> {

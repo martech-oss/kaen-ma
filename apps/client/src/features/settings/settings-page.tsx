@@ -1,23 +1,15 @@
-import { rpc } from "@/rpc";
-import { authClient } from "@/auth-client";
-import { FormInput, PageLayout, SuccessAlert } from "@/components/app-ui";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import type { Workspace } from "@/lib/workspace";
 import { KeyRound } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 
-export function SettingsPage({
-  workspace,
-}: {
-  workspace: Workspace;
-}): ReactNode {
+import { authClient } from "@/auth-client";
+import { FormInput, PageLayout, SuccessAlert } from "@/components/app-ui";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getFormString } from "@/lib/utils";
+import type { Workspace } from "@/lib/workspace";
+import { rpc } from "@/rpc";
+
+export function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode {
   const [apiKey, setApiKey] = useState("");
 
   async function createKey(): Promise<void> {
@@ -40,9 +32,7 @@ export function SettingsPage({
               </div>
               <div>
                 <CardTitle>Workspace APIキー</CardTitle>
-                <CardDescription>
-                  SDK/MCP用。キーは作成時に一度だけ表示されます。
-                </CardDescription>
+                <CardDescription>SDK/MCP用。キーは作成時に一度だけ表示されます。</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -51,9 +41,7 @@ export function SettingsPage({
               APIキーを作成
             </Button>
             {apiKey ? (
-              <pre className="w-full overflow-x-auto rounded-lg bg-muted p-4 text-xs">
-                {apiKey}
-              </pre>
+              <pre className="w-full overflow-x-auto rounded-lg bg-muted p-4 text-xs">{apiKey}</pre>
             ) : null}
           </CardContent>
         </Card>
@@ -93,7 +81,7 @@ function TwoFactorSettings(): ReactNode {
 
   async function enable(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const password = String(new FormData(event.currentTarget).get("password"));
+    const password = getFormString(new FormData(event.currentTarget), "password");
     const result = await authClient.twoFactor.enable({
       password,
       issuer: "Kaenma",
@@ -103,7 +91,7 @@ function TwoFactorSettings(): ReactNode {
 
   async function verify(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const code = String(new FormData(event.currentTarget).get("code"));
+    const code = getFormString(new FormData(event.currentTarget), "code");
     const result = await authClient.twoFactor.verifyTotp({ code });
     if (result.data) setVerified(true);
   }
@@ -117,24 +105,14 @@ function TwoFactorSettings(): ReactNode {
           </div>
           <div>
             <CardTitle>TOTP 二要素認証</CardTitle>
-            <CardDescription>
-              認証アプリを利用してログインを保護します。
-            </CardDescription>
+            <CardDescription>認証アプリを利用してログインを保護します。</CardDescription>
           </div>
         </div>
       </CardHeader>
       <CardContent>
         {!setup ? (
-          <form
-            className="flex flex-col gap-5"
-            onSubmit={(event) => void enable(event)}
-          >
-            <FormInput
-              label="現在のパスワード"
-              name="password"
-              type="password"
-              required
-            />
+          <form className="flex flex-col gap-5" onSubmit={(event) => void enable(event)}>
+            <FormInput label="現在のパスワード" name="password" type="password" required />
             <Button variant="outline" type="submit">
               セットアップを開始
             </Button>
@@ -145,16 +123,11 @@ function TwoFactorSettings(): ReactNode {
           </SuccessAlert>
         ) : (
           <div className="flex flex-col gap-4">
-            <p className="break-all rounded-lg bg-muted p-3 font-mono text-xs">
-              {setup.totpURI}
-            </p>
+            <p className="rounded-lg bg-muted p-3 font-mono text-xs break-all">{setup.totpURI}</p>
             <pre className="overflow-x-auto rounded-lg bg-muted p-3 text-xs">
               {setup.backupCodes.join("\n")}
             </pre>
-            <form
-              className="flex items-end gap-2"
-              onSubmit={(event) => void verify(event)}
-            >
+            <form className="flex items-end gap-2" onSubmit={(event) => void verify(event)}>
               <FormInput
                 label="認証コード"
                 name="code"

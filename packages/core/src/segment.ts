@@ -18,10 +18,7 @@ const contactColumns: Partial<Record<SegmentCondition["field"], string>> = {
   updated_at: "c.updated_at",
 };
 
-export function compileSegmentFilter(
-  workspaceId: string,
-  filter: SegmentFilter,
-): CompiledSegment {
+export function compileSegmentFilter(workspaceId: string, filter: SegmentFilter): CompiledSegment {
   const params: Array<string | number | null> = [workspaceId];
   const expression = compileNode(filter, params);
   return {
@@ -30,10 +27,7 @@ export function compileSegmentFilter(
   };
 }
 
-function compileNode(
-  filter: SegmentFilter,
-  params: Array<string | number | null>,
-): string {
+function compileNode(filter: SegmentFilter, params: Array<string | number | null>): string {
   if (filter.kind === "group") {
     const joiner = filter.combinator === "and" ? " AND " : " OR ";
     return `(${filter.children.map((child) => compileNode(child, params)).join(joiner)})`;

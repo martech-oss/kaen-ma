@@ -1,10 +1,8 @@
-import { rpc } from "@/rpc";
-import { RouteError, RoutePending } from "@/components/route-status";
-import {
-  DashboardPage,
-  type DashboardData,
-} from "@/features/dashboard/dashboard-page";
 import { createFileRoute } from "@tanstack/react-router";
+
+import { RouteError, RoutePending } from "@/components/route-status";
+import { DashboardPage, type DashboardData } from "@/features/dashboard/dashboard-page";
+import { rpc } from "@/rpc";
 
 export const Route = createFileRoute("/_app/dashboard")({
   loader: async ({ abortController }) => {

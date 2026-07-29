@@ -154,10 +154,7 @@ export class ResendEmailAdapter implements ChannelAdapter {
     };
   }
 
-  public async verifyWebhook(
-    request: Request,
-    rawBody: string,
-  ): Promise<WebhookVerification> {
+  public async verifyWebhook(request: Request, rawBody: string): Promise<WebhookVerification> {
     if (!this.options.webhookSecret) return { valid: false };
     const eventId = request.headers.get("svix-id");
     const timestamp = request.headers.get("svix-timestamp");
@@ -177,11 +174,7 @@ export class ResendEmailAdapter implements ChannelAdapter {
     };
   }
 
-  public normalizeEvents(
-    payload: unknown,
-    workspaceId: string,
-    eventId?: string,
-  ): DeliveryEvent[] {
+  public normalizeEvents(payload: unknown, workspaceId: string, eventId?: string): DeliveryEvent[] {
     if (!isRecord(payload) || !isRecord(payload["data"])) return [];
     const data = payload["data"];
     const tags = isRecord(data["tags"]) ? data["tags"] : {};
@@ -198,9 +191,7 @@ export class ResendEmailAdapter implements ChannelAdapter {
     const type = normalizeResendType(eventType);
     if (!type) return [];
     const occurredAt =
-      typeof payload["created_at"] === "string"
-        ? payload["created_at"]
-        : new Date().toISOString();
+      typeof payload["created_at"] === "string" ? payload["created_at"] : new Date().toISOString();
     return [
       {
         id: eventId ?? `${messageId}:${eventType}:${occurredAt}`,
@@ -260,7 +251,12 @@ export class OutboundWebhookAdapter implements ChannelAdapter {
       },
       body,
     });
-    if (response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429) {
+    if (
+      response.status >= 400 &&
+      response.status < 500 &&
+      response.status !== 408 &&
+      response.status !== 429
+    ) {
       throw new PermanentChannelError(`Webhook rejected the event with ${response.status}`);
     }
     if (!response.ok) {
@@ -269,10 +265,7 @@ export class OutboundWebhookAdapter implements ChannelAdapter {
     return { providerMessageId: eventId, acceptedAt: new Date().toISOString() };
   }
 
-  public async verifyWebhook(
-    request: Request,
-    rawBody: string,
-  ): Promise<WebhookVerification> {
+  public async verifyWebhook(request: Request, rawBody: string): Promise<WebhookVerification> {
     const eventId = request.headers.get("kaenma-event-id");
     const timestamp = request.headers.get("kaenma-timestamp");
     const signature = request.headers.get("kaenma-signature")?.replace(/^v1=/, "");
@@ -331,9 +324,7 @@ export async function hmacHex(secret: string, value: string): Promise<string> {
     ["sign"],
   );
   const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value));
-  return [...new Uint8Array(signature)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function timingSafeEqual(left: string, right: string): boolean {

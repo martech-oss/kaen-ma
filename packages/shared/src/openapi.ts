@@ -4,6 +4,7 @@ import {
   extendZodWithOpenApi,
 } from "@asteasolutions/zod-to-openapi";
 import { z } from "zod";
+
 import {
   campaignDefinitionSchema,
   contactCreateSchema,
@@ -34,8 +35,14 @@ export function createOpenApiDocument(serverUrl: string): Record<string, unknown
   );
   const security = [{ workspaceApiKey: [] }];
   const errorResponses = {
-    "401": { description: "Authentication failed", content: { "application/json": { schema: error } } },
-    "403": { description: "Workspace access denied", content: { "application/json": { schema: error } } },
+    "401": {
+      description: "Authentication failed",
+      content: { "application/json": { schema: error } },
+    },
+    "403": {
+      description: "Workspace access denied",
+      content: { "application/json": { schema: error } },
+    },
     "422": { description: "Validation failed", content: { "application/json": { schema: error } } },
   };
 

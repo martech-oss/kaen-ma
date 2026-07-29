@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": [
+    "apps/client/src/routeTree.gen.ts",
+    "apps/server/worker-configuration.d.ts",
+    "packages/database/drizzle/**",
+    "**/coverage/**",
+    "**/dist/**"
+  ],
+  "printWidth": 100,
+  "sortImports": {
+    "internalPattern": ["@/", "@kaenma/", "~/", "#"]
+  },
+  "sortTailwindcss": {
+    "functions": ["cn", "clsx", "cva"],
+    "stylesheet": "./apps/client/src/styles.css"
+  }
+}

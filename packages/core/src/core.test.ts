@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+
 import type { CampaignDefinition } from "@kaenma/shared";
+
 import {
   canTransitionJob,
   compileSegmentFilter,

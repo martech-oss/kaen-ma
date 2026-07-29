@@ -1,5 +1,6 @@
 import { dehydrate, hydrate } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
+
 import { createQueryClient } from "@/lib/query-client";
 
 describe("query client", () => {
@@ -13,9 +14,7 @@ describe("query client", () => {
     const target = createQueryClient();
     hydrate(target, dehydrate(source));
 
-    expect(
-      target.getQueryData<{ createdAt: Date }>(["snapshot", timestamp]),
-    ).toEqual({
+    expect(target.getQueryData<{ createdAt: Date }>(["snapshot", timestamp])).toEqual({
       createdAt: timestamp,
     });
   });

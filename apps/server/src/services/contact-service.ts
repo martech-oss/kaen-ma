@@ -1,17 +1,6 @@
-import type {
-  ContactListInput,
-  ContactListResult,
-  ContactSummary,
-} from "@kaenma/contract";
-import {
-  WorkspaceRepository,
-  type KaenmaDatabase,
-} from "@kaenma/database";
-import type {
-  Contact,
-  ContactCreate,
-  WorkspaceContext,
-} from "@kaenma/shared";
+import type { ContactListInput, ContactListResult, ContactSummary } from "@kaenma/contract";
+import { WorkspaceRepository, type KaenmaDatabase } from "@kaenma/database";
+import type { Contact, ContactCreate, WorkspaceContext } from "@kaenma/shared";
 
 export async function listContacts(
   database: KaenmaDatabase,
@@ -20,11 +9,7 @@ export async function listContacts(
 ): Promise<ContactListResult> {
   const repository = new WorkspaceRepository(database, workspace);
   const page = await repository.listContacts(input);
-  const items = await attachContactRelations(
-    database,
-    workspace.workspaceId,
-    page.items,
-  );
+  const items = await attachContactRelations(database, workspace.workspaceId, page.items);
 
   return {
     items,
@@ -83,18 +68,9 @@ async function attachContactRelations(
   const tagRows = relationResults[0]!;
   const listRows = relationResults[1]!;
   const accountRows = relationResults[2]!;
-  const tagsByContact = new Map<
-    string,
-    ContactSummary["tags"]
-  >();
-  const listsByContact = new Map<
-    string,
-    ContactSummary["lists"]
-  >();
-  const accountsByContact = new Map<
-    string,
-    ContactSummary["accounts"]
-  >();
+  const tagsByContact = new Map<string, ContactSummary["tags"]>();
+  const listsByContact = new Map<string, ContactSummary["lists"]>();
+  const accountsByContact = new Map<string, ContactSummary["accounts"]>();
 
   for (const row of tagRows.results as Array<{
     contact_id: string;

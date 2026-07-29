@@ -1,4 +1,8 @@
-import { rpc } from "@/rpc";
+import { useRouter } from "@tanstack/react-router";
+import { ExternalLink, FileStack, Globe2, Pencil, Plus } from "lucide-react";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { toast } from "sonner";
+
 import {
   AppDialog,
   EmptyState,
@@ -11,13 +15,7 @@ import {
   PageLayout,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FieldGroup } from "@/components/ui/field";
 import {
   Table,
@@ -28,18 +26,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { LandingPageRow } from "@/features/website/website-api";
-import {
-  ArchiveConfirm,
-  CopyButton,
-  PublishStatusBadge,
-} from "@/features/website/website-shared";
+import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { slugify } from "@/lib/utils";
+import { getFormString, slugify } from "@/lib/utils";
+import { rpc } from "@/rpc";
 import type { ContentDocument } from "@kaenma/shared";
-import { useRouter } from "@tanstack/react-router";
-import { ExternalLink, FileStack, Globe2, Pencil, Plus } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
-import { toast } from "sonner";
 
 export function LandingPagesPage({
   items,
@@ -93,9 +84,7 @@ export function LandingPagesPage({
         <Card>
           <CardHeader>
             <CardTitle>ページ一覧</CardTitle>
-            <CardDescription>
-              公開URLと現在のバージョンを管理します。
-            </CardDescription>
+            <CardDescription>公開URLと現在のバージョンを管理します。</CardDescription>
           </CardHeader>
           <CardContent className="px-0">
             <Table>
@@ -116,9 +105,7 @@ export function LandingPagesPage({
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <span className="font-medium">{item.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            /{item.slug}
-                          </span>
+                          <span className="text-xs text-muted-foreground">/{item.slug}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -138,6 +125,7 @@ export function LandingPagesPage({
                                   href={publicUrl}
                                   target="_blank"
                                   rel="noreferrer"
+                                  aria-label={`${item.name}を表示`}
                                 />
                               }
                             >
@@ -156,10 +144,7 @@ export function LandingPagesPage({
                           >
                             <Pencil />
                           </Button>
-                          <ArchiveConfirm
-                            label={item.name}
-                            onConfirm={() => archive(item)}
-                          />
+                          <ArchiveConfirm label={item.name} onConfirm={() => archive(item)} />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -178,11 +163,7 @@ export function LandingPagesPage({
         description="保存するたびに新しいページバージョンを作成します。"
         className="sm:max-w-2xl"
       >
-        <LandingPageEditor
-          key={editing?.id ?? "new"}
-          item={editing}
-          onSaved={refresh}
-        />
+        <LandingPageEditor key={editing?.id ?? "new"} item={editing} onSaved={refresh} />
       </AppDialog>
     </PageLayout>
   );
@@ -190,10 +171,7 @@ export function LandingPagesPage({
 
 function LandingSummary({ items }: { items: LandingPageRow[] }): ReactNode {
   const published = items.filter((item) => item.status === "published").length;
-  const latestVersion = items.reduce(
-    (version, item) => Math.max(version, item.version),
-    0,
-  );
+  const latestVersion = items.reduce((version, item) => Math.max(version, item.version), 0);
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       {[
@@ -245,7 +223,7 @@ function LandingPageEditor({
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    const name = String(formData.get("name") ?? "").trim();
+    const name = getFormString(formData, "name").trim();
     setBusy(true);
     setError("");
     try {
@@ -253,13 +231,13 @@ function LandingPageEditor({
         method: item ? "PATCH" : "POST",
         body: JSON.stringify({
           name,
-          slug: String(formData.get("slug") ?? "").trim() || slugify(name),
+          slug: getFormString(formData, "slug").trim() || slugify(name),
           status: formData.get("status"),
           content: buildLandingContent({
-            headline: String(formData.get("headline") ?? ""),
-            body: String(formData.get("body") ?? ""),
-            ctaLabel: String(formData.get("ctaLabel") ?? ""),
-            ctaUrl: String(formData.get("ctaUrl") ?? ""),
+            headline: getFormString(formData, "headline"),
+            body: getFormString(formData, "body"),
+            ctaLabel: getFormString(formData, "ctaLabel"),
+            ctaUrl: getFormString(formData, "ctaUrl"),
           }),
         }),
       });
@@ -291,11 +269,7 @@ function LandingPageEditor({
             placeholder="spring-campaign"
           />
         </div>
-        <FormNativeSelect
-          label="公開状態"
-          name="status"
-          defaultValue={item?.status ?? "draft"}
-        >
+        <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
           <FormSelectOption value="draft">下書き</FormSelectOption>
           <FormSelectOption value="published">公開</FormSelectOption>
         </FormNativeSelect>
@@ -306,13 +280,7 @@ function LandingPageEditor({
           placeholder="マーケティングを、もっとシンプルに。"
           required
         />
-        <FormTextarea
-          label="本文"
-          name="body"
-          defaultValue={current.body}
-          rows={4}
-          required
-        />
+        <FormTextarea label="本文" name="body" defaultValue={current.body} rows={4} required />
         <div className="grid gap-4 sm:grid-cols-2">
           <FormInput
             label="CTAラベル"
