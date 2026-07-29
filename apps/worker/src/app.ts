@@ -21,6 +21,7 @@ import {
 } from "@kaenma/shared";
 import { createOpenApiDocument } from "@kaenma/shared/openapi";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { z } from "zod";
 import { createAuth } from "./auth";
 import {
@@ -41,6 +42,14 @@ import {
 const app = new Hono<AppEnvironment>();
 
 app.use("*", requestContext);
+app.use(
+  "/api/public/*",
+  cors({
+    origin: "*",
+    allowHeaders: ["Content-Type"],
+    allowMethods: ["GET", "POST", "OPTIONS"],
+  }),
+);
 app.on(["GET", "POST"], "/api/auth/*", (context) => {
   const requestOrigin = new URL(context.req.url).origin;
   return createAuth(context.env, requestOrigin).handler(context.req.raw);
@@ -1091,12 +1100,19 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
 
   api.get("/pages", async (context) => {
     const result = await context.env.DB.prepare(
-      `SELECT id, name, slug, status, current_version_id, created_at, updated_at
-       FROM landing_pages WHERE workspace_id = ? ORDER BY updated_at DESC`,
+      `SELECT lp.id, lp.name, lp.slug, lp.status, lp.current_version_id,
+              lp.created_at, lp.updated_at, lpv.version, lpv.content_document
+       FROM landing_pages lp
+       LEFT JOIN landing_page_versions lpv
+         ON lpv.workspace_id = lp.workspace_id AND lpv.id = lp.current_version_id
+       WHERE lp.workspace_id = ? AND lp.status != 'archived'
+       ORDER BY lp.updated_at DESC`,
     )
       .bind(context.get("workspace").workspaceId)
       .all();
-    return context.json({ data: result.results });
+    return context.json({
+      data: result.results.map(parseJsonColumns(["content_document"])),
+    });
   });
 
   api.post("/pages", requireRole("marketer"), async (context) => {
@@ -1142,6 +1158,78 @@ function registerContentAndIntegrationRoutes(api: Hono<AppEnvironment>): void {
       ),
     ]);
     return context.json({ data: { id, versionId } }, 201);
+  });
+
+  api.patch("/pages/:id", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191),
+        slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+        status: z.enum(["draft", "published"]),
+        content: contentDocumentSchema,
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspaceId = context.get("workspace").workspaceId;
+    const page = await context.env.DB.prepare(
+      `SELECT id, status,
+              COALESCE((SELECT MAX(version) FROM landing_page_versions
+                        WHERE workspace_id = ? AND page_id = landing_pages.id), 0) AS version
+       FROM landing_pages WHERE workspace_id = ? AND id = ?`,
+    )
+      .bind(workspaceId, workspaceId, context.req.param("id"))
+      .first<{ id: string; status: string; version: number }>();
+    if (!page) return apiError(context, 404, "page_not_found", "ページが見つかりません");
+    if (page.status === "archived") {
+      return apiError(context, 409, "page_archived", "アーカイブ済みページは編集できません");
+    }
+    const versionId = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.batch([
+      context.env.DB.prepare(
+        `INSERT INTO landing_page_versions
+         (id, workspace_id, page_id, version, content_document, published_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        versionId,
+        workspaceId,
+        page.id,
+        page.version + 1,
+        JSON.stringify(parsed.data.content),
+        parsed.data.status === "published" ? now : null,
+        now,
+      ),
+      context.env.DB.prepare(
+        `UPDATE landing_pages
+         SET name = ?, slug = ?, status = ?, current_version_id = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ?`,
+      ).bind(
+        parsed.data.name,
+        parsed.data.slug,
+        parsed.data.status,
+        versionId,
+        now,
+        workspaceId,
+        page.id,
+      ),
+    ]);
+    return context.json({ data: { id: page.id, versionId } });
+  });
+
+  api.post("/pages/:id/archive", requireRole("admin"), async (context) => {
+    const result = await context.env.DB.prepare(
+      `UPDATE landing_pages SET status = 'archived', updated_at = ?
+       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
+    )
+      .bind(
+        new Date().toISOString(),
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { archived: true } })
+      : apiError(context, 404, "page_not_found", "ページが見つかりません");
   });
 
   api.get("/subscription-topics", async (context) => {
@@ -2176,11 +2264,29 @@ function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
 }
 
 function registerFormRoutes(api: Hono<AppEnvironment>): void {
+  const allowedDomainsSchema = z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(1)
+        .max(253)
+        .transform(normalizeDomain)
+        .refine(isValidDomain, "有効なドメインを入力してください"),
+    )
+    .max(50);
+
   api.get("/forms", async (context) => {
     const result = await context.env.DB.prepare(
-      `SELECT id, name, slug, status, version, definition, allowed_domains,
-              turnstile_enabled, success_message, created_at, updated_at
-       FROM forms WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
+      `SELECT f.id, f.name, f.slug, f.status, f.version, f.definition,
+              f.allowed_domains, f.turnstile_enabled, f.success_message,
+              f.created_at, f.updated_at,
+              (SELECT COUNT(*) FROM form_submissions fs
+               WHERE fs.workspace_id = f.workspace_id AND fs.form_id = f.id)
+                AS submission_count
+       FROM forms f
+       WHERE f.workspace_id = ? AND f.status != 'archived'
+       ORDER BY f.updated_at DESC LIMIT 200`,
     )
       .bind(context.get("workspace").workspaceId)
       .all();
@@ -2195,7 +2301,7 @@ function registerFormRoutes(api: Hono<AppEnvironment>): void {
       slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
       status: z.enum(["draft", "published"]).default("draft"),
       definition: z.record(z.string(), z.unknown()),
-      allowedDomains: z.array(z.string()).default([]),
+      allowedDomains: allowedDomainsSchema.default([]),
       turnstileEnabled: z.boolean().default(true),
       successMessage: z.string().max(500).default("ありがとうございます。"),
     });
@@ -2221,9 +2327,289 @@ function registerFormRoutes(api: Hono<AppEnvironment>): void {
         parsed.data.successMessage,
         now,
         now,
+    )
+      .run();
+    return context.json({ data: { id } }, 201);
+  });
+
+  api.patch("/forms/:id", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({
+        name: z.string().trim().min(1).max(191),
+        slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+        status: z.enum(["draft", "published"]),
+        definition: z.record(z.string(), z.unknown()),
+        allowedDomains: allowedDomainsSchema.default([]),
+        turnstileEnabled: z.boolean().default(true),
+        successMessage: z.string().max(500).default("ありがとうございます。"),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const result = await context.env.DB.prepare(
+      `UPDATE forms
+       SET name = ?, slug = ?, status = ?, version = version + 1,
+           definition = ?, allowed_domains = ?, turnstile_enabled = ?,
+           success_message = ?, updated_at = ?
+       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
+    )
+      .bind(
+        parsed.data.name,
+        parsed.data.slug,
+        parsed.data.status,
+        JSON.stringify(parsed.data.definition),
+        JSON.stringify(parsed.data.allowedDomains),
+        parsed.data.turnstileEnabled ? 1 : 0,
+        parsed.data.successMessage,
+        new Date().toISOString(),
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { id: context.req.param("id") } })
+      : apiError(context, 404, "form_not_found", "フォームが見つかりません");
+  });
+
+  api.post("/forms/:id/archive", requireRole("admin"), async (context) => {
+    const result = await context.env.DB.prepare(
+      `UPDATE forms SET status = 'archived', updated_at = ?
+       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
+    )
+      .bind(
+        new Date().toISOString(),
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { archived: true } })
+      : apiError(context, 404, "form_not_found", "フォームが見つかりません");
+  });
+
+  registerWebsiteRoutes(api);
+}
+
+function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
+  const messageInputSchema = z.object({
+    name: z.string().trim().min(1).max(191),
+    status: z.enum(["draft", "published"]).default("draft"),
+    headline: z.string().trim().min(1).max(191),
+    body: z.string().max(2_000).default(""),
+    ctaLabel: z.string().max(100).default(""),
+    ctaUrl: z.url().max(2_000).nullable().default(null),
+    pagePattern: z.string().trim().min(1).max(500).default("*"),
+    startsAt: z.iso.datetime().nullable().default(null),
+    endsAt: z.iso.datetime().nullable().default(null),
+  });
+
+  api.get("/site-messages", async (context) => {
+    const result = await context.env.DB.prepare(
+      `SELECT id, name, status, headline, body, cta_label, cta_url,
+              page_pattern, starts_at, ends_at, impression_count, click_count,
+              created_at, updated_at
+       FROM site_messages
+       WHERE workspace_id = ? AND status != 'archived'
+       ORDER BY updated_at DESC`,
+    )
+      .bind(context.get("workspace").workspaceId)
+      .all();
+    return context.json({ data: result.results });
+  });
+
+  api.post("/site-messages", requireRole("marketer"), async (context) => {
+    const parsed = messageInputSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO site_messages
+       (id, workspace_id, name, status, headline, body, cta_label, cta_url,
+        page_pattern, starts_at, ends_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        id,
+        context.get("workspace").workspaceId,
+        parsed.data.name,
+        parsed.data.status,
+        parsed.data.headline,
+        parsed.data.body,
+        parsed.data.ctaLabel,
+        parsed.data.ctaUrl,
+        parsed.data.pagePattern,
+        parsed.data.startsAt,
+        parsed.data.endsAt,
+        now,
+        now,
       )
       .run();
     return context.json({ data: { id } }, 201);
+  });
+
+  api.patch("/site-messages/:id", requireRole("marketer"), async (context) => {
+    const parsed = messageInputSchema.safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const result = await context.env.DB.prepare(
+      `UPDATE site_messages
+       SET name = ?, status = ?, headline = ?, body = ?, cta_label = ?,
+           cta_url = ?, page_pattern = ?, starts_at = ?, ends_at = ?, updated_at = ?
+       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
+    )
+      .bind(
+        parsed.data.name,
+        parsed.data.status,
+        parsed.data.headline,
+        parsed.data.body,
+        parsed.data.ctaLabel,
+        parsed.data.ctaUrl,
+        parsed.data.pagePattern,
+        parsed.data.startsAt,
+        parsed.data.endsAt,
+        new Date().toISOString(),
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { id: context.req.param("id") } })
+      : apiError(context, 404, "site_message_not_found", "サイトメッセージが見つかりません");
+  });
+
+  api.post("/site-messages/:id/archive", requireRole("admin"), async (context) => {
+    const now = new Date().toISOString();
+    const result = await context.env.DB.prepare(
+      `UPDATE site_messages
+       SET status = 'archived', archived_at = ?, updated_at = ?
+       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
+    )
+      .bind(
+        now,
+        now,
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { archived: true } })
+      : apiError(context, 404, "site_message_not_found", "サイトメッセージが見つかりません");
+  });
+
+  api.get("/site-tracking", async (context) => {
+    const workspace = context.get("workspace");
+    const [settings, summary, topPages, recentEvents, organization] = await Promise.all([
+      context.env.DB.prepare(
+        `SELECT enabled, allowed_domains, consent_mode, created_at, updated_at
+         FROM site_tracking_settings WHERE workspace_id = ?`,
+      )
+        .bind(workspace.workspaceId)
+        .first<{
+          enabled: number;
+          allowed_domains: string;
+          consent_mode: string;
+          created_at: string;
+          updated_at: string;
+        }>(),
+      context.env.DB.prepare(
+        `SELECT COUNT(*) AS page_views,
+                COUNT(DISTINCT visitor_id) AS unique_visitors,
+                COUNT(DISTINCT contact_id) AS identified_contacts
+         FROM contact_events
+         WHERE workspace_id = ? AND type = 'page_viewed'
+           AND occurred_at >= datetime('now', '-30 days')`,
+      )
+        .bind(workspace.workspaceId)
+        .first<{
+          page_views: number;
+          unique_visitors: number;
+          identified_contacts: number;
+        }>(),
+      context.env.DB.prepare(
+        `SELECT resource_id AS url, COUNT(*) AS views
+         FROM contact_events
+         WHERE workspace_id = ? AND type = 'page_viewed'
+           AND occurred_at >= datetime('now', '-30 days')
+           AND resource_id IS NOT NULL
+         GROUP BY resource_id ORDER BY views DESC LIMIT 10`,
+      )
+        .bind(workspace.workspaceId)
+        .all(),
+      context.env.DB.prepare(
+        `SELECT visitor_id, contact_id, resource_id, properties, occurred_at
+         FROM contact_events
+         WHERE workspace_id = ? AND type = 'page_viewed'
+         ORDER BY occurred_at DESC LIMIT 20`,
+      )
+        .bind(workspace.workspaceId)
+        .all(),
+      context.env.DB.prepare("SELECT slug FROM organization WHERE id = ?")
+        .bind(workspace.workspaceId)
+        .first<{ slug: string }>(),
+    ]);
+    return context.json({
+      data: {
+        enabled: settings?.enabled === 1,
+        allowedDomains: settings
+          ? (JSON.parse(settings.allowed_domains) as string[])
+          : [],
+        consentMode: settings?.consent_mode ?? "required",
+        workspaceSlug: organization?.slug ?? "",
+        summary: {
+          pageViews: Number(summary?.page_views ?? 0),
+          uniqueVisitors: Number(summary?.unique_visitors ?? 0),
+          identifiedContacts: Number(summary?.identified_contacts ?? 0),
+        },
+        topPages: topPages.results,
+        recentEvents: recentEvents.results.map(parseJsonColumns(["properties"])),
+        updatedAt: settings?.updated_at ?? null,
+      },
+    });
+  });
+
+  api.put("/site-tracking", requireRole("admin"), async (context) => {
+    const parsed = z
+      .object({
+        enabled: z.boolean(),
+        allowedDomains: z
+          .array(
+            z
+              .string()
+              .trim()
+              .min(1)
+              .max(253)
+              .transform(normalizeDomain)
+              .refine(isValidDomain, "有効なドメインを入力してください"),
+          )
+          .max(50),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    if (parsed.data.enabled && parsed.data.allowedDomains.length === 0) {
+      return apiError(
+        context,
+        422,
+        "tracking_domain_required",
+        "トラッキングを有効にするには許可ドメインが必要です",
+      );
+    }
+    const now = new Date().toISOString();
+    await context.env.DB.prepare(
+      `INSERT INTO site_tracking_settings
+       (workspace_id, enabled, allowed_domains, consent_mode, created_at, updated_at)
+       VALUES (?, ?, ?, 'required', ?, ?)
+       ON CONFLICT(workspace_id) DO UPDATE SET
+         enabled = excluded.enabled,
+         allowed_domains = excluded.allowed_domains,
+         updated_at = excluded.updated_at`,
+    )
+      .bind(
+        context.get("workspace").workspaceId,
+        parsed.data.enabled ? 1 : 0,
+        JSON.stringify([...new Set(parsed.data.allowedDomains)]),
+        now,
+        now,
+      )
+      .run();
+    return context.json({ data: { saved: true } });
   });
 }
 
@@ -2595,6 +2981,78 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     return context.html(rendered.html);
   });
 
+  publicApp.get(
+    "/api/public/forms/:workspaceSlug/:formSlug/embed.js",
+    async (context) => {
+      const form = await context.env.DB.prepare(
+        `SELECT f.name, f.definition
+         FROM forms f JOIN organization o ON o.id = f.workspace_id
+         WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
+      )
+        .bind(context.req.param("workspaceSlug"), context.req.param("formSlug"))
+        .first<{ name: string; definition: string }>();
+      if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+      let style = "inline";
+      try {
+        const definition = JSON.parse(form.definition) as unknown;
+        if (
+          isRecord(definition) &&
+          ["inline", "floating-bar", "floating-box", "modal"].includes(
+            String(definition["style"]),
+          )
+        ) {
+          style = String(definition["style"]);
+        }
+      } catch {
+        // Use the inline fallback for old definitions.
+      }
+      const formUrl = new URL(
+        `/f/${context.req.param("workspaceSlug")}/${context.req.param("formSlug")}`,
+        context.req.url,
+      ).toString();
+      return new Response(formEmbedScript(formUrl, form.name, style), {
+        headers: {
+          "Content-Type": "application/javascript; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    },
+  );
+
+  publicApp.get("/f/:workspaceSlug/:formSlug", async (context) => {
+    const form = await context.env.DB.prepare(
+      `SELECT f.name, f.definition, f.allowed_domains
+       FROM forms f JOIN organization o ON o.id = f.workspace_id
+       WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
+    )
+      .bind(context.req.param("workspaceSlug"), context.req.param("formSlug"))
+      .first<{ name: string; definition: string; allowed_domains: string }>();
+    if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
+    let definition: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(form.definition) as unknown;
+      if (isRecord(parsed)) definition = parsed;
+    } catch {
+      // Render the required email field when an old definition cannot be parsed.
+    }
+    const domains = JSON.parse(form.allowed_domains) as string[];
+    const frameAncestors =
+      domains.length > 0
+        ? domains.flatMap((domain) => [
+            `https://${domain}`,
+            `https://*.${domain}`,
+            `http://${domain}`,
+            `http://*.${domain}`,
+          ])
+        : ["https:", "http:"];
+    context.header(
+      "Content-Security-Policy",
+      `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self' ${frameAncestors.join(" ")}`,
+    );
+    return context.html(renderPublicForm(form.name, definition, context.req.url));
+  });
+
   publicApp.post("/f/:workspaceSlug/:formSlug", async (context) => {
     const form = await context.env.DB.prepare(
       `SELECT f.id, f.workspace_id, f.allowed_domains, f.turnstile_enabled, f.success_message
@@ -2612,7 +3070,13 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
     const allowedDomains = JSON.parse(form.allowed_domains) as string[];
     const origin = context.req.header("origin");
-    if (origin && allowedDomains.length > 0 && !originAllowed(origin, allowedDomains)) {
+    const requestHostname = new URL(context.req.url).hostname;
+    if (
+      origin &&
+      new URL(origin).hostname !== requestHostname &&
+      allowedDomains.length > 0 &&
+      !originAllowed(origin, allowedDomains)
+    ) {
       return apiError(context, 403, "form_origin_denied", "このドメインからは送信できません");
     }
     const body = await safeJson(context);
@@ -2648,12 +3112,14 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
       if (existing) {
         await context.env.DB.prepare(
           `UPDATE contacts SET first_name = COALESCE(?, first_name),
-           last_name = COALESCE(?, last_name), updated_at = ?
+           last_name = COALESCE(?, last_name), phone = COALESCE(?, phone),
+           updated_at = ?
            WHERE workspace_id = ? AND id = ?`,
         )
           .bind(
             stringOrNull(body["firstName"]),
             stringOrNull(body["lastName"]),
+            stringOrNull(body["phone"]),
             now,
             form.workspace_id,
             contactId,
@@ -2662,9 +3128,9 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
       } else {
         await context.env.DB.prepare(
           `INSERT INTO contacts
-           (id, workspace_id, email, first_name, last_name, stage, score, status,
-            custom_fields, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, 'lead', 0, 'active', '{}', ?, ?)`,
+           (id, workspace_id, email, first_name, last_name, phone, stage, score,
+            status, custom_fields, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'lead', 0, 'active', '{}', ?, ?)`,
         )
           .bind(
             contactId,
@@ -2672,6 +3138,7 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
             email,
             stringOrNull(body["firstName"]),
             stringOrNull(body["lastName"]),
+            stringOrNull(body["phone"]),
             now,
             now,
           )
@@ -2715,19 +3182,46 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     return context.json({ data: { accepted: true, message: form.success_message } }, 202);
   });
 
+  publicApp.get(
+    "/api/public/site-tracking/:workspaceSlug/script.js",
+    async (context) => {
+    const trackingEndpoint = new URL(
+      `/api/public/track/${context.req.param("workspaceSlug")}`,
+      context.req.url,
+    ).toString();
+    const messagesEndpoint = new URL(
+      `/api/public/site-messages/${context.req.param("workspaceSlug")}`,
+      context.req.url,
+    ).toString();
+    return new Response(siteTrackingScript(trackingEndpoint, messagesEndpoint), {
+      headers: {
+        "Content-Type": "application/javascript; charset=utf-8",
+        "Cache-Control": "public, max-age=300",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+    },
+  );
+
   publicApp.post("/api/public/track/:workspaceSlug", async (context) => {
-    const workspace = await context.env.DB.prepare(
-      "SELECT id FROM organization WHERE slug = ?",
-    )
-      .bind(context.req.param("workspaceSlug"))
-      .first<{ id: string }>();
-    if (!workspace) return apiError(context, 404, "workspace_not_found", "Workspaceがありません");
+    const workspace = await loadPublicTrackingWorkspace(
+      context.env.DB,
+      context.req.param("workspaceSlug"),
+    );
+    if (!workspace) {
+      return context.json({ data: { accepted: false, identityIssued: false } }, 202);
+    }
+    const origin = context.req.header("origin");
+    if (origin && !originAllowed(origin, workspace.allowedDomains)) {
+      return apiError(context, 403, "tracking_origin_denied", "このドメインは許可されていません");
+    }
     const parsed = z
       .object({
         consent: z.literal(true),
         visitorId: z.string().uuid().optional(),
+        email: z.email().optional(),
         type: z.enum(["page_viewed", "custom_event"]),
-        resourceId: z.string().max(500).optional(),
+        resourceId: z.string().max(2_000).optional(),
         properties: z.record(z.string(), z.unknown()).default({}),
       })
       .safeParse(await safeJson(context));
@@ -2736,15 +3230,24 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     }
     const visitorId = parsed.data.visitorId ?? crypto.randomUUID();
     const now = new Date().toISOString();
+    const contact = parsed.data.email
+      ? await context.env.DB.prepare(
+          `SELECT id FROM contacts
+           WHERE workspace_id = ? AND email = ? AND status != 'archived'`,
+        )
+          .bind(workspace.id, parsed.data.email.toLowerCase())
+          .first<{ id: string }>()
+      : null;
     await context.env.DB.prepare(
       `INSERT INTO contact_events
-       (id, workspace_id, visitor_id, type, resource_type, resource_id,
-        properties, occurred_at, created_at)
-       VALUES (?, ?, ?, ?, 'page', ?, ?, ?, ?)`,
+       (id, workspace_id, contact_id, visitor_id, type, resource_type,
+        resource_id, properties, occurred_at, created_at)
+       VALUES (?, ?, ?, ?, ?, 'page', ?, ?, ?, ?)`,
     )
       .bind(
         uuidv7(),
         workspace.id,
+        contact?.id ?? null,
         visitorId,
         parsed.data.type,
         parsed.data.resourceId ?? null,
@@ -2753,8 +3256,127 @@ function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
         now,
       )
       .run();
-    return context.json({ data: { accepted: true, visitorId, identityIssued: true } }, 202);
+    return context.json(
+      {
+        data: {
+          accepted: true,
+          visitorId,
+          identified: Boolean(contact),
+          identityIssued: true,
+        },
+      },
+      202,
+    );
   });
+
+  publicApp.get("/api/public/site-messages/:workspaceSlug", async (context) => {
+    const workspace = await loadPublicTrackingWorkspace(
+      context.env.DB,
+      context.req.param("workspaceSlug"),
+    );
+    const visitorId = context.req.query("visitorId");
+    const pageUrl = context.req.query("url") ?? "";
+    if (!workspace || !visitorId || !z.string().uuid().safeParse(visitorId).success) {
+      return context.json({ data: [] });
+    }
+    const origin = context.req.header("origin");
+    if (origin && !originAllowed(origin, workspace.allowedDomains)) {
+      return context.json({ data: [] });
+    }
+    const identity = await context.env.DB.prepare(
+      `SELECT contact_id FROM contact_events
+       WHERE workspace_id = ? AND visitor_id = ? AND contact_id IS NOT NULL
+       ORDER BY occurred_at DESC LIMIT 1`,
+    )
+      .bind(workspace.id, visitorId)
+      .first<{ contact_id: string }>();
+    if (!identity) return context.json({ data: [] });
+    const result = await context.env.DB.prepare(
+      `SELECT id, headline, body, cta_label, cta_url, page_pattern
+       FROM site_messages
+       WHERE workspace_id = ? AND status = 'published'
+         AND (starts_at IS NULL OR starts_at <= ?)
+         AND (ends_at IS NULL OR ends_at >= ?)
+       ORDER BY updated_at DESC LIMIT 20`,
+    )
+      .bind(workspace.id, new Date().toISOString(), new Date().toISOString())
+      .all<{
+        id: string;
+        headline: string;
+        body: string;
+        cta_label: string;
+        cta_url: string | null;
+        page_pattern: string;
+      }>();
+    return context.json({
+      data: result.results
+        .filter((message) => pagePatternMatches(pageUrl, message.page_pattern))
+        .slice(0, 1),
+    });
+  });
+
+  publicApp.post(
+    "/api/public/site-messages/:workspaceSlug/:messageId/events",
+    async (context) => {
+      const workspace = await loadPublicTrackingWorkspace(
+        context.env.DB,
+        context.req.param("workspaceSlug"),
+      );
+      if (!workspace) return context.json({ data: { accepted: false } }, 202);
+      const origin = context.req.header("origin");
+      if (origin && !originAllowed(origin, workspace.allowedDomains)) {
+        return apiError(context, 403, "tracking_origin_denied", "このドメインは許可されていません");
+      }
+      const parsed = z
+        .object({
+          visitorId: z.string().uuid(),
+          type: z.enum(["impression", "click"]),
+        })
+        .safeParse(await safeJson(context));
+      if (!parsed.success) return context.json({ data: { accepted: false } }, 202);
+      const identity = await context.env.DB.prepare(
+        `SELECT contact_id FROM contact_events
+         WHERE workspace_id = ? AND visitor_id = ? AND contact_id IS NOT NULL
+         ORDER BY occurred_at DESC LIMIT 1`,
+      )
+        .bind(workspace.id, parsed.data.visitorId)
+        .first<{ contact_id: string }>();
+      if (!identity) return context.json({ data: { accepted: false } }, 202);
+      const now = new Date().toISOString();
+      const messageId = context.req.param("messageId");
+      const counter =
+        parsed.data.type === "impression" ? "impression_count" : "click_count";
+      const result = await context.env.DB.prepare(
+        `UPDATE site_messages SET ${counter} = ${counter} + 1, updated_at = updated_at
+         WHERE workspace_id = ? AND id = ? AND status = 'published'`,
+      )
+        .bind(workspace.id, messageId)
+        .run();
+      if (result.meta.changes !== 1) {
+        return context.json({ data: { accepted: false } }, 202);
+      }
+      await context.env.DB.prepare(
+        `INSERT INTO contact_events
+         (id, workspace_id, contact_id, visitor_id, type, resource_type,
+          resource_id, properties, occurred_at, created_at)
+         VALUES (?, ?, ?, ?, ?, 'site_message', ?, '{}', ?, ?)`,
+      )
+        .bind(
+          uuidv7(),
+          workspace.id,
+          identity.contact_id,
+          parsed.data.visitorId,
+          parsed.data.type === "impression"
+            ? "site_message_viewed"
+            : "site_message_clicked",
+          messageId,
+          now,
+          now,
+        )
+        .run();
+      return context.json({ data: { accepted: true } }, 202);
+    },
+  );
 
   publicApp.get("/t/:token", async (context) => {
     const payload = await verifySignedToken(
@@ -3210,6 +3832,187 @@ function originAllowed(origin: string, allowedDomains: string[]): boolean {
   }
 }
 
+function normalizeDomain(value: string): string {
+  try {
+    return new URL(value.includes("://") ? value : `https://${value}`).hostname
+      .toLowerCase()
+      .replace(/\.$/, "");
+  } catch {
+    return value.toLowerCase().replace(/^https?:\/\//, "").split("/")[0] ?? "";
+  }
+}
+
+function isValidDomain(value: string): boolean {
+  return (
+    value === "localhost" ||
+    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(value)
+  );
+}
+
+async function loadPublicTrackingWorkspace(
+  database: D1Database,
+  workspaceSlug: string,
+): Promise<{ id: string; allowedDomains: string[] } | null> {
+  const row = await database.prepare(
+    `SELECT o.id, sts.allowed_domains
+     FROM organization o JOIN site_tracking_settings sts
+       ON sts.workspace_id = o.id
+     WHERE o.slug = ? AND sts.enabled = 1`,
+  )
+    .bind(workspaceSlug)
+    .first<{ id: string; allowed_domains: string }>();
+  if (!row) return null;
+  try {
+    return {
+      id: row.id,
+      allowedDomains: JSON.parse(row.allowed_domains) as string[],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function pagePatternMatches(pageUrl: string, pattern: string): boolean {
+  if (pattern === "*") return true;
+  let path = pageUrl;
+  try {
+    const url = new URL(pageUrl);
+    path = `${url.pathname}${url.search}`;
+  } catch {
+    // Use the supplied path as-is.
+  }
+  const expression = pattern
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(`^${expression}$`).test(path);
+}
+
+function siteTrackingScript(
+  trackingEndpoint: string,
+  messagesEndpoint: string,
+): string {
+  return `(() => {
+  if (window.kaenma) return;
+  const endpoint = ${JSON.stringify(trackingEndpoint)};
+  const messagesEndpoint = ${JSON.stringify(messagesEndpoint)};
+  const settings = window.kaenmaSettings || {};
+  const visitorKey = "kaenma_visitor_" + endpoint.split("/").pop();
+  let email = typeof settings.email === "string" ? settings.email : undefined;
+  let visitorId = localStorage.getItem(visitorKey) || undefined;
+
+  async function record(type, resourceId, properties = {}) {
+    if (settings.consent !== true) return null;
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          consent: true,
+          visitorId,
+          email,
+          type,
+          resourceId,
+          properties,
+        }),
+        keepalive: true,
+      });
+      const payload = await response.json();
+      if (payload?.data?.visitorId) {
+        visitorId = payload.data.visitorId;
+        localStorage.setItem(visitorKey, visitorId);
+      }
+      return payload?.data || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function loadMessage() {
+    if (!visitorId) return;
+    try {
+      const url = new URL(messagesEndpoint);
+      url.searchParams.set("visitorId", visitorId);
+      url.searchParams.set("url", window.location.href);
+      const response = await fetch(url);
+      const payload = await response.json();
+      const message = payload?.data?.[0];
+      if (!message || sessionStorage.getItem("kaenma_message_" + message.id)) return;
+      sessionStorage.setItem("kaenma_message_" + message.id, "shown");
+
+      const container = document.createElement("aside");
+      container.setAttribute("role", "status");
+      container.style.cssText =
+        "position:fixed;right:20px;bottom:20px;max-width:360px;padding:20px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;color:#111827;box-shadow:0 18px 48px rgba(0,0,0,.18);font:14px/1.5 system-ui,sans-serif;z-index:2147483647";
+      const close = document.createElement("button");
+      close.type = "button";
+      close.setAttribute("aria-label", "メッセージを閉じる");
+      close.textContent = "×";
+      close.style.cssText =
+        "position:absolute;right:10px;top:8px;border:0;background:transparent;font-size:22px;cursor:pointer;color:#6b7280";
+      close.addEventListener("click", () => container.remove());
+      const title = document.createElement("strong");
+      title.textContent = message.headline;
+      title.style.cssText = "display:block;padding-right:22px;font-size:16px";
+      const body = document.createElement("p");
+      body.textContent = message.body;
+      body.style.cssText = "margin:8px 0 0;color:#4b5563";
+      container.append(close, title);
+      if (message.body) container.append(body);
+      if (message.cta_url && message.cta_label) {
+        const link = document.createElement("a");
+        link.href = message.cta_url;
+        link.textContent = message.cta_label;
+        link.rel = "noopener noreferrer";
+        link.style.cssText =
+          "display:inline-block;margin-top:14px;padding:8px 12px;border-radius:8px;background:#111827;color:#fff;text-decoration:none;font-weight:600";
+        link.addEventListener("click", () => {
+          void messageEvent(message.id, "click");
+        });
+        container.append(link);
+      }
+      document.body.append(container);
+      void messageEvent(message.id, "impression");
+    } catch {
+      // Tracking must never interrupt the host page.
+    }
+  }
+
+  function messageEvent(messageId, type) {
+    return fetch(messagesEndpoint + "/" + encodeURIComponent(messageId) + "/events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ visitorId, type }),
+      keepalive: true,
+    });
+  }
+
+  async function page() {
+    const result = await record("page_viewed", window.location.href, {
+      title: document.title,
+      referrer: document.referrer,
+    });
+    if (result?.identified) await loadMessage();
+  }
+
+  window.kaenma = {
+    consent() {
+      settings.consent = true;
+      void page();
+    },
+    identify(value) {
+      email = value;
+      void page();
+    },
+    track(name, properties) {
+      return record("custom_event", name, properties);
+    },
+  };
+
+  if (settings.consent === true) void page();
+})();`;
+}
+
 async function verifyTurnstile(
   secret: string,
   token: string,
@@ -3290,6 +4093,151 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function renderPublicForm(
+  name: string,
+  definition: Record<string, unknown>,
+  actionUrl: string,
+): string {
+  const configuredFields = Array.isArray(definition["fields"])
+    ? definition["fields"].filter(isRecord)
+    : [];
+  const supported = new Map([
+    ["email", { label: "メールアドレス", type: "email", required: true }],
+    ["firstName", { label: "名", type: "text", required: false }],
+    ["lastName", { label: "姓", type: "text", required: false }],
+    ["phone", { label: "電話番号", type: "tel", required: false }],
+  ]);
+  const fields = configuredFields
+    .map((field) => {
+      const key = typeof field["key"] === "string" ? field["key"] : "";
+      const base = supported.get(key);
+      return base
+        ? {
+            key,
+            ...base,
+            required: key === "email" || field["required"] === true,
+          }
+        : null;
+    })
+    .filter((field): field is NonNullable<typeof field> => field !== null);
+  if (!fields.some((field) => field.key === "email")) {
+    fields.unshift({
+      key: "email",
+      label: "メールアドレス",
+      type: "email",
+      required: true,
+    });
+  }
+  const controls = fields
+    .map(
+      (field) =>
+        `<label>${escapeHtml(field.label)}<input name="${escapeHtml(field.key)}" type="${field.type}"${field.required ? " required" : ""}></label>`,
+    )
+    .join("");
+  const endpoint = escapeHtml(actionUrl.split("?")[0] ?? actionUrl);
+  return `<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${escapeHtml(name)}</title>
+  <style>
+    :root{color-scheme:light;font-family:system-ui,sans-serif;color:#111827}
+    *{box-sizing:border-box}body{margin:0;padding:24px;background:#fff}
+    form{display:grid;gap:16px;max-width:520px;margin:auto}
+    h1{margin:0;font-size:24px}label{display:grid;gap:6px;font-size:14px;font-weight:600}
+    input{width:100%;height:42px;border:1px solid #d1d5db;border-radius:8px;padding:0 12px;font:inherit}
+    button{height:42px;border:0;border-radius:8px;background:#111827;color:#fff;font:inherit;font-weight:700;cursor:pointer}
+    p{margin:0;color:#4b5563;font-size:14px}.hidden{position:absolute;left:-9999px}
+  </style>
+</head>
+<body>
+  <form id="signup-form">
+    <h1>${escapeHtml(name)}</h1>
+    ${controls}
+    <label class="hidden" aria-hidden="true">Website<input name="_website" tabindex="-1" autocomplete="off"></label>
+    <button type="submit">送信する</button>
+    <p id="result" role="status"></p>
+  </form>
+  <script>
+    document.getElementById("signup-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector("button");
+      const result = document.getElementById("result");
+      button.disabled = true;
+      result.textContent = "送信しています…";
+      try {
+        const payload = Object.fromEntries(new FormData(form));
+        payload.idempotencyKey = crypto.randomUUID();
+        const response = await fetch("${endpoint}", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body?.error?.message || "送信できませんでした");
+        result.textContent = body?.data?.message || "ありがとうございます。";
+        form.reset();
+      } catch (error) {
+        result.textContent = error instanceof Error ? error.message : "送信できませんでした";
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function formEmbedScript(formUrl: string, formName: string, style: string): string {
+  return `(() => {
+  const current = document.currentScript;
+  const frame = document.createElement("iframe");
+  frame.src = ${JSON.stringify(formUrl)};
+  frame.title = ${JSON.stringify(formName)};
+  frame.loading = "lazy";
+  frame.style.cssText = "border:0;background:#fff;width:100%";
+  const style = ${JSON.stringify(style)};
+
+  if (style === "inline") {
+    frame.style.height = "520px";
+    current?.parentNode?.insertBefore(frame, current.nextSibling);
+    return;
+  }
+
+  if (style === "floating-bar") {
+    frame.style.cssText += ";position:fixed;left:0;bottom:0;height:230px;box-shadow:0 -10px 32px rgba(0,0,0,.14);z-index:2147483646";
+    document.body.append(frame);
+    return;
+  }
+
+  if (style === "floating-box") {
+    frame.style.cssText += ";position:fixed;right:20px;bottom:20px;width:min(380px,calc(100vw - 40px));height:480px;border-radius:14px;box-shadow:0 18px 48px rgba(0,0,0,.18);z-index:2147483646";
+    document.body.append(frame);
+    return;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", ${JSON.stringify(formName)});
+  overlay.style.cssText = "position:fixed;inset:0;display:grid;place-items:center;padding:20px;background:rgba(0,0,0,.45);z-index:2147483646";
+  frame.style.cssText += ";max-width:560px;height:540px;border-radius:14px";
+  const close = document.createElement("button");
+  close.type = "button";
+  close.setAttribute("aria-label", "フォームを閉じる");
+  close.textContent = "×";
+  close.style.cssText = "position:absolute;right:24px;top:16px;border:0;background:transparent;color:#fff;font-size:32px;cursor:pointer";
+  close.addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) overlay.remove();
+  });
+  overlay.append(frame, close);
+  document.body.append(overlay);
+})();`;
 }
 
 const transparentGif = Uint8Array.from([

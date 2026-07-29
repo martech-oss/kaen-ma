@@ -35,12 +35,17 @@ import {
   Braces,
   Building2,
   ContactRound,
+  ChartNoAxesCombined,
   FileText,
   Gauge,
   GitBranch,
+  Globe2,
+  LayoutTemplate,
   ListChecks,
   LogOut,
   Mail,
+  MessageSquareText,
+  PanelsTopLeft,
   Send,
   Settings,
   Shapes,
@@ -72,8 +77,26 @@ const emailNavigation = linkOptions([
   { to: "/emails/archive", label: "アーカイブ", icon: Archive },
 ]);
 
+const websiteNavigation = linkOptions([
+  {
+    to: "/website/forms",
+    label: "サインアップフォーム",
+    icon: LayoutTemplate,
+  },
+  { to: "/website/pages", label: "ランディングページ", icon: PanelsTopLeft },
+  {
+    to: "/website/messages",
+    label: "サイトメッセージ",
+    icon: MessageSquareText,
+  },
+  {
+    to: "/website/tracking",
+    label: "サイトトラッキング",
+    icon: ChartNoAxesCombined,
+  },
+]);
+
 const utilityNavigation = linkOptions([
-  { to: "/forms", label: "フォーム", icon: FileText },
   { to: "/settings", label: "設定", icon: Settings },
 ]);
 
@@ -130,6 +153,12 @@ export function AppShell({ workspace }: { workspace: Workspace }): ReactNode {
                   label="メール"
                   icon={Mail}
                   items={emailNavigation}
+                />
+                <NestedNavigation
+                  to="/website"
+                  label="Website"
+                  icon={Globe2}
+                  items={websiteNavigation}
                 />
                 <PrimaryNavigation items={utilityNavigation} />
               </SidebarMenu>

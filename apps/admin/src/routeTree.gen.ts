@@ -20,6 +20,7 @@ import { Route as AppEmailsRouteImport } from './routes/_app.emails'
 import { Route as AppFormsRouteImport } from './routes/_app.forms'
 import { Route as AppSegmentsRouteImport } from './routes/_app.segments'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppWebsiteRouteImport } from './routes/_app.website'
 import { Route as AppCampaignsIndexRouteImport } from './routes/_app.campaigns.index'
 import { Route as AppCampaignsIdRouteImport } from './routes/_app.campaigns.$id'
 import { Route as AppContactsIndexRouteImport } from './routes/_app.contacts.index'
@@ -31,6 +32,11 @@ import { Route as AppEmailsIndexRouteImport } from './routes/_app.emails.index'
 import { Route as AppEmailsArchiveRouteImport } from './routes/_app.emails.archive'
 import { Route as AppEmailsTemplatesRouteImport } from './routes/_app.emails.templates'
 import { Route as AppEmailsVariablesRouteImport } from './routes/_app.emails.variables'
+import { Route as AppWebsiteIndexRouteImport } from './routes/_app.website.index'
+import { Route as AppWebsiteFormsRouteImport } from './routes/_app.website.forms'
+import { Route as AppWebsiteMessagesRouteImport } from './routes/_app.website.messages'
+import { Route as AppWebsitePagesRouteImport } from './routes/_app.website.pages'
+import { Route as AppWebsiteTrackingRouteImport } from './routes/_app.website.tracking'
 import { Route as AppContactsAccountsIndexRouteImport } from './routes/_app.contacts.accounts.index'
 import { Route as AppContactsAccountsIdRouteImport } from './routes/_app.contacts.accounts.$id'
 
@@ -88,6 +94,11 @@ const AppSettingsRoute = AppSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AppRoute,
 } as any)
+const AppWebsiteRoute = AppWebsiteRouteImport.update({
+  id: '/website',
+  path: '/website',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppCampaignsIndexRoute = AppCampaignsIndexRouteImport.update({
   id: '/campaigns/',
   path: '/campaigns/',
@@ -143,6 +154,31 @@ const AppEmailsVariablesRoute = AppEmailsVariablesRouteImport.update({
   path: '/variables',
   getParentRoute: () => AppEmailsRoute,
 } as any)
+const AppWebsiteIndexRoute = AppWebsiteIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppWebsiteRoute,
+} as any)
+const AppWebsiteFormsRoute = AppWebsiteFormsRouteImport.update({
+  id: '/forms',
+  path: '/forms',
+  getParentRoute: () => AppWebsiteRoute,
+} as any)
+const AppWebsiteMessagesRoute = AppWebsiteMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => AppWebsiteRoute,
+} as any)
+const AppWebsitePagesRoute = AppWebsitePagesRouteImport.update({
+  id: '/pages',
+  path: '/pages',
+  getParentRoute: () => AppWebsiteRoute,
+} as any)
+const AppWebsiteTrackingRoute = AppWebsiteTrackingRouteImport.update({
+  id: '/tracking',
+  path: '/tracking',
+  getParentRoute: () => AppWebsiteRoute,
+} as any)
 const AppContactsAccountsIndexRoute =
   AppContactsAccountsIndexRouteImport.update({
     id: '/',
@@ -166,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/forms': typeof AppFormsRoute
   '/segments': typeof AppSegmentsRoute
   '/settings': typeof AppSettingsRoute
+  '/website': typeof AppWebsiteRouteWithChildren
   '/campaigns/$id': typeof AppCampaignsIdRoute
   '/contacts/accounts': typeof AppContactsAccountsRouteWithChildren
   '/contacts/lists': typeof AppContactsListsRoute
@@ -174,9 +211,14 @@ export interface FileRoutesByFullPath {
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
+  '/website/forms': typeof AppWebsiteFormsRoute
+  '/website/messages': typeof AppWebsiteMessagesRoute
+  '/website/pages': typeof AppWebsitePagesRoute
+  '/website/tracking': typeof AppWebsiteTrackingRoute
   '/campaigns/': typeof AppCampaignsIndexRoute
   '/contacts/': typeof AppContactsIndexRoute
   '/emails/': typeof AppEmailsIndexRoute
+  '/website/': typeof AppWebsiteIndexRoute
   '/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
   '/contacts/accounts/': typeof AppContactsAccountsIndexRoute
 }
@@ -196,9 +238,14 @@ export interface FileRoutesByTo {
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
+  '/website/forms': typeof AppWebsiteFormsRoute
+  '/website/messages': typeof AppWebsiteMessagesRoute
+  '/website/pages': typeof AppWebsitePagesRoute
+  '/website/tracking': typeof AppWebsiteTrackingRoute
   '/campaigns': typeof AppCampaignsIndexRoute
   '/contacts': typeof AppContactsIndexRoute
   '/emails': typeof AppEmailsIndexRoute
+  '/website': typeof AppWebsiteIndexRoute
   '/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
   '/contacts/accounts': typeof AppContactsAccountsIndexRoute
 }
@@ -215,6 +262,7 @@ export interface FileRoutesById {
   '/_app/forms': typeof AppFormsRoute
   '/_app/segments': typeof AppSegmentsRoute
   '/_app/settings': typeof AppSettingsRoute
+  '/_app/website': typeof AppWebsiteRouteWithChildren
   '/_app/campaigns/$id': typeof AppCampaignsIdRoute
   '/_app/contacts/accounts': typeof AppContactsAccountsRouteWithChildren
   '/_app/contacts/lists': typeof AppContactsListsRoute
@@ -223,9 +271,14 @@ export interface FileRoutesById {
   '/_app/emails/archive': typeof AppEmailsArchiveRoute
   '/_app/emails/templates': typeof AppEmailsTemplatesRoute
   '/_app/emails/variables': typeof AppEmailsVariablesRoute
+  '/_app/website/forms': typeof AppWebsiteFormsRoute
+  '/_app/website/messages': typeof AppWebsiteMessagesRoute
+  '/_app/website/pages': typeof AppWebsitePagesRoute
+  '/_app/website/tracking': typeof AppWebsiteTrackingRoute
   '/_app/campaigns/': typeof AppCampaignsIndexRoute
   '/_app/contacts/': typeof AppContactsIndexRoute
   '/_app/emails/': typeof AppEmailsIndexRoute
+  '/_app/website/': typeof AppWebsiteIndexRoute
   '/_app/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
   '/_app/contacts/accounts/': typeof AppContactsAccountsIndexRoute
 }
@@ -242,6 +295,7 @@ export interface FileRouteTypes {
     | '/forms'
     | '/segments'
     | '/settings'
+    | '/website'
     | '/campaigns/$id'
     | '/contacts/accounts'
     | '/contacts/lists'
@@ -250,9 +304,14 @@ export interface FileRouteTypes {
     | '/emails/archive'
     | '/emails/templates'
     | '/emails/variables'
+    | '/website/forms'
+    | '/website/messages'
+    | '/website/pages'
+    | '/website/tracking'
     | '/campaigns/'
     | '/contacts/'
     | '/emails/'
+    | '/website/'
     | '/contacts/accounts/$id'
     | '/contacts/accounts/'
   fileRoutesByTo: FileRoutesByTo
@@ -272,9 +331,14 @@ export interface FileRouteTypes {
     | '/emails/archive'
     | '/emails/templates'
     | '/emails/variables'
+    | '/website/forms'
+    | '/website/messages'
+    | '/website/pages'
+    | '/website/tracking'
     | '/campaigns'
     | '/contacts'
     | '/emails'
+    | '/website'
     | '/contacts/accounts/$id'
     | '/contacts/accounts'
   id:
@@ -290,6 +354,7 @@ export interface FileRouteTypes {
     | '/_app/forms'
     | '/_app/segments'
     | '/_app/settings'
+    | '/_app/website'
     | '/_app/campaigns/$id'
     | '/_app/contacts/accounts'
     | '/_app/contacts/lists'
@@ -298,9 +363,14 @@ export interface FileRouteTypes {
     | '/_app/emails/archive'
     | '/_app/emails/templates'
     | '/_app/emails/variables'
+    | '/_app/website/forms'
+    | '/_app/website/messages'
+    | '/_app/website/pages'
+    | '/_app/website/tracking'
     | '/_app/campaigns/'
     | '/_app/contacts/'
     | '/_app/emails/'
+    | '/_app/website/'
     | '/_app/contacts/accounts/$id'
     | '/_app/contacts/accounts/'
   fileRoutesById: FileRoutesById
@@ -392,6 +462,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/website': {
+      id: '/_app/website'
+      path: '/website'
+      fullPath: '/website'
+      preLoaderRoute: typeof AppWebsiteRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/campaigns/': {
       id: '/_app/campaigns/'
       path: '/campaigns'
@@ -469,6 +546,41 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEmailsVariablesRouteImport
       parentRoute: typeof AppEmailsRoute
     }
+    '/_app/website/': {
+      id: '/_app/website/'
+      path: '/'
+      fullPath: '/website/'
+      preLoaderRoute: typeof AppWebsiteIndexRouteImport
+      parentRoute: typeof AppWebsiteRoute
+    }
+    '/_app/website/forms': {
+      id: '/_app/website/forms'
+      path: '/forms'
+      fullPath: '/website/forms'
+      preLoaderRoute: typeof AppWebsiteFormsRouteImport
+      parentRoute: typeof AppWebsiteRoute
+    }
+    '/_app/website/messages': {
+      id: '/_app/website/messages'
+      path: '/messages'
+      fullPath: '/website/messages'
+      preLoaderRoute: typeof AppWebsiteMessagesRouteImport
+      parentRoute: typeof AppWebsiteRoute
+    }
+    '/_app/website/pages': {
+      id: '/_app/website/pages'
+      path: '/pages'
+      fullPath: '/website/pages'
+      preLoaderRoute: typeof AppWebsitePagesRouteImport
+      parentRoute: typeof AppWebsiteRoute
+    }
+    '/_app/website/tracking': {
+      id: '/_app/website/tracking'
+      path: '/tracking'
+      fullPath: '/website/tracking'
+      preLoaderRoute: typeof AppWebsiteTrackingRouteImport
+      parentRoute: typeof AppWebsiteRoute
+    }
     '/_app/contacts/accounts/': {
       id: '/_app/contacts/accounts/'
       path: '/'
@@ -537,6 +649,26 @@ const AppEmailsRouteWithChildren = AppEmailsRoute._addFileChildren(
   AppEmailsRouteChildren,
 )
 
+interface AppWebsiteRouteChildren {
+  AppWebsiteFormsRoute: typeof AppWebsiteFormsRoute
+  AppWebsiteMessagesRoute: typeof AppWebsiteMessagesRoute
+  AppWebsitePagesRoute: typeof AppWebsitePagesRoute
+  AppWebsiteTrackingRoute: typeof AppWebsiteTrackingRoute
+  AppWebsiteIndexRoute: typeof AppWebsiteIndexRoute
+}
+
+const AppWebsiteRouteChildren: AppWebsiteRouteChildren = {
+  AppWebsiteFormsRoute: AppWebsiteFormsRoute,
+  AppWebsiteMessagesRoute: AppWebsiteMessagesRoute,
+  AppWebsitePagesRoute: AppWebsitePagesRoute,
+  AppWebsiteTrackingRoute: AppWebsiteTrackingRoute,
+  AppWebsiteIndexRoute: AppWebsiteIndexRoute,
+}
+
+const AppWebsiteRouteWithChildren = AppWebsiteRoute._addFileChildren(
+  AppWebsiteRouteChildren,
+)
+
 interface AppRouteChildren {
   AppContactsRoute: typeof AppContactsRouteWithChildren
   AppDashboardRoute: typeof AppDashboardRoute
@@ -544,6 +676,7 @@ interface AppRouteChildren {
   AppFormsRoute: typeof AppFormsRoute
   AppSegmentsRoute: typeof AppSegmentsRoute
   AppSettingsRoute: typeof AppSettingsRoute
+  AppWebsiteRoute: typeof AppWebsiteRouteWithChildren
   AppCampaignsIdRoute: typeof AppCampaignsIdRoute
   AppCampaignsIndexRoute: typeof AppCampaignsIndexRoute
 }
@@ -555,6 +688,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppFormsRoute: AppFormsRoute,
   AppSegmentsRoute: AppSegmentsRoute,
   AppSettingsRoute: AppSettingsRoute,
+  AppWebsiteRoute: AppWebsiteRouteWithChildren,
   AppCampaignsIdRoute: AppCampaignsIdRoute,
   AppCampaignsIndexRoute: AppCampaignsIndexRoute,
 }

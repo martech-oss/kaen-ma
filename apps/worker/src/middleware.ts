@@ -22,10 +22,12 @@ export const requestContext = createMiddleware<AppEnvironment>(async (context, n
   context.header("X-Content-Type-Options", "nosniff");
   context.header("Referrer-Policy", "strict-origin-when-cross-origin");
   context.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  context.header(
-    "Content-Security-Policy",
-    "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
-  );
+  if (!context.res.headers.has("Content-Security-Policy")) {
+    context.header(
+      "Content-Security-Policy",
+      "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+    );
+  }
 });
 
 export const requireWorkspace = createMiddleware<AppEnvironment>(async (context, next) => {
