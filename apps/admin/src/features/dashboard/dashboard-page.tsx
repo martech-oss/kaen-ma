@@ -45,10 +45,7 @@ export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
   ];
 
   return (
-    <PageLayout
-      title="ダッシュボード"
-      description="獲得・自動化・配信の現在地を確認します。"
-    >
+    <PageLayout title="ダッシュボード">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
           <Card key={card.label}>

@@ -1,7 +1,13 @@
 import { authClient } from "@/auth-client";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -20,8 +26,8 @@ import {
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import type { Workspace } from "@/lib/workspace";
 import {
   Link,
   Outlet,
@@ -34,6 +40,7 @@ import {
   Blocks,
   Braces,
   Building2,
+  ChevronsUpDown,
   ContactRound,
   ChartNoAxesCombined,
   FileText,
@@ -100,7 +107,11 @@ const utilityNavigation = linkOptions([
   { to: "/settings", label: "設定", icon: Settings },
 ]);
 
-export function AppShell({ workspace }: { workspace: Workspace }): ReactNode {
+export function AppShell({
+  user,
+}: {
+  user: { name: string; email: string };
+}): ReactNode {
   const navigate = useNavigate();
   const router = useRouter();
 
@@ -125,18 +136,24 @@ export function AppShell({ workspace }: { workspace: Workspace }): ReactNode {
       <Sidebar collapsible="icon">
         <SidebarHeader>
           <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton size="lg" tooltip="Kaenma">
+            <SidebarMenuItem className="flex items-center gap-1">
+              <SidebarMenuButton
+                render={<Link to="/dashboard" />}
+                size="lg"
+                tooltip="Kaenma"
+                className="flex-1 group-data-[collapsible=icon]:hidden"
+              >
                 <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Blocks />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">Kaenma</span>
-                  <span className="truncate text-xs text-muted-foreground">
-                    {workspace.name}
-                  </span>
                 </div>
               </SidebarMenuButton>
+              <SidebarTrigger
+                className="shrink-0"
+                aria-label="ナビゲーションを開閉"
+              />
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarHeader>
@@ -166,40 +183,73 @@ export function AppShell({ workspace }: { workspace: Workspace }): ReactNode {
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter>
-          <div className="flex flex-col gap-2 rounded-lg border p-2 text-xs group-data-[collapsible=icon]:hidden">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Cloudflare native</span>
-              <Badge variant="secondary">
-                <span className="size-1.5 rounded-full bg-success" />
-                Online
-              </Badge>
-            </div>
-            <span className="text-muted-foreground">
-              Role: {workspace.role}
-            </span>
-          </div>
+          <AccountMenu user={user} onSignOut={signOut} />
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
       <SidebarInset id="main-content" tabIndex={-1}>
-        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
-          <div className="flex items-center gap-2">
-            <SidebarTrigger aria-label="ナビゲーションを開閉" />
-            <Separator orientation="vertical" className="h-4" />
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              {workspace.name} / {workspace.timezone}
-            </span>
-          </div>
-          <Button variant="outline" onClick={() => void signOut()}>
-            <LogOut data-icon="inline-start" />
-            ログアウト
-          </Button>
-        </header>
+        <div className="p-2 pb-0 md:hidden">
+          <SidebarTrigger aria-label="ナビゲーションを開く" />
+        </div>
         <div className="mx-auto w-full max-w-[1500px] p-4 lg:p-8">
           <Outlet />
         </div>
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+function AccountMenu({
+  user,
+  onSignOut,
+}: {
+  user: { name: string; email: string };
+  onSignOut: () => Promise<void>;
+}): ReactNode {
+  const { isMobile } = useSidebar();
+  const displayName = user.name.trim() || user.email;
+  const fallback = displayName.charAt(0).toUpperCase();
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <SidebarMenuButton
+                size="lg"
+                tooltip="アカウントメニュー"
+                className="data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground"
+              />
+            }
+          >
+            <Avatar className="size-8">
+              <AvatarFallback>{fallback}</AvatarFallback>
+            </Avatar>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-medium">{displayName}</span>
+              <span className="truncate text-xs text-muted-foreground">
+                {user.email}
+              </span>
+            </div>
+            <ChevronsUpDown className="ml-auto" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side={isMobile ? "top" : "right"}
+            align="end"
+            className="min-w-56"
+          >
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>アカウント</DropdownMenuLabel>
+              <DropdownMenuItem onClick={() => void onSignOut()}>
+                <LogOut />
+                ログアウト
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }
 

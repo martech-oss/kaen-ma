@@ -74,7 +74,6 @@ export function SiteMessagesPage({
   return (
     <PageLayout
       title="サイトメッセージ"
-      description="識別済みの連絡先へ、サイト上で軽量なメッセージを表示します。"
       action={
         <Button
           onClick={() => {

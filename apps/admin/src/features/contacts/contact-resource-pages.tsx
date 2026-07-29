@@ -79,7 +79,6 @@ export function ContactListsPage({
   return (
     <PageLayout
       title="リスト"
-      description="用途や配信先ごとに連絡先を整理する、明示的なメンバー一覧です。"
       action={
         <Button onClick={() => setShowCreate(true)}>
           <Plus data-icon="inline-start" />
@@ -193,7 +192,6 @@ export function ContactTagsPage({
   return (
     <PageLayout
       title="タグ"
-      description="連絡先に横断的なラベルを付け、検索やセグメント条件に利用します。"
       action={
         <Button onClick={() => setShowCreate(true)}>
           <Plus data-icon="inline-start" />

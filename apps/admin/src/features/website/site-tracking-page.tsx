@@ -82,10 +82,7 @@ export function SiteTrackingPage({
   }
 
   return (
-    <PageLayout
-      title="サイトトラッキング"
-      description="許可したWebサイトの訪問を連絡先の行動履歴へ接続します。"
-    >
+    <PageLayout title="サイトトラッキング">
       <TrackingSummary data={data} />
       <Tabs defaultValue="setup">
         <TabsList>

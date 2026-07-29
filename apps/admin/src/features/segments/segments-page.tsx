@@ -39,7 +39,6 @@ export function SegmentsPage({
   return (
     <PageLayout
       title="セグメント"
-      description="属性・タグ・行動・同意を組み合わせた安全な動的条件です。"
       action={
         <Button onClick={() => setShowForm(true)}>
           <Plus data-icon="inline-start" />

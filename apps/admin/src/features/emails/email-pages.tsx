@@ -214,24 +214,11 @@ function EmailCenterPage({
     }
   }
 
-  const page = {
-    campaigns: {
-      title: "メールキャンペーン",
-      description: "セグメントを選び、即時または予約でResendから配信します。",
-    },
-    templates: {
-      title: "メールテンプレート",
-      description: "件名、本文、CTAをバージョン管理しながら編集します。",
-    },
-    variables: {
-      title: "メッセージ変数",
-      description:
-        "ブランド名や署名など、複数テンプレートで使う値を一元管理します。",
-    },
-    archive: {
-      title: "メールアーカイブ",
-      description: "運用を終了したキャンペーンとテンプレートを確認します。",
-    },
+  const pageTitle = {
+    campaigns: "メールキャンペーン",
+    templates: "メールテンプレート",
+    variables: "メッセージ変数",
+    archive: "メールアーカイブ",
   }[view];
 
   const action =
@@ -269,8 +256,7 @@ function EmailCenterPage({
 
   return (
     <PageLayout
-      title={page.title}
-      description={page.description}
+      title={pageTitle}
       action={action}
     >
       {error ? <ErrorAlert>{error}</ErrorAlert> : null}

@@ -71,7 +71,6 @@ export function LandingPagesPage({
   return (
     <PageLayout
       title="ランディングページ"
-      description="キャンペーン専用ページを作成し、バージョン管理しながら公開します。"
       action={
         <Button
           onClick={() => {

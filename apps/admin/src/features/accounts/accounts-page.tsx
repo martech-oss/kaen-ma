@@ -100,7 +100,6 @@ export function AccountsPage({
   return (
     <PageLayout
       title="アカウント"
-      description="会社単位で連絡先と担当者情報をまとめて管理します。"
       action={
         <Button onClick={() => setShowCreate(true)}>
           <Plus data-icon="inline-start" />
@@ -260,10 +259,7 @@ export function AccountDetailPage({
 
   if (!account) {
     return (
-      <PageLayout
-        title="アカウント"
-        description="会社情報を読み込めませんでした。"
-      >
+      <PageLayout title="アカウント">
         <ErrorAlert>{error || "アカウントが見つかりません"}</ErrorAlert>
         <Button
           variant="outline"
@@ -282,7 +278,6 @@ export function AccountDetailPage({
   return (
     <PageLayout
       title={account.name}
-      description="会社情報と所属する連絡先を管理します。"
       action={
         <div className="flex flex-wrap gap-2">
           <Button

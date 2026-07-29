@@ -89,7 +89,6 @@ export function SignupFormsPage({
   return (
     <PageLayout
       title="サインアップフォーム"
-      description="連絡先を獲得するフォームを作成し、公開URLまたは埋め込みコードで設置します。"
       action={
         <Button
           onClick={() => {

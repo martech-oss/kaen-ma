@@ -506,7 +506,6 @@ export function ContactsPage({
   return (
     <Page
       title="連絡先"
-      description="連絡先を検索し、会社、リスト、セグメント、タグ、スコアを一つの画面で管理します。"
       action={
         <div className="flex flex-wrap gap-2">
           <Button

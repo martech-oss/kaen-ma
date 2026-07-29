@@ -40,21 +40,16 @@ import type { ComponentProps, ReactNode } from "react";
 
 export function PageHeader({
   title,
-  description,
   action,
 }: {
   title: string;
-  description: string;
   action?: ReactNode;
 }): ReactNode {
   return (
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <div className="flex flex-col gap-1">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight lg:text-3xl">
-          {title}
-        </h1>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
+    <header className="flex flex-wrap items-center justify-between gap-4">
+      <h1 className="font-heading text-2xl font-semibold tracking-tight lg:text-3xl">
+        {title}
+      </h1>
       {action}
     </header>
   );
@@ -62,18 +57,16 @@ export function PageHeader({
 
 export function PageLayout({
   title,
-  description,
   action,
   children,
 }: {
   title: string;
-  description: string;
   action?: ReactNode;
   children: ReactNode;
 }): ReactNode {
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title={title} description={description} action={action} />
+      <PageHeader title={title} action={action} />
       {children}
     </div>
   );

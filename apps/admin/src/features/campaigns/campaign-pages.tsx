@@ -74,7 +74,6 @@ export function CampaignsPage({
   return (
     <PageLayout
       title="キャンペーン"
-      description="SourceからDecision、Delay、Actionへつながる不変バージョンの自動化です。"
       action={
         <Button onClick={() => void createCampaign()}>
           <Plus data-icon="inline-start" />

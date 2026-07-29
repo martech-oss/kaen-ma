@@ -45,10 +45,7 @@ export function SettingsPage({
   }
 
   return (
-    <PageLayout
-      title="設定"
-      description="チャネル資格情報はAES-GCMで暗号化してD1へ保存します。"
-    >
+    <PageLayout title="設定">
       <div className="grid gap-6 xl:grid-cols-2">
         <TwoFactorSettings />
         <Card>
