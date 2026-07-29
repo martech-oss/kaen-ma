@@ -70,8 +70,22 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  buildContactSearchParams,
+  loadContactOptions,
+  loadContacts as fetchContacts,
+  type AccountOption,
+  type ContactOptions,
+  type ContactSearch,
+  type ContactStatus,
+  type ContactSummary,
+  type ContactsPageData,
+  type ListOption,
+  type SegmentOption,
+  type TagOption,
+} from "@/features/contacts/contact-api";
 import { cn } from "@/lib/utils";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
   Building2,
@@ -98,60 +112,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { api } from "../api";
-
-interface TagOption {
-  id: string;
-  name: string;
-  slug: string;
-  color: string;
-  contact_count?: number;
-}
-
-interface ListOption {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  color: string;
-  contact_count?: number;
-}
-
-interface SegmentOption {
-  id: string;
-  name: string;
-  slug: string;
-  kind: "static" | "dynamic";
-  filter_ast: SegmentFilter | null;
-  member_count: number;
-  evaluated_at: string | null;
-}
-
-interface AccountOption {
-  id: string;
-  name: string;
-  domain: string | null;
-  contact_count?: number;
-}
-
-interface ContactOptions {
-  tags: TagOption[];
-  lists: ListOption[];
-  segments: SegmentOption[];
-  accounts: AccountOption[];
-  stages: Array<{ stage: string; contact_count: number }>;
-}
-
-interface ContactSummary extends Contact {
-  tags: TagOption[];
-  lists: ListOption[];
-  accounts: Array<
-    AccountOption & {
-      title: string | null;
-      is_primary: boolean;
-    }
-  >;
-}
+import { api } from "@/api";
 
 interface ContactProfile {
   contact: Contact;
@@ -187,7 +148,6 @@ interface ContactProfile {
   }>;
 }
 
-type ContactStatus = "active" | "archived" | "anonymous" | "all";
 type BulkAction =
   | "add_tag"
   | "remove_tag"
@@ -195,14 +155,6 @@ type BulkAction =
   | "remove_list"
   | "archive"
   | "restore";
-
-const emptyOptions: ContactOptions = {
-  tags: [],
-  lists: [],
-  segments: [],
-  accounts: [],
-  stages: [],
-};
 
 function ControlledSelect({
   value,
@@ -240,23 +192,31 @@ function ControlledSelect({
   );
 }
 
-export function ContactsPage(): ReactNode {
-  const [contacts, setContacts] = useState<ContactSummary[]>([]);
-  const [options, setOptions] = useState<ContactOptions>(emptyOptions);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+export function ContactsPage({
+  initialData,
+  initialSearch,
+}: {
+  initialData: ContactsPageData;
+  initialSearch: ContactSearch;
+}): ReactNode {
+  const [contacts, setContacts] = useState<ContactSummary[]>(
+    initialData.contacts,
+  );
+  const [options, setOptions] = useState<ContactOptions>(initialData.options);
+  const [total, setTotal] = useState(initialData.total);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<ContactStatus>("active");
-  const [stage, setStage] = useState("");
-  const [tagId, setTagId] = useState("");
-  const [listId, setListId] = useState("");
-  const [accountId, setAccountId] = useState("");
-  const [segmentId, setSegmentId] = useState("");
-  const [scoreMin, setScoreMin] = useState("");
-  const [scoreMax, setScoreMax] = useState("");
-  const [sort, setSort] = useState("updatedAt");
-  const [direction, setDirection] = useState("desc");
+  const [query, setQuery] = useState(initialSearch.q);
+  const [status, setStatus] = useState<ContactStatus>(initialSearch.status);
+  const [stage, setStage] = useState(initialSearch.stage);
+  const [tagId, setTagId] = useState(initialSearch.tagId);
+  const [listId, setListId] = useState(initialSearch.listId);
+  const [accountId, setAccountId] = useState(initialSearch.accountId);
+  const [segmentId, setSegmentId] = useState(initialSearch.segmentId);
+  const [scoreMin, setScoreMin] = useState(initialSearch.scoreMin);
+  const [scoreMax, setScoreMax] = useState(initialSearch.scoreMax);
+  const [sort, setSort] = useState(initialSearch.sort);
+  const [direction, setDirection] = useState(initialSearch.direction);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
@@ -265,35 +225,32 @@ export function ContactsPage(): ReactNode {
   const [bulkAction, setBulkAction] = useState<BulkAction>("add_tag");
   const [bulkResourceId, setBulkResourceId] = useState("");
   const [busy, setBusy] = useState(false);
+  const navigate = useNavigate();
 
   const loadOptions = useCallback(async () => {
-    const response = await api<ContactOptions>("/contact-options");
-    setOptions(response.data);
+    setOptions(await loadContactOptions());
   }, []);
 
   const loadContacts = useCallback(async () => {
     setLoading(true);
     setError("");
-    const params = new URLSearchParams({
-      limit: "100",
+    const params = buildContactSearchParams({
+      q: query,
       status,
+      stage,
+      tagId,
+      listId,
+      accountId,
+      segmentId,
+      scoreMin,
+      scoreMax,
       sort,
-      direction,
+      direction: direction === "asc" ? "asc" : "desc",
     });
-    if (query.trim()) params.set("q", query.trim());
-    if (stage) params.set("stage", stage);
-    if (tagId) params.set("tagId", tagId);
-    if (listId) params.set("listId", listId);
-    if (accountId) params.set("accountId", accountId);
-    if (segmentId) params.set("segmentId", segmentId);
-    if (scoreMin) params.set("scoreMin", scoreMin);
-    if (scoreMax) params.set("scoreMax", scoreMax);
     try {
-      const response = await api<ContactSummary[]>(
-        `/contacts?${params.toString()}`,
-      );
-      setContacts(response.data);
-      setTotal(response.meta?.total ?? response.data.length);
+      const result = await fetchContacts(params);
+      setContacts(result.contacts);
+      setTotal(result.total);
       setSelected(new Set());
     } catch (caught) {
       setError(
@@ -319,12 +276,73 @@ export function ContactsPage(): ReactNode {
   ]);
 
   useEffect(() => {
-    void loadOptions();
-  }, [loadOptions]);
+    setContacts(initialData.contacts);
+    setOptions(initialData.options);
+    setTotal(initialData.total);
+    setLoading(false);
+    setSelected(new Set());
+  }, [initialData]);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => void loadContacts(), 180);
+    setQuery(initialSearch.q);
+    setStatus(initialSearch.status);
+    setStage(initialSearch.stage);
+    setTagId(initialSearch.tagId);
+    setListId(initialSearch.listId);
+    setAccountId(initialSearch.accountId);
+    setSegmentId(initialSearch.segmentId);
+    setScoreMin(initialSearch.scoreMin);
+    setScoreMax(initialSearch.scoreMax);
+    setSort(initialSearch.sort);
+    setDirection(initialSearch.direction);
+  }, [initialSearch]);
+
+  useEffect(() => {
+    const nextSearch: ContactSearch = {
+      q: query,
+      status,
+      stage,
+      tagId,
+      listId,
+      accountId,
+      segmentId,
+      scoreMin,
+      scoreMax,
+      sort,
+      direction: direction === "asc" ? "asc" : "desc",
+    };
+    if (
+      Object.keys(nextSearch).every(
+        (key) =>
+          nextSearch[key as keyof ContactSearch] ===
+          initialSearch[key as keyof ContactSearch],
+      )
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void navigate({
+        to: "/contacts",
+        search: nextSearch,
+        replace: true,
+      });
+    }, 180);
     return () => window.clearTimeout(timer);
-  }, [loadContacts]);
+  }, [
+    accountId,
+    direction,
+    initialSearch,
+    listId,
+    navigate,
+    query,
+    scoreMax,
+    scoreMin,
+    segmentId,
+    sort,
+    stage,
+    status,
+    tagId,
+  ]);
 
   const selectedSegment = options.segments.find(
     (segment) => segment.id === segmentId,
@@ -333,13 +351,7 @@ export function ContactsPage(): ReactNode {
     contacts.length > 0 &&
     contacts.every((contact) => selected.has(contact.id));
   const hasAdvancedFilters = Boolean(
-    stage ||
-      tagId ||
-      listId ||
-      accountId ||
-      segmentId ||
-      scoreMin ||
-      scoreMax,
+    stage || tagId || listId || accountId || segmentId || scoreMin || scoreMax,
   );
 
   function clearFilters() {
@@ -654,7 +666,7 @@ export function ContactsPage(): ReactNode {
                   const [nextSort = "updatedAt", nextDirection = "desc"] =
                     value.split(":");
                   setSort(nextSort);
-                  setDirection(nextDirection);
+                  setDirection(nextDirection === "asc" ? "asc" : "desc");
                 }}
               >
                 <NativeSelectOption value="updatedAt:desc">
@@ -808,9 +820,9 @@ export function ContactsPage(): ReactNode {
                     </TableRow>
                   ))
                 : contacts.map((contact) => (
-                <TableRow
-                  key={contact.id}
-                  className="cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                    <TableRow
+                      key={contact.id}
+                      className="cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                       onClick={() => setActiveContactId(contact.id)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter")

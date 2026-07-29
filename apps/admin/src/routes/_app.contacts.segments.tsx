@@ -1,6 +1,24 @@
+import { api } from "@/api";
+import { RouteError, RoutePending } from "@/components/route-status";
+import {
+  SegmentsPage,
+  type SegmentRow,
+} from "@/features/segments/segments-page";
 import { createFileRoute } from "@tanstack/react-router";
-import { SegmentsPage } from "../App";
 
 export const Route = createFileRoute("/_app/contacts/segments")({
-  component: SegmentsPage,
+  loader: async ({ abortController }) => {
+    const response = await api<SegmentRow[]>("/segments", {
+      signal: abortController.signal,
+    });
+    return response.data;
+  },
+  pendingComponent: RoutePending,
+  errorComponent: RouteError,
+  component: SegmentsRoute,
 });
+
+function SegmentsRoute() {
+  const segments = Route.useLoaderData();
+  return <SegmentsPage segments={segments} />;
+}

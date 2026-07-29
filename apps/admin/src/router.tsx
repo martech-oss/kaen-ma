@@ -5,6 +5,11 @@ export function getRouter() {
   return createRouter({
     routeTree,
     defaultPreload: "intent",
+    defaultPreloadDelay: 80,
+    defaultPendingMs: 300,
+    defaultPendingMinMs: 200,
+    defaultStructuralSharing: true,
+    search: { strict: true },
     scrollRestoration: true,
   });
 }

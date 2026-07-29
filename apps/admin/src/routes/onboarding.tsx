@@ -1,11 +1,11 @@
 import { ApiClientError } from "@/api";
 import { RouteError, RoutePending } from "@/components/route-status";
-import { AppShell } from "@/layouts/app-shell";
+import { WorkspaceSetupPage } from "@/features/auth/auth-pages";
 import { getCurrentSession } from "@/lib/auth-session";
 import { getCurrentWorkspace } from "@/lib/workspace";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/_app")({
+export const Route = createFileRoute("/onboarding")({
   ssr: false,
   beforeLoad: async ({ location }) => {
     const session = await getCurrentSession();
@@ -16,28 +16,22 @@ export const Route = createFileRoute("/_app")({
         replace: true,
       });
     }
-
     try {
-      const workspace = await getCurrentWorkspace();
-      return { session, workspace };
+      await getCurrentWorkspace();
+      throw redirect({ to: "/dashboard", replace: true });
     } catch (error) {
       if (
         error instanceof ApiClientError &&
         error.code === "workspace_required"
       ) {
-        throw redirect({ to: "/onboarding", replace: true });
+        return;
       }
       throw error;
     }
   },
   pendingComponent: () => (
-    <RoutePending label="ワークスペースを読み込んでいます…" />
+    <RoutePending label="ワークスペースを確認しています…" />
   ),
   errorComponent: RouteError,
-  component: ProtectedLayout,
+  component: WorkspaceSetupPage,
 });
-
-function ProtectedLayout() {
-  const { workspace } = Route.useRouteContext();
-  return <AppShell workspace={workspace} />;
-}

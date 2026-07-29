@@ -1,6 +1,24 @@
+import { api } from "@/api";
+import { RouteError, RoutePending } from "@/components/route-status";
+import {
+  DashboardPage,
+  type DashboardData,
+} from "@/features/dashboard/dashboard-page";
 import { createFileRoute } from "@tanstack/react-router";
-import { Dashboard } from "../App";
 
 export const Route = createFileRoute("/_app/dashboard")({
-  component: Dashboard,
+  loader: async ({ abortController }) => {
+    const response = await api<DashboardData>("/dashboard", {
+      signal: abortController.signal,
+    });
+    return response.data;
+  },
+  pendingComponent: RoutePending,
+  errorComponent: RouteError,
+  component: DashboardRoute,
 });
+
+function DashboardRoute() {
+  const data = Route.useLoaderData();
+  return <DashboardPage data={data} />;
+}

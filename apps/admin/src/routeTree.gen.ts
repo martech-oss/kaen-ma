@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AppContactsRouteImport } from './routes/_app.contacts'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppEmailsRouteImport } from './routes/_app.emails'
@@ -44,6 +46,16 @@ const SplatRoute = SplatRouteImport.update({
 } as any)
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppContactsRoute = AppContactsRouteImport.update({
@@ -146,6 +158,8 @@ const AppContactsAccountsIdRoute = AppContactsAccountsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
   '/contacts': typeof AppContactsRouteWithChildren
   '/dashboard': typeof AppDashboardRoute
   '/emails': typeof AppEmailsRouteWithChildren
@@ -169,6 +183,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
   '/dashboard': typeof AppDashboardRoute
   '/forms': typeof AppFormsRoute
   '/segments': typeof AppSegmentsRoute
@@ -191,6 +207,8 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
   '/_app': typeof AppRouteWithChildren
+  '/login': typeof LoginRoute
+  '/onboarding': typeof OnboardingRoute
   '/_app/contacts': typeof AppContactsRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/emails': typeof AppEmailsRouteWithChildren
@@ -216,6 +234,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$'
+    | '/login'
+    | '/onboarding'
     | '/contacts'
     | '/dashboard'
     | '/emails'
@@ -239,6 +259,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$'
+    | '/login'
+    | '/onboarding'
     | '/dashboard'
     | '/forms'
     | '/segments'
@@ -260,6 +282,8 @@ export interface FileRouteTypes {
     | '/'
     | '/$'
     | '/_app'
+    | '/login'
+    | '/onboarding'
     | '/_app/contacts'
     | '/_app/dashboard'
     | '/_app/emails'
@@ -285,6 +309,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
   AppRoute: typeof AppRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  OnboardingRoute: typeof OnboardingRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -308,6 +334,20 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/contacts': {
@@ -525,6 +565,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
   AppRoute: AppRouteWithChildren,
+  LoginRoute: LoginRoute,
+  OnboardingRoute: OnboardingRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

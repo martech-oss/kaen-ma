@@ -1,5 +1,21 @@
 import type { ContentDocument, EmailBlock } from "@kaenma/shared";
 import {
+  loadEmailArchive,
+  loadEmailCampaigns,
+  loadEmailTemplates,
+  loadEmailVariables,
+  type EmailArchiveData,
+  type EmailCampaignRow,
+  type EmailCampaignsData,
+  type EmailTemplateDetail,
+  type EmailTemplateRow,
+  type EmailTemplatesData,
+  type EmailVariablesData,
+  type MessageVariableRow,
+  type SegmentOption,
+  type TopicOption,
+} from "@/features/emails/email-api";
+import {
   AppDialog,
   EmptyState,
   ErrorAlert,
@@ -56,105 +72,88 @@ import {
   type FormEvent,
   type ReactNode,
   useCallback,
-  useEffect,
   useMemo,
   useState,
 } from "react";
 import { toast } from "sonner";
 
-interface EmailCampaignRow {
-  id: string;
-  name: string;
-  segment_id: string;
-  template_version_id: string;
-  topic_id: string | null;
-  status: "draft" | "scheduled" | "sending" | "completed" | "cancelled";
-  scheduled_at: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-  segment_name: string;
-  member_count: number;
-  template_name: string;
-  subject: string;
-  recipient_count: number;
-  sent_count: number;
-  delivered_count: number;
+type EmailSection = "campaigns" | "templates" | "variables" | "archive";
+
+export function EmailCampaignsPage({
+  data,
+}: {
+  data: EmailCampaignsData;
+}): ReactNode {
+  return <EmailCenterPage view="campaigns" data={data} />;
 }
 
-interface EmailTemplateRow {
-  id: string;
-  name: string;
-  purpose: "marketing" | "transactional";
-  status: "draft" | "published" | "archived";
-  current_version_id: string;
-  version: number;
-  subject: string;
-  preview_text: string;
-  created_at: string;
-  updated_at: string;
+export function EmailTemplatesPage({
+  data,
+}: {
+  data: EmailTemplatesData;
+}): ReactNode {
+  return <EmailCenterPage view="templates" data={data} />;
 }
 
-interface EmailTemplateDetail extends EmailTemplateRow {
-  content_document: ContentDocument;
+export function EmailVariablesPage({
+  data,
+}: {
+  data: EmailVariablesData;
+}): ReactNode {
+  return <EmailCenterPage view="variables" data={data} />;
 }
 
-interface MessageVariableRow {
-  id: string;
-  key: string;
-  name: string;
-  value: string;
-  description: string;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
+export function EmailArchivePage({
+  data,
+}: {
+  data: EmailArchiveData;
+}): ReactNode {
+  return <EmailCenterPage view="archive" data={data} />;
 }
 
-interface SegmentOption {
-  id: string;
-  name: string;
-  member_count: number;
-}
+type EmailPageData =
+  | EmailCampaignsData
+  | EmailTemplatesData
+  | EmailVariablesData
+  | EmailArchiveData;
 
-interface TopicOption {
-  id: string;
-  name: string;
-  is_default: number;
-}
-
-type EmailView = "campaigns" | "templates" | "variables" | "archive";
-
-export function EmailCampaignsPage(): ReactNode {
-  return <EmailCenterPage view="campaigns" />;
-}
-
-export function EmailTemplatesPage(): ReactNode {
-  return <EmailCenterPage view="templates" />;
-}
-
-export function EmailVariablesPage(): ReactNode {
-  return <EmailCenterPage view="variables" />;
-}
-
-export function EmailArchivePage(): ReactNode {
-  return <EmailCenterPage view="archive" />;
-}
-
-function EmailCenterPage({ view }: { view: EmailView }): ReactNode {
-  const [campaigns, setCampaigns] = useState<EmailCampaignRow[]>([]);
-  const [templates, setTemplates] = useState<EmailTemplateRow[]>([]);
-  const [variables, setVariables] = useState<MessageVariableRow[]>([]);
+function EmailCenterPage({
+  view,
+  data,
+}: {
+  view: EmailSection;
+  data: EmailPageData;
+}): ReactNode {
+  const [campaigns, setCampaigns] = useState<EmailCampaignRow[]>(
+    view === "campaigns" ? (data as EmailCampaignsData).campaigns : [],
+  );
+  const [templates, setTemplates] = useState<EmailTemplateRow[]>(
+    view === "campaigns"
+      ? (data as EmailCampaignsData).templates
+      : view === "templates"
+        ? (data as EmailTemplatesData).templates
+        : [],
+  );
+  const [variables, setVariables] = useState<MessageVariableRow[]>(
+    view === "templates"
+      ? (data as EmailTemplatesData).variables
+      : view === "variables"
+        ? (data as EmailVariablesData).variables
+        : [],
+  );
   const [archivedCampaigns, setArchivedCampaigns] = useState<
     EmailCampaignRow[]
-  >([]);
+  >(view === "archive" ? (data as EmailArchiveData).campaigns : []);
   const [archivedTemplates, setArchivedTemplates] = useState<
     EmailTemplateRow[]
-  >([]);
-  const [segments, setSegments] = useState<SegmentOption[]>([]);
-  const [topics, setTopics] = useState<TopicOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  >(view === "archive" ? (data as EmailArchiveData).templates : []);
+  const [segments, setSegments] = useState<SegmentOption[]>(
+    view === "campaigns" ? (data as EmailCampaignsData).segments : [],
+  );
+  const [topics, setTopics] = useState<TopicOption[]>(
+    view === "campaigns" ? (data as EmailCampaignsData).topics : [],
+  );
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showCampaignForm, setShowCampaignForm] = useState(false);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
@@ -171,40 +170,22 @@ function EmailCenterPage({ view }: { view: EmailView }): ReactNode {
     setLoading(true);
     try {
       if (view === "campaigns") {
-        const [
-          campaignResponse,
-          templateResponse,
-          segmentResponse,
-          topicResponse,
-        ] = await Promise.all([
-          api<EmailCampaignRow[]>("/broadcasts"),
-          api<EmailTemplateRow[]>("/email-templates"),
-          api<SegmentOption[]>("/segments"),
-          api<TopicOption[]>("/subscription-topics"),
-        ]);
-        setCampaigns(campaignResponse.data);
-        setTemplates(templateResponse.data);
-        setSegments(segmentResponse.data);
-        setTopics(topicResponse.data);
+        const result = await loadEmailCampaigns();
+        setCampaigns(result.campaigns);
+        setTemplates(result.templates);
+        setSegments(result.segments);
+        setTopics(result.topics);
       } else if (view === "templates") {
-        const [templateResponse, variableResponse] = await Promise.all([
-          api<EmailTemplateRow[]>("/email-templates"),
-          api<MessageVariableRow[]>("/message-variables"),
-        ]);
-        setTemplates(templateResponse.data);
-        setVariables(variableResponse.data);
+        const result = await loadEmailTemplates();
+        setTemplates(result.templates);
+        setVariables(result.variables);
       } else if (view === "variables") {
-        const variableResponse =
-          await api<MessageVariableRow[]>("/message-variables");
-        setVariables(variableResponse.data);
+        const result = await loadEmailVariables();
+        setVariables(result.variables);
       } else {
-        const [archivedCampaignResponse, archivedTemplateResponse] =
-          await Promise.all([
-            api<EmailCampaignRow[]>("/broadcasts?archived=true"),
-            api<EmailTemplateRow[]>("/email-templates?archived=true"),
-          ]);
-        setArchivedCampaigns(archivedCampaignResponse.data);
-        setArchivedTemplates(archivedTemplateResponse.data);
+        const result = await loadEmailArchive();
+        setArchivedCampaigns(result.campaigns);
+        setArchivedTemplates(result.templates);
       }
     } catch (caught) {
       setError(
@@ -216,10 +197,6 @@ function EmailCenterPage({ view }: { view: EmailView }): ReactNode {
       setLoading(false);
     }
   }, [view]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
 
   async function editTemplate(template: EmailTemplateRow): Promise<void> {
     try {
@@ -240,8 +217,7 @@ function EmailCenterPage({ view }: { view: EmailView }): ReactNode {
   const page = {
     campaigns: {
       title: "メールキャンペーン",
-      description:
-        "セグメントを選び、即時または予約でResendから配信します。",
+      description: "セグメントを選び、即時または予約でResendから配信します。",
     },
     templates: {
       title: "メールテンプレート",
@@ -254,8 +230,7 @@ function EmailCenterPage({ view }: { view: EmailView }): ReactNode {
     },
     archive: {
       title: "メールアーカイブ",
-      description:
-        "運用を終了したキャンペーンとテンプレートを確認します。",
+      description: "運用を終了したキャンペーンとテンプレートを確認します。",
     },
   }[view];
 
@@ -378,9 +353,7 @@ function EmailCenterPage({ view }: { view: EmailView }): ReactNode {
       <AppDialog
         open={showTemplateForm}
         onOpenChange={setShowTemplateForm}
-        title={
-          editingTemplate ? "テンプレートを編集" : "テンプレートを作成"
-        }
+        title={editingTemplate ? "テンプレートを編集" : "テンプレートを作成"}
         description="保存するたびに新しいバージョンが作成されます。"
         className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
       >
@@ -398,7 +371,9 @@ function EmailCenterPage({ view }: { view: EmailView }): ReactNode {
       <AppDialog
         open={showVariableForm}
         onOpenChange={setShowVariableForm}
-        title={editingVariable ? "メッセージ変数を編集" : "メッセージ変数を作成"}
+        title={
+          editingVariable ? "メッセージ変数を編集" : "メッセージ変数を作成"
+        }
         description="テンプレート内では {{ message.key }} の形式で使用します。"
       >
         <VariableForm
@@ -421,7 +396,9 @@ function EmailSummary({
   campaigns: EmailCampaignRow[];
   templates: EmailTemplateRow[];
 }): ReactNode {
-  const scheduled = campaigns.filter((item) => item.status === "scheduled").length;
+  const scheduled = campaigns.filter(
+    (item) => item.status === "scheduled",
+  ).length;
   const sent = campaigns.reduce((total, item) => total + item.sent_count, 0);
   const delivered = campaigns.reduce(
     (total, item) => total + item.delivered_count,
@@ -430,7 +407,9 @@ function EmailSummary({
   const cards = [
     {
       label: "稼働中・予約",
-      value: scheduled + campaigns.filter((item) => item.status === "sending").length,
+      value:
+        scheduled +
+        campaigns.filter((item) => item.status === "sending").length,
       description: "予約済みまたは送信中",
       icon: CalendarClock,
     },
@@ -443,7 +422,10 @@ function EmailSummary({
     {
       label: "到達",
       value: delivered,
-      description: sent > 0 ? `到達率 ${Math.round((delivered / sent) * 100)}%` : "配信後に集計",
+      description:
+        sent > 0
+          ? `到達率 ${Math.round((delivered / sent) * 100)}%`
+          : "配信後に集計",
       icon: UsersRound,
     },
     {
@@ -490,7 +472,9 @@ function CampaignTable({
       toast.success("メールキャンペーンの送信を開始しました");
       await onChanged();
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "送信を開始できませんでした");
+      toast.error(
+        caught instanceof Error ? caught.message : "送信を開始できませんでした",
+      );
     }
   }
 
@@ -500,7 +484,9 @@ function CampaignTable({
       toast.success("メールキャンペーンをアーカイブしました");
       await onChanged();
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
+      toast.error(
+        caught instanceof Error ? caught.message : "アーカイブできませんでした",
+      );
     }
   }
 
@@ -583,9 +569,7 @@ function CampaignTable({
                             編集
                           </Button>
                           <AlertDialog>
-                            <AlertDialogTrigger
-                              render={<Button size="sm" />}
-                            >
+                            <AlertDialogTrigger render={<Button size="sm" />}>
                               <Send data-icon="inline-start" />
                               今すぐ送信
                             </AlertDialogTrigger>
@@ -598,7 +582,8 @@ function CampaignTable({
                                   配信を開始しますか？
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  「{campaign.segment_name}」の現在の対象者を確定し、
+                                  「{campaign.segment_name}
+                                  」の現在の対象者を確定し、
                                   Resendから送信します。
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
@@ -651,7 +636,9 @@ function TemplateTable({
       toast.success("テンプレートをアーカイブしました");
       await onChanged();
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
+      toast.error(
+        caught instanceof Error ? caught.message : "アーカイブできませんでした",
+      );
     }
   }
 
@@ -778,7 +765,9 @@ function VariableTable({
       toast.success("メッセージ変数をアーカイブしました");
       await onChanged();
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
+      toast.error(
+        caught instanceof Error ? caught.message : "アーカイブできませんでした",
+      );
     }
   }
   if (!loading && items.length === 0) {
@@ -958,21 +947,16 @@ function CampaignForm({
     const form = new FormData(event.currentTarget);
     const scheduledAt = String(form.get("scheduledAt") ?? "").trim();
     try {
-      await api(
-        campaign ? `/broadcasts/${campaign.id}` : "/broadcasts",
-        {
-          method: campaign ? "PATCH" : "POST",
-          body: JSON.stringify({
-            name: form.get("name"),
-            segmentId: form.get("segmentId"),
-            templateVersionId: form.get("templateVersionId"),
-            topicId: optionalFormValue(form.get("topicId")),
-            scheduledAt: scheduledAt
-              ? new Date(scheduledAt).toISOString()
-              : null,
-          }),
-        },
-      );
+      await api(campaign ? `/broadcasts/${campaign.id}` : "/broadcasts", {
+        method: campaign ? "PATCH" : "POST",
+        body: JSON.stringify({
+          name: form.get("name"),
+          segmentId: form.get("segmentId"),
+          templateVersionId: form.get("templateVersionId"),
+          topicId: optionalFormValue(form.get("topicId")),
+          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+        }),
+      });
       toast.success(
         campaign
           ? "メールキャンペーンを更新しました"
@@ -1215,7 +1199,9 @@ function TemplateForm({
           </Card>
         ) : null}
         <LoadingButton busy={busy} type="submit" className="w-full">
-          {template ? `v${template.version + 1}として保存` : "テンプレートを作成"}
+          {template
+            ? `v${template.version + 1}として保存`
+            : "テンプレートを作成"}
         </LoadingButton>
       </FieldGroup>
     </form>
@@ -1238,9 +1224,7 @@ function VariableForm({
     const form = new FormData(event.currentTarget);
     try {
       await api(
-        variable
-          ? `/message-variables/${variable.id}`
-          : "/message-variables",
+        variable ? `/message-variables/${variable.id}` : "/message-variables",
         {
           method: variable ? "PATCH" : "POST",
           body: JSON.stringify({
@@ -1318,7 +1302,13 @@ function ArchiveConfirm({
   return (
     <AlertDialog>
       <AlertDialogTrigger
-        render={<Button size="sm" variant="ghost" aria-label={`${label}をアーカイブ`} />}
+        render={
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={`${label}をアーカイブ`}
+          />
+        }
       >
         <Archive />
       </AlertDialogTrigger>

@@ -28,61 +28,31 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ListChecks, Plus, Tags } from "lucide-react";
 import {
-  type FormEvent,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+  loadContactResources,
+  type ContactResources,
+} from "@/features/contacts/contact-resource-api";
+import { ListChecks, Plus, Tags } from "lucide-react";
+import { type FormEvent, type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
-import { api } from "../api";
+import { api } from "@/api";
 
-interface TagResource {
-  id: string;
-  name: string;
-  slug: string;
-  color: string;
-  contact_count: number;
-}
-
-interface ListResource {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  color: string;
-  contact_count: number;
-}
-
-interface ContactResources {
-  tags: TagResource[];
-  lists: ListResource[];
-}
-
-const emptyResources: ContactResources = {
-  tags: [],
-  lists: [],
-};
-
-function useContactResources(): {
+function useContactResources(initialResources: ContactResources): {
   resources: ContactResources;
   loading: boolean;
   error: string;
   load: () => Promise<void>;
 } {
   const [resources, setResources] =
-    useState<ContactResources>(emptyResources);
-  const [loading, setLoading] = useState(true);
+    useState<ContactResources>(initialResources);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const response = await api<ContactResources>("/contact-options");
-      setResources(response.data);
+      setResources(await loadContactResources());
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -94,15 +64,16 @@ function useContactResources(): {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   return { resources, loading, error, load };
 }
 
-export function ContactListsPage(): ReactNode {
-  const { resources, loading, error, load } = useContactResources();
+export function ContactListsPage({
+  initialResources,
+}: {
+  initialResources: ContactResources;
+}): ReactNode {
+  const { resources, loading, error, load } =
+    useContactResources(initialResources);
   const [showCreate, setShowCreate] = useState(false);
 
   return (
@@ -133,7 +104,9 @@ export function ContactListsPage(): ReactNode {
         </CardHeader>
         <CardContent className="px-0">
           <Table>
-            <TableCaption className="sr-only">コンタクトリスト一覧</TableCaption>
+            <TableCaption className="sr-only">
+              コンタクトリスト一覧
+            </TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead className="px-4">リスト</TableHead>
@@ -208,8 +181,13 @@ export function ContactListsPage(): ReactNode {
   );
 }
 
-export function ContactTagsPage(): ReactNode {
-  const { resources, loading, error, load } = useContactResources();
+export function ContactTagsPage({
+  initialResources,
+}: {
+  initialResources: ContactResources;
+}): ReactNode {
+  const { resources, loading, error, load } =
+    useContactResources(initialResources);
   const [showCreate, setShowCreate] = useState(false);
 
   return (
@@ -346,9 +324,7 @@ function ResourceTableSkeleton({ columns }: { columns: number }): ReactNode {
           key={columnIndex}
           className={columnIndex === 0 ? "px-4" : undefined}
         >
-          <Skeleton
-            className={columnIndex === 0 ? "h-4 w-32" : "h-4 w-20"}
-          />
+          <Skeleton className={columnIndex === 0 ? "h-4 w-32" : "h-4 w-20"} />
         </TableCell>
       ))}
     </TableRow>
@@ -380,7 +356,11 @@ function CreateListForm({
       await onSaved();
       toast.success("リストを作成しました");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "リストを作成できませんでした");
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "リストを作成できませんでした",
+      );
     } finally {
       setBusy(false);
     }
@@ -443,7 +423,9 @@ function CreateTagForm({
       await onSaved();
       toast.success("タグを作成しました");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "タグを作成できませんでした");
+      setError(
+        caught instanceof Error ? caught.message : "タグを作成できませんでした",
+      );
     } finally {
       setBusy(false);
     }

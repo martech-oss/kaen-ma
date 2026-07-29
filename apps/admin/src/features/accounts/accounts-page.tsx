@@ -7,7 +7,6 @@ import {
   FormSelectOption,
   LoadingButton,
   PageLayout,
-  PageLoading,
 } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,7 +32,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -55,6 +53,14 @@ import {
   UsersRound,
 } from "lucide-react";
 import {
+  loadAccountDetail,
+  type AccountContact,
+  type AccountDetail,
+  type AccountDetailData,
+  type AccountSummary,
+  type ContactOption,
+} from "@/features/accounts/account-api";
+import {
   type FormEvent,
   type ReactNode,
   useCallback,
@@ -62,75 +68,34 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { api } from "../api";
+import { api } from "@/api";
 
-interface AccountSummary {
-  id: string;
-  workspaceId: string;
-  name: string;
-  domain: string | null;
-  contactCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface AccountContact {
-  id: string;
-  email: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  stage: string;
-  score: number;
-  status: "active" | "archived" | "anonymous";
-  title: string | null;
-  is_primary: boolean;
-}
-
-interface AccountDetail
-  extends Omit<AccountSummary, "contactCount"> {
-  contacts: AccountContact[];
-}
-
-interface ContactOption {
-  id: string;
-  email: string | null;
-  firstName: string | null;
-  lastName: string | null;
-}
-
-export function AccountsPage(): ReactNode {
-  const [accounts, setAccounts] = useState<AccountSummary[]>([]);
-  const [query, setQuery] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+export function AccountsPage({
+  accounts,
+  initialQuery,
+}: {
+  accounts: AccountSummary[];
+  initialQuery: string;
+}): ReactNode {
+  const [query, setQuery] = useState(initialQuery);
   const [showCreate, setShowCreate] = useState(false);
   const navigate = useNavigate();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams({ limit: "200" });
-      if (query.trim()) params.set("q", query.trim());
-      const response = await api<AccountSummary[]>(
-        `/accounts?${params.toString()}`,
-      );
-      setAccounts(response.data);
-    } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "アカウントを読み込めませんでした",
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [query]);
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 180);
+    if (query === initialQuery) return;
+    const timer = window.setTimeout(() => {
+      void navigate({
+        to: "/contacts/accounts",
+        search: { q: query },
+        replace: true,
+      });
+    }, 180);
     return () => window.clearTimeout(timer);
-  }, [load]);
+  }, [initialQuery, navigate, query]);
 
   return (
     <PageLayout
@@ -156,7 +121,6 @@ export function AccountsPage(): ReactNode {
           </InputGroupAddon>
         </InputGroup>
       </div>
-      {error ? <ErrorAlert>{error}</ErrorAlert> : null}
       <Card>
         <CardHeader className="border-b">
           <CardTitle>すべてのアカウント</CardTitle>
@@ -164,11 +128,7 @@ export function AccountsPage(): ReactNode {
             会社情報と所属する連絡先数を確認できます。
           </CardDescription>
           <CardAction>
-            {loading ? (
-              <Skeleton className="h-5 w-12 rounded-full" />
-            ) : (
-              <Badge variant="secondary">{accounts.length}社</Badge>
-            )}
+            <Badge variant="secondary">{accounts.length}社</Badge>
           </CardAction>
         </CardHeader>
         <CardContent className="px-0">
@@ -183,60 +143,45 @@ export function AccountsPage(): ReactNode {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading
-                ? Array.from({ length: 4 }, (_, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="px-4">
-                        <Skeleton className="h-4 w-40" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-4 w-32" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-5 w-14 rounded-full" />
-                      </TableCell>
-                      <TableCell className="px-4">
-                        <Skeleton className="ml-auto h-4 w-24" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                : accounts.map((account) => (
-                    <TableRow key={account.id}>
-                      <TableCell className="px-4 font-medium">
-                        <Button
-                          variant="link"
-                          className="h-auto p-0"
-                          nativeButton={false}
-                          render={
-                            <Link
-                              to="/contacts/accounts/$id"
-                              params={{ id: account.id }}
-                            />
-                          }
-                        >
-                          {account.name}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {account.domain ?? "未設定"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {Number(account.contactCount).toLocaleString()}人
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-4 text-right text-muted-foreground">
-                        {formatDate(account.updatedAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+              {accounts.map((account) => (
+                <TableRow key={account.id}>
+                  <TableCell className="px-4 font-medium">
+                    <Button
+                      variant="link"
+                      className="h-auto p-0"
+                      nativeButton={false}
+                      render={
+                        <Link
+                          to="/contacts/accounts/$id"
+                          params={{ id: account.id }}
+                        />
+                      }
+                    >
+                      {account.name}
+                    </Button>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {account.domain ?? "未設定"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">
+                      {Number(account.contactCount).toLocaleString()}人
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-4 text-right text-muted-foreground">
+                    {formatDate(account.updatedAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
-          {!loading && accounts.length === 0 ? (
+          {accounts.length === 0 ? (
             <EmptyState
               compact
               title={
-                query ? "条件に一致する会社がありません" : "会社がまだありません"
+                query
+                  ? "条件に一致する会社がありません"
+                  : "会社がまだありません"
               }
               description={
                 query
@@ -245,10 +190,7 @@ export function AccountsPage(): ReactNode {
               }
               action={
                 query ? undefined : (
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowCreate(true)}
-                  >
+                  <Button variant="outline" onClick={() => setShowCreate(true)}>
                     <Building2 data-icon="inline-start" />
                     アカウントを作成
                   </Button>
@@ -286,44 +228,36 @@ export function AccountsPage(): ReactNode {
 
 export function AccountDetailPage({
   accountId,
+  initialData,
 }: {
   accountId: string;
+  initialData: AccountDetailData;
 }): ReactNode {
-  const [account, setAccount] = useState<AccountDetail | null>(null);
-  const [contacts, setContacts] = useState<ContactOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [account, setAccount] = useState<AccountDetail | null>(
+    initialData.account,
+  );
+  const [contacts, setContacts] = useState<ContactOption[]>(
+    initialData.contacts,
+  );
   const [error, setError] = useState("");
   const [showEdit, setShowEdit] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError("");
     try {
-      const [accountResponse, contactResponse] = await Promise.all([
-        api<AccountDetail>(`/accounts/${accountId}`),
-        api<ContactOption[]>(
-          "/contacts?limit=100&status=active&sort=name&direction=asc",
-        ),
-      ]);
-      setAccount(accountResponse.data);
-      setContacts(contactResponse.data);
+      const result = await loadAccountDetail(accountId);
+      setAccount(result.account);
+      setContacts(result.contacts);
     } catch (caught) {
       setError(
         caught instanceof Error
           ? caught.message
           : "アカウントを読み込めませんでした",
       );
-    } finally {
-      setLoading(false);
     }
   }, [accountId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  if (loading && !account) return <PageLoading label="アカウントを読み込んでいます…" />;
   if (!account) {
     return (
       <PageLayout
@@ -454,7 +388,9 @@ export function AccountDetailPage({
                   <TableCell>
                     <Badge variant="secondary">{contact.stage}</Badge>
                   </TableCell>
-                  <TableCell className="tabular-nums">{contact.score}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {contact.score}
+                  </TableCell>
                   <TableCell className="px-4 text-right">
                     <Button
                       variant="ghost"
@@ -562,7 +498,9 @@ function AccountForm({
     setBusy(true);
     setError("");
     try {
-      const domain = String(form.get("domain") ?? "").trim().toLowerCase();
+      const domain = String(form.get("domain") ?? "")
+        .trim()
+        .toLowerCase();
       await onSubmit({
         name: String(form.get("name") ?? "").trim(),
         ...(domain ? { domain } : {}),
@@ -695,7 +633,9 @@ function AddAccountContactForm({
 }
 
 function contactName(contact: AccountContact): string {
-  const name = [contact.last_name, contact.first_name].filter(Boolean).join(" ");
+  const name = [contact.last_name, contact.first_name]
+    .filter(Boolean)
+    .join(" ");
   return name || contact.email || "名前未設定";
 }
 
@@ -703,7 +643,7 @@ function contactOptionLabel(contact: ContactOption): string {
   const name = [contact.lastName, contact.firstName].filter(Boolean).join(" ");
   return name
     ? `${name}${contact.email ? `（${contact.email}）` : ""}`
-    : contact.email ?? "名前未設定";
+    : (contact.email ?? "名前未設定");
 }
 
 function formatDate(value: string): string {

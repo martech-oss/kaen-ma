@@ -1,6 +1,11 @@
+import { SettingsPage } from "@/features/settings/settings-page";
 import { createFileRoute } from "@tanstack/react-router";
-import { SettingsPage } from "../App";
 
 export const Route = createFileRoute("/_app/settings")({
-  component: SettingsPage,
+  component: SettingsRoute,
 });
+
+function SettingsRoute() {
+  const { workspace } = Route.useRouteContext();
+  return <SettingsPage workspace={workspace} />;
+}
