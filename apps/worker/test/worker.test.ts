@@ -76,6 +76,7 @@ describe("Kaenma Worker", () => {
     const workspaceId = uuidv7();
     const tagId = uuidv7();
     const listId = uuidv7();
+    const accountId = uuidv7();
     const now = new Date().toISOString();
     await env.DB.prepare(
       `INSERT INTO organization (id, name, slug, created_at, timezone)
@@ -92,13 +93,13 @@ describe("Kaenma Worker", () => {
       email: "high@example.com",
       firstName: "High",
       stage: "customer",
-      customFields: { region: "Tokyo" },
+      customFields: {},
     });
     const lowScore = await repository.createContact({
       email: "low@example.com",
       firstName: "Low",
       stage: "lead",
-      customFields: { region: "Osaka" },
+      customFields: {},
     });
     await env.DB.batch([
       env.DB.prepare(
@@ -110,6 +111,11 @@ describe("Kaenma Worker", () => {
          (id, workspace_id, name, slug, description, color, created_at, updated_at)
          VALUES (?, ?, 'Customers', ?, '', '#6366f1', ?, ?)`,
       ).bind(listId, workspaceId, `customers-${listId}`, now, now),
+      env.DB.prepare(
+        `INSERT INTO companies
+         (id, workspace_id, name, domain, custom_fields, created_at, updated_at)
+         VALUES (?, ?, 'Acme', 'acme.example', '{}', ?, ?)`,
+      ).bind(accountId, workspaceId, now, now),
       env.DB.prepare(
         "UPDATE contacts SET score = 80 WHERE workspace_id = ? AND id = ?",
       ).bind(workspaceId, highScore.id),
@@ -127,15 +133,19 @@ describe("Kaenma Worker", () => {
          (workspace_id, list_id, contact_id, status, source, created_at, updated_at)
          VALUES (?, ?, ?, 'active', 'manual', ?, ?)`,
       ).bind(workspaceId, listId, highScore.id, now, now),
+      env.DB.prepare(
+        `INSERT INTO company_contacts
+         (workspace_id, company_id, contact_id, title, is_primary, created_at)
+         VALUES (?, ?, ?, 'Owner', 1, ?)`,
+      ).bind(workspaceId, accountId, highScore.id, now),
     ]);
 
     const filtered = await repository.listContacts({
       tagId,
       listId,
+      accountId,
       stage: "customer",
       scoreMin: 50,
-      customFieldKey: "region",
-      customFieldValue: "Tokyo",
     });
     expect(filtered.total).toBe(1);
     expect(filtered.items.map((contact) => contact.id)).toEqual([highScore.id]);
@@ -214,19 +224,14 @@ describe("Kaenma Worker", () => {
     });
     expect(listResponse.status).toBe(201);
     const list = (await listResponse.json()) as { data: { id: string; slug: string } };
-    expect(
-      (
-        await call("/custom-fields", {
-          method: "POST",
-          body: JSON.stringify({
-            key: "region",
-            label: "地域",
-            dataType: "select",
-            options: ["Tokyo", "Osaka"],
-          }),
-        })
-      ).status,
-    ).toBe(201);
+    const accountResponse = await call("/accounts", {
+      method: "POST",
+      body: JSON.stringify({ name: "Acme", domain: "acme.example" }),
+    });
+    expect(accountResponse.status).toBe(201);
+    const account = (await accountResponse.json()) as {
+      data: { id: string; name: string };
+    };
 
     const contactResponse = await call("/contacts", {
       method: "POST",
@@ -234,7 +239,6 @@ describe("Kaenma Worker", () => {
         email: "api-contact@example.com",
         firstName: "API",
         stage: "customer",
-        customFields: { region: "Tokyo" },
       }),
     });
     expect(contactResponse.status).toBe(201);
@@ -252,6 +256,18 @@ describe("Kaenma Worker", () => {
         await call(`/contacts/${contact.data.id}/lists`, {
           method: "POST",
           body: JSON.stringify({ listId: list.data.id }),
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (
+        await call(`/accounts/${account.data.id}/contacts`, {
+          method: "POST",
+          body: JSON.stringify({
+            contactId: contact.data.id,
+            title: "Marketing Lead",
+            isPrimary: true,
+          }),
         })
       ).status,
     ).toBe(201);
@@ -285,12 +301,17 @@ describe("Kaenma Worker", () => {
     const segment = (await segmentResponse.json()) as { data: { id: string } };
 
     const filteredResponse = await call(
-      `/contacts?tagId=${tag.data.id}&listId=${list.data.id}&segmentId=${segment.data.id}` +
-        "&scoreMin=50&customFieldKey=region&customFieldValue=Tokyo",
+      `/contacts?tagId=${tag.data.id}&listId=${list.data.id}` +
+        `&accountId=${account.data.id}&segmentId=${segment.data.id}&scoreMin=50`,
     );
     expect(filteredResponse.status).toBe(200);
     const filtered = (await filteredResponse.json()) as {
-      data: Array<{ id: string; tags: unknown[]; lists: unknown[] }>;
+      data: Array<{
+        id: string;
+        tags: unknown[];
+        lists: unknown[];
+        accounts: unknown[];
+      }>;
       meta: { total: number };
     };
     expect(filtered.meta.total).toBe(1);
@@ -298,6 +319,7 @@ describe("Kaenma Worker", () => {
       id: contact.data.id,
       tags: [expect.objectContaining({ id: tag.data.id })],
       lists: [expect.objectContaining({ id: list.data.id })],
+      accounts: [expect.objectContaining({ id: account.data.id })],
     });
 
     const profileResponse = await call(`/contacts/${contact.data.id}/profile`);
@@ -307,13 +329,28 @@ describe("Kaenma Worker", () => {
         contact: { score: number };
         tags: unknown[];
         lists: unknown[];
+        accounts: unknown[];
         scoreEvents: unknown[];
       };
     };
     expect(profile.data.contact.score).toBe(75);
     expect(profile.data.tags).toHaveLength(1);
     expect(profile.data.lists).toHaveLength(1);
+    expect(profile.data.accounts).toHaveLength(1);
     expect(profile.data.scoreEvents).toHaveLength(1);
+
+    const accountDetailResponse = await call(`/accounts/${account.data.id}`);
+    expect(accountDetailResponse.status).toBe(200);
+    const accountDetail = (await accountDetailResponse.json()) as {
+      data: { name: string; contacts: Array<{ id: string; title: string }> };
+    };
+    expect(accountDetail.data.name).toBe("Acme");
+    expect(accountDetail.data.contacts).toEqual([
+      expect.objectContaining({
+        id: contact.data.id,
+        title: "Marketing Lead",
+      }),
+    ]);
 
     expect((await call(`/contacts/${contact.data.id}`, { method: "DELETE" })).status).toBe(200);
     expect(
