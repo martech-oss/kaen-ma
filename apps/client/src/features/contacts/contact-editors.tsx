@@ -5,7 +5,7 @@ import { ErrorAlert as ErrorNotice } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type AccountOption, type SegmentOption } from "@/features/contacts/contact-api";
-import { rpc } from "@/rpc";
+import { orpc } from "@/lib/orpc";
 
 import { ControlledSelect, Section } from "./contact-bits";
 import { type ContactProfile } from "./contact-drawer";
@@ -101,12 +101,10 @@ export function AccountEditor({
     setBusy(true);
     setError("");
     try {
-      await rpc(`/accounts/${selectedId}/contacts`, {
-        method: "POST",
-        body: JSON.stringify({
-          contactId,
-          isPrimary: accounts.length === 0,
-        }),
+      await orpc.accounts.assignContact({
+        id: selectedId,
+        contactId,
+        isPrimary: accounts.length === 0,
       });
       setSelectedId("");
       await onChanged();
@@ -121,9 +119,7 @@ export function AccountEditor({
     setBusy(true);
     setError("");
     try {
-      await rpc(`/accounts/${accountId}/contacts/${contactId}`, {
-        method: "DELETE",
-      });
+      await orpc.accounts.removeContact({ id: accountId, contactId });
       await onChanged();
     } catch (caught) {
       setError(
@@ -141,7 +137,7 @@ export function AccountEditor({
           <Badge key={account.id} variant="outline">
             <Building2 />
             {account.name}
-            {account.is_primary ? " · 主担当" : ""}
+            {account.isPrimary ? " · 主担当" : ""}
             {!disabled ? (
               <Button
                 variant="ghost"

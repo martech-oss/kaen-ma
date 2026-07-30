@@ -36,7 +36,8 @@ import {
   loadContactResources,
   type ContactResources,
 } from "@/features/contacts/contact-resource-api";
-import { rpc } from "@/rpc";
+import { orpc } from "@/lib/orpc";
+import { getFormString } from "@/lib/utils";
 
 function useContactResources(initialResources: ContactResources): {
   resources: ContactResources;
@@ -129,7 +130,7 @@ export function ContactListsPage({
                     </TableCell>
                     <TableCell className="px-4 text-right">
                       <Badge variant="secondary">
-                        {Number(list.contact_count).toLocaleString()}
+                        {Number(list.contactCount).toLocaleString()}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -236,9 +237,7 @@ export function ContactTagsPage({
                       <span className="font-mono text-xs text-muted-foreground">{tag.slug}</span>
                     </TableCell>
                     <TableCell className="px-4 text-right">
-                      <Badge variant="secondary">
-                        {Number(tag.contact_count).toLocaleString()}
-                      </Badge>
+                      <Badge variant="secondary">{Number(tag.contactCount).toLocaleString()}</Badge>
                     </TableCell>
                   </TableRow>
                 ))
@@ -316,13 +315,10 @@ function CreateListForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNod
     setBusy(true);
     setError("");
     try {
-      await rpc("/contact-lists", {
-        method: "POST",
-        body: JSON.stringify({
-          name: form.get("name"),
-          description: form.get("description"),
-          color: form.get("color"),
-        }),
+      await orpc.contactResources.createList({
+        name: getFormString(form, "name"),
+        description: getFormString(form, "description"),
+        color: getFormString(form, "color"),
       });
       await onSaved();
       toast.success("リストを作成しました");
@@ -370,12 +366,9 @@ function CreateTagForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode
     setBusy(true);
     setError("");
     try {
-      await rpc("/tags", {
-        method: "POST",
-        body: JSON.stringify({
-          name: form.get("name"),
-          color: form.get("color"),
-        }),
+      await orpc.contactResources.createTag({
+        name: getFormString(form, "name"),
+        color: getFormString(form, "color"),
       });
       await onSaved();
       toast.success("タグを作成しました");

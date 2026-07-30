@@ -11,8 +11,8 @@ import { NativeSelectOption } from "@/components/ui/native-select";
 import { type ContactOptions } from "@/features/contacts/contact-api";
 import { optionalString } from "@/lib/form-data";
 import { orpcQuery } from "@/lib/orpc";
+import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
-import { rpc } from "@/rpc";
 import { type SegmentFilter } from "@kaenma/shared/segments";
 
 import { slugify } from "./contact-bits";
@@ -47,24 +47,16 @@ export function ContactCreateForm({
       const accountId = optionalString(form.get("accountId"));
       await Promise.all([
         tagId
-          ? rpc(`/contacts/${contact.id}/tags`, {
-              method: "POST",
-              body: JSON.stringify({ tagId }),
-            })
+          ? orpc.contactResources.addTag({ contactId: contact.id, resourceId: tagId })
           : Promise.resolve(),
         listId
-          ? rpc(`/contacts/${contact.id}/lists`, {
-              method: "POST",
-              body: JSON.stringify({ listId }),
-            })
+          ? orpc.contactResources.addList({ contactId: contact.id, resourceId: listId })
           : Promise.resolve(),
         accountId
-          ? rpc(`/accounts/${accountId}/contacts`, {
-              method: "POST",
-              body: JSON.stringify({
-                contactId: contact.id,
-                isPrimary: true,
-              }),
+          ? orpc.accounts.assignContact({
+              id: accountId,
+              contactId: contact.id,
+              isPrimary: true,
             })
           : Promise.resolve(),
       ]);
@@ -142,14 +134,11 @@ export function SegmentSaveForm({
     const name = getFormString(new FormData(event.currentTarget), "name");
     setBusy(true);
     try {
-      await rpc("/segments", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          slug: slugify(name),
-          kind: "dynamic",
-          filter,
-        }),
+      await orpc.segments.create({
+        name,
+        slug: slugify(name),
+        kind: "dynamic",
+        filter,
       });
       await onSaved();
     } catch (caught) {

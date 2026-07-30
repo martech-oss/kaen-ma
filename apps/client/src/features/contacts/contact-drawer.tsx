@@ -38,54 +38,17 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  type AccountOption,
-  type ContactOptions,
-  type ListOption,
-  type TagOption,
-} from "@/features/contacts/contact-api";
+import { type ContactOptions } from "@/features/contacts/contact-api";
 import { nullableString } from "@/lib/form-data";
 import { formatLongDateTime } from "@/lib/format";
-import { cn } from "@/lib/utils";
-import { rpc } from "@/rpc";
-import { type Contact } from "@kaenma/shared/contacts";
+import { orpc } from "@/lib/orpc";
+import { cn, getFormString } from "@/lib/utils";
+import { type ContactProfile } from "@kaenma/shared/contacts";
+
+export type { ContactProfile };
 
 import { ContactAvatar, contactName, ContactStatusBadge, Section, StatCard } from "./contact-bits";
 import { AccountEditor, RelationEditor, SegmentEditor } from "./contact-editors";
-
-export interface ContactProfile {
-  contact: Contact;
-  tags: TagOption[];
-  lists: Array<ListOption & { status: string; updated_at: string }>;
-  segments: Array<{
-    id: string;
-    name: string;
-    kind: "static" | "dynamic";
-    source: string;
-    joined_at: string;
-  }>;
-  accounts: Array<
-    AccountOption & {
-      title: string | null;
-      is_primary: boolean;
-    }
-  >;
-  scoreEvents: Array<{
-    id: string;
-    delta: number;
-    total: number;
-    reason: string;
-    created_at: string;
-  }>;
-  timeline: Array<{
-    id: string;
-    type: string;
-    resource_type: string | null;
-    resource_id: string | null;
-    properties: Record<string, unknown>;
-    occurred_at: string;
-  }>;
-}
 
 export function ContactDrawer({
   contactId,
@@ -106,8 +69,7 @@ export function ContactDrawer({
   const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await rpc<ContactProfile>(`/contacts/${contactId}/profile`);
-      setProfile(response.data);
+      setProfile(await orpc.contactResources.profile({ contactId }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "プロフィールを読み込めませんでした");
     } finally {
@@ -123,10 +85,10 @@ export function ContactDrawer({
     await Promise.all([loadProfile(), onChanged()]);
   }
 
-  async function mutate(path: string, init: RequestInit) {
+  async function mutate(action: () => Promise<unknown>) {
     setError("");
     try {
-      await rpc(path, init);
+      await action();
       await changed();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更新できませんでした");
@@ -178,11 +140,7 @@ export function ContactDrawer({
                   <Button
                     variant="outline"
                     className="ml-auto"
-                    onClick={() =>
-                      void mutate(`/contacts/${contactId}/restore`, {
-                        method: "POST",
-                      })
-                    }
+                    onClick={() => void mutate(() => orpc.contactResources.restore({ contactId }))}
                   >
                     <RotateCcw data-icon="inline-start" />
                     復元
@@ -210,9 +168,7 @@ export function ContactDrawer({
                         <AlertDialogAction
                           variant="destructive"
                           onClick={() =>
-                            void mutate(`/contacts/${contactId}`, {
-                              method: "DELETE",
-                            })
+                            void mutate(() => orpc.contacts.archive({ id: contactId }))
                           }
                         >
                           アーカイブ
@@ -246,15 +202,10 @@ export function ContactDrawer({
                 options={options.tags}
                 disabled={profile.contact.status === "archived"}
                 onAdd={(id) =>
-                  mutate(`/contacts/${contactId}/tags`, {
-                    method: "POST",
-                    body: JSON.stringify({ tagId: id }),
-                  })
+                  mutate(() => orpc.contactResources.addTag({ contactId, resourceId: id }))
                 }
                 onRemove={(id) =>
-                  mutate(`/contacts/${contactId}/tags/${id}`, {
-                    method: "DELETE",
-                  })
+                  mutate(() => orpc.contactResources.removeTag({ contactId, resourceId: id }))
                 }
               />
 
@@ -265,15 +216,10 @@ export function ContactDrawer({
                 options={options.lists}
                 disabled={profile.contact.status === "archived"}
                 onAdd={(id) =>
-                  mutate(`/contacts/${contactId}/lists`, {
-                    method: "POST",
-                    body: JSON.stringify({ listId: id }),
-                  })
+                  mutate(() => orpc.contactResources.addList({ contactId, resourceId: id }))
                 }
                 onRemove={(id) =>
-                  mutate(`/contacts/${contactId}/lists/${id}`, {
-                    method: "DELETE",
-                  })
+                  mutate(() => orpc.contactResources.removeList({ contactId, resourceId: id }))
                 }
               />
 
@@ -290,15 +236,10 @@ export function ContactDrawer({
                 options={options.segments}
                 disabled={profile.contact.status === "archived"}
                 onAdd={(id) =>
-                  mutate(`/contacts/${contactId}/segments`, {
-                    method: "POST",
-                    body: JSON.stringify({ segmentId: id }),
-                  })
+                  mutate(() => orpc.contactResources.addSegment({ contactId, resourceId: id }))
                 }
                 onRemove={(id) =>
-                  mutate(`/contacts/${contactId}/segments/${id}`, {
-                    method: "DELETE",
-                  })
+                  mutate(() => orpc.contactResources.removeSegment({ contactId, resourceId: id }))
                 }
               />
 
@@ -341,16 +282,14 @@ function ProfileEditForm({
     setBusy(true);
     setError("");
     try {
-      await rpc(`/contacts/${contact.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          firstName: nullableString(form.get("firstName")),
-          lastName: nullableString(form.get("lastName")),
-          email: nullableString(form.get("email")),
-          phone: nullableString(form.get("phone")),
-          externalId: nullableString(form.get("externalId")),
-          stage: form.get("stage"),
-        }),
+      await orpc.contacts.update({
+        id: contact.id,
+        firstName: nullableString(form.get("firstName")),
+        lastName: nullableString(form.get("lastName")),
+        email: nullableString(form.get("email")),
+        phone: nullableString(form.get("phone")),
+        externalId: nullableString(form.get("externalId")),
+        stage: getFormString(form, "stage"),
       });
       await onSaved();
     } catch (caught) {
@@ -435,12 +374,10 @@ function ScoreForm({
     setBusy(true);
     setError("");
     try {
-      await rpc(`/contacts/${contactId}/score`, {
-        method: "POST",
-        body: JSON.stringify({
-          delta: Number(form.get("delta")),
-          reason: form.get("reason"),
-        }),
+      await orpc.contactResources.adjustScore({
+        contactId,
+        delta: Number(form.get("delta")),
+        reason: getFormString(form, "reason"),
       });
       formElement.reset();
       await onSaved();
@@ -480,17 +417,17 @@ function ActivityTimeline({ profile }: { profile: ContactProfile }): ReactNode {
         ...profile.timeline.map((event) => ({
           id: event.id,
           type: event.type,
-          description: event.resource_type
-            ? `${event.resource_type}${event.resource_id ? ` · ${event.resource_id}` : ""}`
+          description: event.resourceType
+            ? `${event.resourceType}${event.resourceId ? ` · ${event.resourceId}` : ""}`
             : "Contact activity",
-          at: event.occurred_at,
+          at: event.occurredAt,
           tone: "indigo",
         })),
         ...profile.scoreEvents.map((event) => ({
           id: event.id,
           type: event.delta > 0 ? `スコア +${event.delta}` : `スコア ${event.delta}`,
           description: `${event.reason} · 合計 ${event.total}`,
-          at: event.created_at,
+          at: event.createdAt,
           tone: event.delta > 0 ? "emerald" : "amber",
         })),
       ].sort((left, right) => right.at.localeCompare(left.at)),

@@ -53,8 +53,8 @@ import {
 } from "@/features/contacts/contact-api";
 import { formatLongDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
+import { orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
-import { rpc } from "@/rpc";
 import { type SegmentFilter } from "@kaenma/shared/segments";
 
 import {
@@ -148,13 +148,10 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
     setBusy(true);
     setError("");
     try {
-      await rpc("/contact-actions", {
-        method: "POST",
-        body: JSON.stringify({
-          contactIds: [...selected],
-          action: bulkAction,
-          ...(needsResource ? { resourceId: bulkResourceId } : {}),
-        }),
+      await orpc.contactResources.bulkAction({
+        contactIds: [...selected],
+        action: bulkAction,
+        ...(needsResource ? { resourceId: bulkResourceId } : {}),
       });
       await refreshContactData();
     } catch (caught) {
@@ -168,7 +165,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
     if (!segmentId) return;
     setBusy(true);
     try {
-      await rpc(`/segments/${segmentId}/refresh`, { method: "POST" });
+      await orpc.segments.refresh({ id: segmentId });
       await refreshContactData();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "セグメントを更新できませんでした");
@@ -390,7 +387,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                 <NativeSelectOption value="">すべて</NativeSelectOption>
                 {options.stages.map((item) => (
                   <NativeSelectOption key={item.stage} value={item.stage}>
-                    {item.stage} ({item.contact_count})
+                    {item.stage} ({item.contactCount})
                   </NativeSelectOption>
                 ))}
               </SelectField>

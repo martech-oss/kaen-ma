@@ -1,21 +1,8 @@
-import { rpc } from "@/rpc";
+import { orpc } from "@/lib/orpc";
+import type { ContactList, ContactOptions, Tag } from "@kaenma/shared/contacts";
 
-export interface TagResource {
-  id: string;
-  name: string;
-  slug: string;
-  color: string;
-  contact_count: number;
-}
-
-export interface ListResource {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  color: string;
-  contact_count: number;
-}
+export type TagResource = Tag;
+export type ListResource = ContactList;
 
 export interface ContactResources {
   tags: TagResource[];
@@ -23,8 +10,9 @@ export interface ContactResources {
 }
 
 export async function loadContactResources(signal?: AbortSignal): Promise<ContactResources> {
-  const response = await rpc<ContactResources>("/contact-options", {
-    signal: signal ?? null,
-  });
-  return response.data;
+  const options: ContactOptions = await orpc.contactResources.options(
+    undefined,
+    signal ? { signal } : undefined,
+  );
+  return { tags: options.tags, lists: options.lists };
 }

@@ -1,51 +1,16 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { orpcQuery } from "@/lib/orpc";
-import { rpc } from "@/rpc";
+import { orpc, orpcQuery } from "@/lib/orpc";
 import type { ContactListInput } from "@kaenma/orpc";
-import type { SegmentFilter } from "@kaenma/shared/segments";
+import type {
+  AccountOption,
+  ContactList as ListOption,
+  ContactOptions,
+  SegmentOption,
+  Tag as TagOption,
+} from "@kaenma/shared/contacts";
 
-export interface TagOption {
-  id: string;
-  name: string;
-  slug: string;
-  color: string;
-  contact_count?: number;
-}
-
-export interface ListOption {
-  id: string;
-  name: string;
-  slug: string;
-  description?: string;
-  color: string;
-  contact_count?: number;
-}
-
-export interface SegmentOption {
-  id: string;
-  name: string;
-  slug: string;
-  kind: "static" | "dynamic";
-  filter_ast: SegmentFilter | null;
-  member_count: number;
-  evaluated_at: string | null;
-}
-
-export interface AccountOption {
-  id: string;
-  name: string;
-  domain: string | null;
-  contact_count?: number;
-}
-
-export interface ContactOptions {
-  tags: TagOption[];
-  lists: ListOption[];
-  segments: SegmentOption[];
-  accounts: AccountOption[];
-  stages: Array<{ stage: string; contact_count: number }>;
-}
+export type { AccountOption, ContactOptions, ListOption, SegmentOption, TagOption };
 
 export const contactOptionsQueryKey = ["contacts", "options"] as const;
 
@@ -146,10 +111,7 @@ export function contactOptionsQueryOptions() {
 }
 
 export async function loadContactOptions(signal?: AbortSignal): Promise<ContactOptions> {
-  const response = await rpc<ContactOptions>("/contact-options", {
-    signal: signal ?? null,
-  });
-  return response.data;
+  return orpc.contactResources.options(undefined, signal ? { signal } : undefined);
 }
 
 function optionalNumber(value: string): number | undefined {
