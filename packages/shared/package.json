@@ -10,7 +10,8 @@
     "./openapi": "./src/openapi.ts",
     "./reports": "./src/reports/index.ts",
     "./segments": "./src/segments/index.ts",
-    "./segments/fields": "./src/segments/fields.ts"
+    "./segments/fields": "./src/segments/fields.ts",
+    "./website": "./src/website/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

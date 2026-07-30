@@ -39,8 +39,8 @@ import {
 import type { SignupFormDefinition, SignupFormRow } from "@/features/website/website-api";
 import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
+import { orpc } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
-import { rpc } from "@/rpc";
 
 export function SignupFormsPage({
   items,
@@ -61,7 +61,7 @@ export function SignupFormsPage({
 
   async function archive(item: SignupFormRow): Promise<void> {
     try {
-      await rpc(`/forms/${item.id}/archive`, { method: "POST" });
+      await orpc.website.archiveForm({ id: item.id });
       toast.success("サインアップフォームをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -127,9 +127,9 @@ export function SignupFormsPage({
                       </TableCell>
                       <TableCell>{formStyleLabel(item.definition.style)}</TableCell>
                       <TableCell className="text-right">
-                        {item.submission_count.toLocaleString()}
+                        {item.submissionCount.toLocaleString()}
                       </TableCell>
-                      <TableCell>{formatDateTime(item.updated_at)}</TableCell>
+                      <TableCell>{formatDateTime(item.updatedAt)}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
                           <CopyButton value={embedCode} label="埋め込み" />
@@ -188,7 +188,7 @@ export function SignupFormsPage({
 
 function FormSummary({ items }: { items: SignupFormRow[] }): ReactNode {
   const published = items.filter((item) => item.status === "published").length;
-  const submissions = items.reduce((total, item) => total + item.submission_count, 0);
+  const submissions = items.reduce((total, item) => total + item.submissionCount, 0);
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       {[
@@ -239,9 +239,7 @@ function SignupFormEditor({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [turnstileEnabled, setTurnstileEnabled] = useState(
-    item ? item.turnstile_enabled === 1 : true,
-  );
+  const [turnstileEnabled, setTurnstileEnabled] = useState(item?.turnstileEnabled ?? true);
   const [optionalFields, setOptionalFields] = useState(
     new Set(
       ["firstName", "lastName", "phone"].filter((field) =>
@@ -282,21 +280,18 @@ function SignupFormEditor({
     setBusy(true);
     setError("");
     try {
-      await rpc(item ? `/forms/${item.id}` : "/forms", {
-        method: item ? "PATCH" : "POST",
-        body: JSON.stringify({
-          name,
-          slug: getFormString(formData, "slug").trim() || slugify(name),
-          status: formData.get("status"),
-          definition: {
-            style: formData.get("style"),
-            fields,
-          },
-          allowedDomains,
-          turnstileEnabled,
-          successMessage: formData.get("successMessage"),
-        }),
-      });
+      const payload = {
+        name,
+        slug: getFormString(formData, "slug").trim() || slugify(name),
+        status: getFormString(formData, "status") === "published" ? "published" : "draft",
+        definition: { style: readFormStyle(formData), fields },
+        allowedDomains,
+        turnstileEnabled,
+        successMessage: getFormString(formData, "successMessage"),
+      } as const;
+      await (item
+        ? orpc.website.updateForm({ id: item.id, ...payload })
+        : orpc.website.createForm(payload));
       toast.success(item ? "フォームを更新しました" : "フォームを作成しました");
       await onSaved();
     } catch (caught) {
@@ -372,7 +367,7 @@ function SignupFormEditor({
         <FormTextarea
           label="許可ドメイン"
           name="allowedDomains"
-          defaultValue={item?.allowed_domains.join("\n")}
+          defaultValue={item?.allowedDomains.join("\n")}
           description="1行に1ドメイン。空欄ならすべてのドメインから送信できます。"
           placeholder={"example.com\ncampaign.example.com"}
           rows={3}
@@ -380,7 +375,7 @@ function SignupFormEditor({
         <FormInput
           label="送信完了メッセージ"
           name="successMessage"
-          defaultValue={item?.success_message ?? "ありがとうございます。"}
+          defaultValue={item?.successMessage ?? "ありがとうございます。"}
           required
         />
         <Field orientation="horizontal">
@@ -405,6 +400,14 @@ function SignupFormEditor({
       </FieldGroup>
     </form>
   );
+}
+
+/** Narrows the select value to the union the form definition accepts. */
+function readFormStyle(formData: FormData): NonNullable<SignupFormDefinition["style"]> {
+  const value = getFormString(formData, "style");
+  return value === "floating-bar" || value === "floating-box" || value === "modal"
+    ? value
+    : "inline";
 }
 
 function formStyleLabel(style?: SignupFormDefinition["style"]): string {

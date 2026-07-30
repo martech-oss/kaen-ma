@@ -28,8 +28,8 @@ import {
 import type { LandingPageRow } from "@/features/website/website-api";
 import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
+import { orpc } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
-import { rpc } from "@/rpc";
 import type { ContentDocument } from "@kaenma/shared";
 
 export function LandingPagesPage({
@@ -51,7 +51,7 @@ export function LandingPagesPage({
 
   async function archive(item: LandingPageRow): Promise<void> {
     try {
-      await rpc(`/pages/${item.id}/archive`, { method: "POST" });
+      await orpc.website.archivePage({ id: item.id });
       toast.success("ランディングページをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -112,7 +112,7 @@ export function LandingPagesPage({
                         <PublishStatusBadge status={item.status} />
                       </TableCell>
                       <TableCell>v{item.version}</TableCell>
-                      <TableCell>{formatDateTime(item.updated_at)}</TableCell>
+                      <TableCell>{formatDateTime(item.updatedAt)}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
                           <CopyButton value={publicUrl} label="URL" />
@@ -171,7 +171,7 @@ export function LandingPagesPage({
 
 function LandingSummary({ items }: { items: LandingPageRow[] }): ReactNode {
   const published = items.filter((item) => item.status === "published").length;
-  const latestVersion = items.reduce((version, item) => Math.max(version, item.version), 0);
+  const latestVersion = items.reduce((version, item) => Math.max(version, item.version ?? 0), 0);
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       {[
@@ -218,7 +218,7 @@ function LandingPageEditor({
 }): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const current = readLandingContent(item?.content_document);
+  const current = readLandingContent(item?.contentDocument ?? undefined);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -227,20 +227,20 @@ function LandingPageEditor({
     setBusy(true);
     setError("");
     try {
-      await rpc(item ? `/pages/${item.id}` : "/pages", {
-        method: item ? "PATCH" : "POST",
-        body: JSON.stringify({
-          name,
-          slug: getFormString(formData, "slug").trim() || slugify(name),
-          status: formData.get("status"),
-          content: buildLandingContent({
-            headline: getFormString(formData, "headline"),
-            body: getFormString(formData, "body"),
-            ctaLabel: getFormString(formData, "ctaLabel"),
-            ctaUrl: getFormString(formData, "ctaUrl"),
-          }),
+      const payload = {
+        name,
+        slug: getFormString(formData, "slug").trim() || slugify(name),
+        status: getFormString(formData, "status") === "published" ? "published" : "draft",
+        content: buildLandingContent({
+          headline: getFormString(formData, "headline"),
+          body: getFormString(formData, "body"),
+          ctaLabel: getFormString(formData, "ctaLabel"),
+          ctaUrl: getFormString(formData, "ctaUrl"),
         }),
-      });
+      } as const;
+      await (item
+        ? orpc.website.updatePage({ id: item.id, ...payload })
+        : orpc.website.createPage(payload));
       toast.success(item ? "ページを更新しました" : "ページを作成しました");
       await onSaved();
     } catch (caught) {

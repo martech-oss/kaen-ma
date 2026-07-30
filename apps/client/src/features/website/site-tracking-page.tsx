@@ -35,8 +35,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { SiteTrackingData } from "@/features/website/website-api";
 import { CopyButton } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
+import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
-import { rpc } from "@/rpc";
 
 export function SiteTrackingPage({ data }: { data: SiteTrackingData }): ReactNode {
   const router = useRouter();
@@ -55,10 +55,7 @@ export function SiteTrackingPage({ data }: { data: SiteTrackingData }): ReactNod
     setBusy(true);
     setError("");
     try {
-      await rpc("/site-tracking", {
-        method: "PUT",
-        body: JSON.stringify({ enabled, allowedDomains }),
-      });
+      await orpc.website.updateTracking({ enabled, allowedDomains });
       toast.success("サイトトラッキング設定を保存しました");
       await router.invalidate({ sync: true });
     } catch (caught) {
@@ -261,16 +258,16 @@ function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): R
           <TableBody>
             {items.length > 0 ? (
               items.map((item, index) => (
-                <TableRow key={`${item.visitor_id}-${item.occurred_at}-${index}`}>
+                <TableRow key={`${item.visitorId}-${item.occurredAt}-${index}`}>
                   <TableCell>
-                    <span className="block max-w-64 truncate">{item.resource_id}</span>
+                    <span className="block max-w-64 truncate">{item.resourceId}</span>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={item.contact_id ? "default" : "secondary"}>
-                      {item.contact_id ? "識別済み" : "匿名"}
+                    <Badge variant={item.contactId ? "default" : "secondary"}>
+                      {item.contactId ? "識別済み" : "匿名"}
                     </Badge>
                   </TableCell>
-                  <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
+                  <TableCell>{formatDateTime(item.occurredAt)}</TableCell>
                 </TableRow>
               ))
             ) : (

@@ -36,8 +36,8 @@ import {
 import type { SiteMessageRow } from "@/features/website/website-api";
 import { ArchiveConfirm, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
+import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
-import { rpc } from "@/rpc";
 
 export function SiteMessagesPage({ items }: { items: SiteMessageRow[] }): ReactNode {
   const router = useRouter();
@@ -52,7 +52,7 @@ export function SiteMessagesPage({ items }: { items: SiteMessageRow[] }): ReactN
 
   async function archive(item: SiteMessageRow): Promise<void> {
     try {
-      await rpc(`/site-messages/${item.id}/archive`, { method: "POST" });
+      await orpc.website.archiveMessage({ id: item.id });
       toast.success("サイトメッセージをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -124,15 +124,13 @@ export function SiteMessagesPage({ items }: { items: SiteMessageRow[] }): ReactN
                       <PublishStatusBadge status={item.status} />
                     </TableCell>
                     <TableCell>
-                      <code className="text-xs">{item.page_pattern}</code>
+                      <code className="text-xs">{item.pagePattern}</code>
                     </TableCell>
                     <TableCell className="text-right">
-                      {item.impression_count.toLocaleString()}
+                      {item.impressionCount.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {item.click_count.toLocaleString()}
-                    </TableCell>
-                    <TableCell>{formatDateTime(item.updated_at)}</TableCell>
+                    <TableCell className="text-right">{item.clickCount.toLocaleString()}</TableCell>
+                    <TableCell>{formatDateTime(item.updatedAt)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
                         <Button
@@ -171,8 +169,8 @@ export function SiteMessagesPage({ items }: { items: SiteMessageRow[] }): ReactN
 }
 
 function MessageSummary({ items }: { items: SiteMessageRow[] }): ReactNode {
-  const impressions = items.reduce((total, item) => total + item.impression_count, 0);
-  const clicks = items.reduce((total, item) => total + item.click_count, 0);
+  const impressions = items.reduce((total, item) => total + item.impressionCount, 0);
+  const clicks = items.reduce((total, item) => total + item.clickCount, 0);
   const clickRate = impressions > 0 ? (clicks / impressions) * 100 : 0;
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -240,20 +238,20 @@ function SiteMessageEditor({
     setBusy(true);
     setError("");
     try {
-      await rpc(item ? `/site-messages/${item.id}` : "/site-messages", {
-        method: item ? "PATCH" : "POST",
-        body: JSON.stringify({
-          name: formData.get("name"),
-          status: formData.get("status"),
-          headline: formData.get("headline"),
-          body: formData.get("body"),
-          ctaLabel: formData.get("ctaLabel"),
-          ctaUrl: ctaUrl || null,
-          pagePattern: formData.get("pagePattern"),
-          startsAt,
-          endsAt,
-        }),
-      });
+      const payload = {
+        name: getFormString(formData, "name"),
+        status: getFormString(formData, "status") === "published" ? "published" : "draft",
+        headline: getFormString(formData, "headline"),
+        body: getFormString(formData, "body"),
+        ctaLabel: getFormString(formData, "ctaLabel"),
+        ctaUrl: ctaUrl || null,
+        pagePattern: getFormString(formData, "pagePattern"),
+        startsAt,
+        endsAt,
+      } as const;
+      await (item
+        ? orpc.website.updateMessage({ id: item.id, ...payload })
+        : orpc.website.createMessage(payload));
       toast.success(item ? "サイトメッセージを更新しました" : "サイトメッセージを作成しました");
       await onSaved();
     } catch (caught) {
@@ -291,21 +289,21 @@ function SiteMessageEditor({
           <FormInput
             label="CTAラベル"
             name="ctaLabel"
-            defaultValue={item?.cta_label ?? ""}
+            defaultValue={item?.ctaLabel ?? ""}
             placeholder="相談する"
           />
           <FormInput
             label="CTAリンク"
             name="ctaUrl"
             type="url"
-            defaultValue={item?.cta_url ?? ""}
+            defaultValue={item?.ctaUrl ?? ""}
             placeholder="https://example.com/contact"
           />
         </div>
         <FormInput
           label="対象ページ"
           name="pagePattern"
-          defaultValue={item?.page_pattern ?? "*"}
+          defaultValue={item?.pagePattern ?? "*"}
           description="* はすべてのページ、/pricing* は料金ページ配下を表します。"
           placeholder="/pricing*"
           required
@@ -315,13 +313,13 @@ function SiteMessageEditor({
             label="表示開始"
             name="startsAt"
             type="datetime-local"
-            defaultValue={toLocalDateTime(item?.starts_at)}
+            defaultValue={toLocalDateTime(item?.startsAt)}
           />
           <FormInput
             label="表示終了"
             name="endsAt"
             type="datetime-local"
-            defaultValue={toLocalDateTime(item?.ends_at)}
+            defaultValue={toLocalDateTime(item?.endsAt)}
           />
         </div>
         {error ? <ErrorAlert>{error}</ErrorAlert> : null}

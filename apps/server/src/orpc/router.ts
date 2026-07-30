@@ -29,6 +29,22 @@ import {
   updateContactProcedure,
 } from "../contacts/router";
 import { createSegmentProcedure, refreshSegmentProcedure } from "../segments/router";
+import {
+  archiveFormProcedure,
+  archiveMessageProcedure,
+  archivePageProcedure,
+  createFormProcedure,
+  createMessageProcedure,
+  createPageProcedure,
+  getTrackingProcedure,
+  listFormsProcedure,
+  listMessagesProcedure,
+  listPagesProcedure,
+  updateFormProcedure,
+  updateMessageProcedure,
+  updatePageProcedure,
+  updateTrackingProcedure,
+} from "../website/router";
 import { getWorkspaceProcedure } from "../workspaces/router";
 import { os } from "./base";
 
@@ -65,6 +81,22 @@ export const orpcRouter = os.router({
     adjustScore: adjustScoreProcedure,
     restore: restoreContactProcedure,
     bulkAction: bulkActionProcedure,
+  },
+  website: {
+    listForms: listFormsProcedure,
+    createForm: createFormProcedure,
+    updateForm: updateFormProcedure,
+    archiveForm: archiveFormProcedure,
+    listPages: listPagesProcedure,
+    createPage: createPageProcedure,
+    updatePage: updatePageProcedure,
+    archivePage: archivePageProcedure,
+    listMessages: listMessagesProcedure,
+    createMessage: createMessageProcedure,
+    updateMessage: updateMessageProcedure,
+    archiveMessage: archiveMessageProcedure,
+    getTracking: getTrackingProcedure,
+    updateTracking: updateTrackingProcedure,
   },
   accounts: {
     list: listAccountsProcedure,

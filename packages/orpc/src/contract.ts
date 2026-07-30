@@ -3,6 +3,7 @@ import { adminContract } from "./admin/contract";
 import { contactResourcesContract } from "./contact-resources/contract";
 import { contactsContract } from "./contacts/contract";
 import { segmentsContract } from "./segments/contract";
+import { websiteContract } from "./website/contract";
 import { workspaceContract } from "./workspaces/contract";
 
 export const contract = {
@@ -12,4 +13,5 @@ export const contract = {
   contacts: contactsContract,
   contactResources: contactResourcesContract,
   segments: segmentsContract,
+  website: websiteContract,
 };
