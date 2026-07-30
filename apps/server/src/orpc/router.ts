@@ -6,7 +6,14 @@ import {
   removeAccountContactProcedure,
   updateAccountProcedure,
 } from "../accounts/router";
-import { adminRequestProcedure } from "../admin/router";
+import {
+  createCampaignProcedure,
+  getCampaignDraftProcedure,
+  listCampaignsProcedure,
+  publishCampaignProcedure,
+  saveCampaignDraftProcedure,
+  setCampaignStatusProcedure,
+} from "../campaigns/router";
 import {
   addListProcedure,
   addSegmentProcedure,
@@ -41,22 +48,23 @@ import {
   updateDealTaskProcedure,
 } from "../deals/router";
 import {
-  archiveCampaignProcedure,
+  archiveEmailCampaignProcedure,
   archiveTemplateProcedure,
   archiveVariableProcedure,
-  createCampaignProcedure,
+  createEmailCampaignProcedure,
   createVariableProcedure,
   importTemplateProcedure,
-  listCampaignsProcedure,
+  listEmailCampaignsProcedure,
   listSegmentOptionsProcedure,
   listTemplatesProcedure,
   listTopicOptionsProcedure,
   listVariablesProcedure,
-  startCampaignProcedure,
+  startEmailCampaignProcedure,
   syncTemplateProcedure,
-  updateCampaignProcedure,
+  updateEmailCampaignProcedure,
   updateVariableProcedure,
 } from "../emails/router";
+import { createApiKeyProcedure, dashboardProcedure } from "../operations/router";
 import {
   automationsReportProcedure,
   contactsReportProcedure,
@@ -64,7 +72,11 @@ import {
   emailsReportProcedure,
   siteReportProcedure,
 } from "../reports/router";
-import { createSegmentProcedure, refreshSegmentProcedure } from "../segments/router";
+import {
+  createSegmentProcedure,
+  listSegmentsProcedure,
+  refreshSegmentProcedure,
+} from "../segments/router";
 import {
   archiveFormProcedure,
   archiveMessageProcedure,
@@ -87,9 +99,6 @@ import { os } from "./base";
 export type { OrpcContext, OrpcInitialContext } from "./context";
 
 export const orpcRouter = os.router({
-  admin: {
-    request: adminRequestProcedure,
-  },
   workspace: {
     get: getWorkspaceProcedure,
   },
@@ -112,11 +121,11 @@ export const orpcRouter = os.router({
     deleteTask: deleteDealTaskProcedure,
   },
   emails: {
-    listCampaigns: listCampaignsProcedure,
-    createCampaign: createCampaignProcedure,
-    updateCampaign: updateCampaignProcedure,
-    startCampaign: startCampaignProcedure,
-    archiveCampaign: archiveCampaignProcedure,
+    listCampaigns: listEmailCampaignsProcedure,
+    createCampaign: createEmailCampaignProcedure,
+    updateCampaign: updateEmailCampaignProcedure,
+    startCampaign: startEmailCampaignProcedure,
+    archiveCampaign: archiveEmailCampaignProcedure,
     listTemplates: listTemplatesProcedure,
     importTemplate: importTemplateProcedure,
     syncTemplate: syncTemplateProcedure,
@@ -135,9 +144,22 @@ export const orpcRouter = os.router({
     deals: dealsReportProcedure,
     site: siteReportProcedure,
   },
+  operations: {
+    dashboard: dashboardProcedure,
+    createApiKey: createApiKeyProcedure,
+  },
   segments: {
+    list: listSegmentsProcedure,
     create: createSegmentProcedure,
     refresh: refreshSegmentProcedure,
+  },
+  campaigns: {
+    list: listCampaignsProcedure,
+    create: createCampaignProcedure,
+    getDraft: getCampaignDraftProcedure,
+    saveDraft: saveCampaignDraftProcedure,
+    publish: publishCampaignProcedure,
+    setStatus: setCampaignStatusProcedure,
   },
   contactResources: {
     options: contactOptionsProcedure,

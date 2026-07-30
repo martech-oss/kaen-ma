@@ -1,16 +1,6 @@
-import { type CampaignDefinition } from "@kaenma/shared";
+import type { CampaignDraft, CampaignRow } from "@kaenma/orpc";
 
-export interface CampaignRow {
-  id: string;
-  name: string;
-  description: string;
-  status: "draft" | "active" | "paused" | "archived";
-  trigger_source: string | null;
-  enrollment_count: number;
-  active_count: number;
-  completed_count: number;
-  updated_at: string;
-}
+export type { CampaignDraft, CampaignRow };
 
 export interface AutomationOptions {
   templates: EmailTemplateOption[];
@@ -24,9 +14,4 @@ export interface EmailTemplateOption {
   purpose: "transactional" | "marketing";
   subject: string | null;
   sendable: boolean;
-}
-
-export interface CampaignDraft {
-  graph: CampaignDefinition;
-  status: CampaignRow["status"];
 }

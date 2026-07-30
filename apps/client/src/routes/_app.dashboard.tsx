@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RouteError, RoutePending } from "@/components/route-status";
-import { DashboardPage, type DashboardData } from "@/features/dashboard/dashboard-page";
-import { rpc } from "@/rpc";
+import { DashboardPage } from "@/features/dashboard/dashboard-page";
+import { orpc } from "@/lib/orpc";
 
 export const Route = createFileRoute("/_app/dashboard")({
   loader: async ({ abortController }) => {
-    const response = await rpc<DashboardData>("/dashboard", {
-      signal: abortController.signal,
-    });
-    return response.data;
+    return orpc.operations.dashboard(undefined, { signal: abortController.signal });
   },
   pendingComponent: RoutePending,
   errorComponent: RouteError,

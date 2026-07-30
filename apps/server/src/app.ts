@@ -46,7 +46,7 @@ app.on(["GET", "POST"], "/api/auth/*", (context) => {
   const requestOrigin = new URL(context.req.url).origin;
   return createAuth(context.env, requestOrigin).handler(context.req.raw);
 });
-app.use("/api/rpc/*", createOrpcRequestHandler(adminApi));
+app.use("/api/rpc/*", createOrpcRequestHandler());
 app.get("/api/health", async (context) => {
   try {
     const result = await context

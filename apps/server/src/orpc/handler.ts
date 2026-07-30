@@ -1,6 +1,5 @@
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
-import type { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 
 import type { AppEnvironment } from "../env";
@@ -19,7 +18,7 @@ const handler = new RPCHandler(orpcRouter, {
   ],
 });
 
-export function createOrpcRequestHandler(adminApi: Hono<AppEnvironment>) {
+export function createOrpcRequestHandler() {
   return createMiddleware<AppEnvironment>(async (context, next) => {
     const { matched, response } = await handler.handle(context.req.raw, {
       prefix: "/api/rpc",
@@ -30,8 +29,6 @@ export function createOrpcRequestHandler(adminApi: Hono<AppEnvironment>) {
         headers: context.req.raw.headers,
         method: context.req.method,
         executionContext: context.executionCtx,
-        adminApiFetch: async (request) =>
-          adminApi.fetch(request, context.env, context.executionCtx),
       },
     });
 

@@ -12,13 +12,9 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { formatDateTime } from "@/lib/format";
+import type { Dashboard as DashboardData } from "@kaenma/orpc";
 
-export interface DashboardData {
-  contacts: { count: number };
-  campaigns: { count: number };
-  deliveries: { sent: number; delivered: number; failed: number };
-  recentEvents: Array<{ type: string; occurred_at: string }>;
-}
+export type { DashboardData };
 
 export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
   const deliveredRate =
@@ -94,14 +90,14 @@ export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
               <SimpleEmpty compact label="まだイベントがありません" />
             ) : (
               data.recentEvents.slice(0, 8).map((event, index) => (
-                <div key={`${event.occurred_at}-${index}`}>
+                <div key={`${event.occurredAt}-${index}`}>
                   {index > 0 ? <Separator /> : null}
                   <div className="flex gap-3 py-3">
                     <span className="mt-1 size-2 rounded-full bg-success" />
                     <div>
                       <div className="text-sm font-medium">{event.type}</div>
                       <div className="text-xs text-muted-foreground">
-                        {formatDateTime(event.occurred_at)}
+                        {formatDateTime(event.occurredAt)}
                       </div>
                     </div>
                   </div>

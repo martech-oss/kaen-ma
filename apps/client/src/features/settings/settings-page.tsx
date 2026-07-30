@@ -5,19 +5,19 @@ import { authClient } from "@/auth-client";
 import { FormInput, PageLayout, SuccessAlert } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
 import type { Workspace } from "@/lib/workspace";
-import { rpc } from "@/rpc";
 
 export function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode {
   const [apiKey, setApiKey] = useState("");
 
   async function createKey(): Promise<void> {
-    const response = await rpc<{ token: string }>("/api-keys", {
-      method: "POST",
-      body: JSON.stringify({ name: "Admin generated key", role: "marketer" }),
+    const created = await orpc.operations.createApiKey({
+      name: "Admin generated key",
+      role: "marketer",
     });
-    setApiKey(response.data.token);
+    setApiKey(created.token);
   }
 
   return (

@@ -9,7 +9,24 @@ const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
 } as const;
 
+export const segmentRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  kind: z.enum(["static", "dynamic"]),
+  filterAst: segmentFilterSchema.nullable(),
+  memberCount: z.number().int().nonnegative(),
+  evaluatedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type SegmentRow = z.infer<typeof segmentRowSchema>;
+
 export const segmentsContract = {
+  list: oc
+    .route({ method: "GET", path: "/segments" })
+    .errors(workspaceErrors)
+    .output(z.array(segmentRowSchema)),
   create: oc
     .route({ method: "POST", path: "/segments", successStatus: 201 })
     .errors({

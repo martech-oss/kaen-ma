@@ -1,28 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RouteError, RoutePending } from "@/components/route-status";
-import {
-  CampaignsPage,
-  type AutomationOptions,
-  type CampaignRow,
-} from "@/features/campaigns/campaign-pages";
-import { rpc } from "@/rpc";
+import { CampaignsPage } from "@/features/campaigns/campaign-pages";
+import { orpc } from "@/lib/orpc";
 
 export const Route = createFileRoute("/_app/campaigns/")({
   loader: async ({ abortController }) => {
     const request = { signal: abortController.signal };
     const [campaigns, templates, forms, segments] = await Promise.all([
-      rpc<CampaignRow[]>("/campaigns", request),
-      rpc<AutomationOptions["templates"]>("/email-templates", request),
-      rpc<AutomationOptions["forms"]>("/forms", request),
-      rpc<AutomationOptions["segments"]>("/segments", request),
+      orpc.campaigns.list(undefined, request),
+      orpc.emails.listTemplates({ archived: false }, request),
+      orpc.website.listForms(undefined, request),
+      orpc.emails.listSegmentOptions(undefined, request),
     ]);
     return {
-      campaigns: campaigns.data,
+      campaigns,
       options: {
-        templates: templates.data.filter((template) => template.sendable),
-        forms: forms.data,
-        segments: segments.data,
+        templates: templates.filter((template) => template.sendable),
+        forms,
+        segments,
       },
     };
   },

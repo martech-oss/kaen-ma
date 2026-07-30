@@ -47,7 +47,7 @@ async function seedWorkspace(prefix: string, role = "owner") {
        VALUES (?, ?, ?, 'accounts test', ?, ?, ?, ?)`,
     ).bind(uuidv7(), workspaceId, userId, prefix, await sha256Hex(token), role, now),
   ]);
-  return { workspaceId, client: createClient(token) };
+  return { workspaceId, token, client: createClient(token) };
 }
 
 describe("accounts over oRPC", () => {
@@ -149,37 +149,48 @@ describe("accounts over oRPC", () => {
 
   // The REST routes stay for the SDK, MCP server and OpenAPI document. They now
   // delegate to the same service functions as the oRPC procedures, so they are
-  // checked here to catch the two surfaces drifting apart.
+  // checked here to catch the two surfaces drifting apart. Called directly
+  // rather than through a tunnel, which no longer exists.
   it("serves the same data over the REST routes", async () => {
-    const { client } = await seedWorkspace("acctkeygggg7");
+    const { token, client } = await seedWorkspace("acctkeygggg7");
     const created = await client.accounts.create({ name: "Umbrella", domain: "umbrella.example" });
 
-    const listed = await client.admin.request({ path: "/accounts?q=Umbrella", method: "GET" });
-    expect(listed).toMatchObject({
-      status: 200,
-      payload: { data: [expect.objectContaining({ id: created.id, contactCount: 0 })] },
+    const rest = (path: string, init?: RequestInit) =>
+      exports.default.fetch(
+        new Request(`http://localhost:8787/api/v1${path}`, {
+          ...init,
+          headers: {
+            authorization: `Bearer ${token}`,
+            ...(init?.body ? { "content-type": "application/json" } : {}),
+          },
+        }),
+      );
+
+    const listed = await rest("/accounts?q=Umbrella");
+    expect(listed.status).toBe(200);
+    await expect(listed.json()).resolves.toMatchObject({
+      data: [expect.objectContaining({ id: created.id, contactCount: 0 })],
     });
 
-    const detail = await client.admin.request({ path: `/accounts/${created.id}`, method: "GET" });
-    expect(detail).toMatchObject({
-      status: 200,
-      payload: { data: { id: created.id, name: "Umbrella", contacts: [] } },
+    const detail = await rest(`/accounts/${created.id}`);
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      data: { id: created.id, name: "Umbrella", contacts: [] },
     });
 
-    const missing = await client.admin.request({ path: `/accounts/${uuidv7()}`, method: "GET" });
-    expect(missing).toMatchObject({
-      status: 404,
-      payload: { error: { code: "account_not_found" } },
+    const missing = await rest(`/accounts/${uuidv7()}`);
+    expect(missing.status).toBe(404);
+    await expect(missing.json()).resolves.toMatchObject({
+      error: { code: "account_not_found" },
     });
 
-    const conflict = await client.admin.request({
-      path: "/accounts",
+    const conflict = await rest("/accounts", {
       method: "POST",
       body: JSON.stringify({ name: "Umbrella Two", domain: "umbrella.example" }),
     });
-    expect(conflict).toMatchObject({
-      status: 409,
-      payload: { error: { code: "account_conflict" } },
+    expect(conflict.status).toBe(409);
+    await expect(conflict.json()).resolves.toMatchObject({
+      error: { code: "account_conflict" },
     });
   });
 });

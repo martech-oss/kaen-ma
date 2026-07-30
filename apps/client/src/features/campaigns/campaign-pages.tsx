@@ -48,8 +48,8 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { formatDateTime } from "@/lib/format";
+import { orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
-import { rpc } from "@/rpc";
 import { type CampaignDefinition, type CampaignEdge, type CampaignNode } from "@kaenma/shared";
 
 import { campaignNodeTypes, nodeHandles, StepButton } from "./campaign-flow-node";
@@ -101,14 +101,11 @@ export function CampaignsPage({
     setCreating(true);
     try {
       const definition = createPresetCampaign(name.trim(), preset, template);
-      const response = await rpc<{ id: string }>("/campaigns", {
-        method: "POST",
-        body: JSON.stringify(definition),
-      });
+      const created = await orpc.campaigns.create(definition);
       setCreateOpen(false);
       await navigate({
         to: "/campaigns/$id",
-        params: { id: response.data.id },
+        params: { id: created.id },
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "オートメーションを作成できません");
@@ -119,10 +116,7 @@ export function CampaignsPage({
 
   async function changeStatus(campaign: CampaignRow): Promise<void> {
     const status = campaign.status === "active" ? "paused" : "active";
-    await rpc(`/campaigns/${campaign.id}/status`, {
-      method: "POST",
-      body: JSON.stringify({ status }),
-    });
+    await orpc.campaigns.setStatus({ id: campaign.id, status });
     toast.success(status === "active" ? "オートメーションを再開しました" : "一時停止しました");
     await router.invalidate();
   }
@@ -149,19 +143,19 @@ export function CampaignsPage({
                 <GitBranch className="size-4" />
               </div>
               <CardTitle>{campaign.name}</CardTitle>
-              <CardDescription>{triggerLabel(campaign.trigger_source)}</CardDescription>
+              <CardDescription>{triggerLabel(campaign.triggerSource)}</CardDescription>
               <CardAction>
                 <CampaignStatusBadge status={campaign.status} />
               </CardAction>
             </CardHeader>
             <CardContent className="grid grid-cols-3 gap-3">
-              <Metric label="登録" value={campaign.enrollment_count} />
-              <Metric label="進行中" value={campaign.active_count} />
-              <Metric label="完了" value={campaign.completed_count} />
+              <Metric label="登録" value={campaign.enrollmentCount} />
+              <Metric label="進行中" value={campaign.activeCount} />
+              <Metric label="完了" value={campaign.completedCount} />
             </CardContent>
             <CardFooter className="justify-between gap-2">
               <span className="text-xs text-muted-foreground">
-                {formatDateTime(campaign.updated_at)}
+                {formatDateTime(campaign.updatedAt)}
               </span>
               <div className="flex gap-1">
                 {campaign.status === "active" || campaign.status === "paused" ? (
@@ -440,12 +434,9 @@ export function CampaignBuilder({
     setSaving(true);
     setNotice("");
     try {
-      await rpc(`/campaigns/${id}/draft`, {
-        method: "PUT",
-        body: JSON.stringify(definition),
-      });
+      await orpc.campaigns.saveDraft({ id, ...definition });
       if (publish) {
-        await rpc(`/campaigns/${id}/publish`, { method: "POST" });
+        await orpc.campaigns.publish({ id });
         setStatus("active");
         setNotice("公開しました。以降の行動イベントから自動登録されます。");
         toast.success("オートメーションを公開しました");
@@ -464,10 +455,7 @@ export function CampaignBuilder({
 
   async function changeStatus(): Promise<void> {
     const nextStatus = status === "active" ? "paused" : "active";
-    await rpc(`/campaigns/${id}/status`, {
-      method: "POST",
-      body: JSON.stringify({ status: nextStatus }),
-    });
+    await orpc.campaigns.setStatus({ id, status: nextStatus });
     setStatus(nextStatus);
     toast.success(nextStatus === "active" ? "再開しました" : "一時停止しました");
   }

@@ -12,7 +12,6 @@ export interface OrpcInitialContext {
   executionContext: {
     waitUntil(promise: Promise<unknown>): void;
   };
-  adminApiFetch(request: Request): Promise<Response>;
 }
 
 export interface OrpcContext extends OrpcInitialContext {

@@ -27,11 +27,11 @@ function requireRole(role: WorkspaceRole, minimum: WorkspaceRole, forbidden: () 
   if (!hasWorkspaceRole(role, minimum)) throw forbidden();
 }
 
-export const listCampaignsProcedure = authed.emails.listCampaigns.handler(({ context, input }) =>
-  listEmailCampaigns(context.database, context.workspace, input.archived),
+export const listEmailCampaignsProcedure = authed.emails.listCampaigns.handler(
+  ({ context, input }) => listEmailCampaigns(context.database, context.workspace, input.archived),
 );
 
-export const createCampaignProcedure = authed.emails.createCampaign.handler(
+export const createEmailCampaignProcedure = authed.emails.createCampaign.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const outcome = await createEmailCampaign(context.database, context.workspace, input);
@@ -40,7 +40,7 @@ export const createCampaignProcedure = authed.emails.createCampaign.handler(
   },
 );
 
-export const updateCampaignProcedure = authed.emails.updateCampaign.handler(
+export const updateEmailCampaignProcedure = authed.emails.updateCampaign.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...changes } = input;
@@ -51,7 +51,7 @@ export const updateCampaignProcedure = authed.emails.updateCampaign.handler(
   },
 );
 
-export const startCampaignProcedure = authed.emails.startCampaign.handler(
+export const startEmailCampaignProcedure = authed.emails.startCampaign.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const outcome = await startEmailCampaign(
@@ -66,7 +66,7 @@ export const startCampaignProcedure = authed.emails.startCampaign.handler(
   },
 );
 
-export const archiveCampaignProcedure = authed.emails.archiveCampaign.handler(
+export const archiveEmailCampaignProcedure = authed.emails.archiveCampaign.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await archiveEmailCampaign(context.database, context.workspace, input.id))) {

@@ -33,21 +33,6 @@ describe("oRPC API", () => {
     });
   });
 
-  it("returns the legacy admin error envelope through oRPC", async () => {
-    const response = await createClient().admin.request({
-      path: "/dashboard",
-      method: "GET",
-    });
-    expect(response).toMatchObject({
-      status: 401,
-      payload: {
-        error: {
-          code: "unauthorized",
-        },
-      },
-    });
-  });
-
   it("gets a workspace and creates and lists contacts", async () => {
     const workspaceId = uuidv7();
     const userId = uuidv7();
@@ -118,46 +103,27 @@ describe("oRPC API", () => {
       status: 409,
     });
 
-    const dashboard = await client.admin.request({
-      path: "/dashboard",
-      method: "GET",
-    });
-    expect(dashboard).toMatchObject({
-      status: 200,
-      payload: {
-        data: {
-          contacts: { count: 1 },
-        },
-      },
+    await expect(client.operations.dashboard()).resolves.toMatchObject({
+      contacts: { count: 1 },
     });
 
     const tagName = `oRPC tag ${workspaceId}`;
-    const createdTag = await client.admin.request({
-      path: "/tags",
-      method: "POST",
-      body: JSON.stringify({
-        name: tagName,
-        color: "#0f766e",
-      }),
-    });
-    expect(createdTag).toMatchObject({
-      status: 201,
-      payload: {
-        data: {
-          name: tagName,
-          color: "#0f766e",
-        },
-      },
-    });
+    await expect(
+      client.contactResources.createTag({ name: tagName, color: "#0f766e" }),
+    ).resolves.toMatchObject({ name: tagName, color: "#0f766e" });
 
-    const removedProviderConfig = await client.admin.request({
-      path: "/providers/resend",
-      method: "POST",
-      body: JSON.stringify({
-        apiKey: "re_must_not_be_saved",
-        webhookSecret: "whsec_must_not_be_saved",
+    // /providers/resend has no procedure; call REST directly to keep asserting
+    // that a removed endpoint never persists credentials.
+    const removedProviderConfig = await exports.default.fetch(
+      new Request("http://localhost:8787/api/v1/providers/resend", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          apiKey: "re_must_not_be_saved",
+          webhookSecret: "whsec_must_not_be_saved",
+        }),
       }),
-    });
+    );
     expect(removedProviderConfig.status).toBe(404);
     const storedProviderConfigs = await env.DB.prepare(
       "SELECT COUNT(*) AS count FROM provider_configs WHERE workspace_id = ?",

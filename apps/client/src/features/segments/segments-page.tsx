@@ -23,23 +23,17 @@ import {
   segmentFieldOptions,
 } from "@/features/segments/segment-fields";
 import { formatDateTime } from "@/lib/format";
+import { orpc } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
-import { rpc } from "@/rpc";
+import type { SegmentRow } from "@kaenma/orpc";
 import type { SegmentFilter } from "@kaenma/shared/segments";
+
+export type { SegmentRow };
 import {
   getSegmentFieldDefinition,
   type SegmentField,
   type SegmentOperator,
 } from "@kaenma/shared/segments/fields";
-
-export interface SegmentRow {
-  id: string;
-  name: string;
-  slug: string;
-  kind: string;
-  member_count: number;
-  updated_at: string;
-}
 
 export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNode {
   const router = useRouter();
@@ -61,8 +55,8 @@ export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNod
             key={segment.id}
             icon={<Shapes />}
             title={segment.name}
-            subtitle={`${segment.kind} · ${segment.member_count} contacts`}
-            footer={formatDateTime(segment.updated_at)}
+            subtitle={`${segment.kind} · ${segment.memberCount} contacts`}
+            footer={formatDateTime(segment.updatedAt)}
           />
         ))}
       </ResourceGrid>
@@ -105,14 +99,11 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
     setBusy(true);
     setError("");
     try {
-      await rpc("/segments", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          slug: slugify(name),
-          kind: "dynamic",
-          filter,
-        }),
+      await orpc.segments.create({
+        name,
+        slug: slugify(name),
+        kind: "dynamic",
+        filter,
       });
       await onSaved();
     } catch (caught) {

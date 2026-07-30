@@ -1,15 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RouteError, RoutePending } from "@/components/route-status";
-import { SegmentsPage, type SegmentRow } from "@/features/segments/segments-page";
-import { rpc } from "@/rpc";
+import { SegmentsPage } from "@/features/segments/segments-page";
+import { orpc } from "@/lib/orpc";
 
 export const Route = createFileRoute("/_app/contacts/segments")({
   loader: async ({ abortController }) => {
-    const response = await rpc<SegmentRow[]>("/segments", {
-      signal: abortController.signal,
-    });
-    return response.data;
+    return orpc.segments.list(undefined, { signal: abortController.signal });
   },
   pendingComponent: RoutePending,
   errorComponent: RouteError,
