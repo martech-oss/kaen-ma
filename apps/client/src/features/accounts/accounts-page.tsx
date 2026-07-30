@@ -60,8 +60,8 @@ import {
   type ContactOption,
 } from "@/features/accounts/account-api";
 import { formatDate } from "@/lib/format";
+import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
-import { rpc } from "@/rpc";
 
 export function AccountsPage({
   accounts,
@@ -190,15 +190,12 @@ export function AccountsPage({
         <AccountForm
           submitLabel="作成"
           onSubmit={async (values) => {
-            const response = await rpc<AccountSummary>("/accounts", {
-              method: "POST",
-              body: JSON.stringify(values),
-            });
+            const account = await orpc.accounts.create(values);
             toast.success("アカウントを作成しました");
             setShowCreate(false);
             await navigate({
               to: "/contacts/accounts/$id",
-              params: { id: response.data.id },
+              params: { id: account.id },
             });
           }}
         />
@@ -334,7 +331,7 @@ export function AccountDetailPage({
                     <div className="flex flex-col gap-0.5">
                       <span className="font-medium">
                         {contactName(contact)}
-                        {contact.is_primary ? (
+                        {contact.isPrimary ? (
                           <Badge variant="outline" className="ml-2">
                             主担当
                           </Badge>
@@ -357,12 +354,12 @@ export function AccountDetailPage({
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        void rpc(`/accounts/${account.id}/contacts/${contact.id}`, {
-                          method: "DELETE",
-                        }).then(async () => {
-                          toast.success("アカウントとの関連を解除しました");
-                          await load();
-                        });
+                        void orpc.accounts
+                          .removeContact({ id: account.id, contactId: contact.id })
+                          .then(async () => {
+                            toast.success("アカウントとの関連を解除しました");
+                            await load();
+                          });
                       }}
                     >
                       <UserMinus data-icon="inline-start" />
@@ -399,12 +396,10 @@ export function AccountDetailPage({
           initialDomain={account.domain ?? ""}
           submitLabel="変更を保存"
           onSubmit={async (values) => {
-            await rpc(`/accounts/${account.id}`, {
-              method: "PATCH",
-              body: JSON.stringify({
-                name: values.name,
-                domain: values.domain || null,
-              }),
+            await orpc.accounts.update({
+              id: account.id,
+              name: values.name,
+              domain: values.domain || null,
             });
             toast.success("アカウントを更新しました");
             setShowEdit(false);
@@ -421,10 +416,7 @@ export function AccountDetailPage({
         <AddAccountContactForm
           contacts={contacts.filter((contact) => !assignedIds.has(contact.id))}
           onSubmit={async (values) => {
-            await rpc(`/accounts/${account.id}/contacts`, {
-              method: "POST",
-              body: JSON.stringify(values),
-            });
+            await orpc.accounts.assignContact({ id: account.id, ...values });
             toast.success("連絡先をアカウントへ追加しました");
             setShowAddContact(false);
             await load();
@@ -571,7 +563,7 @@ function AddAccountContactForm({
 }
 
 function contactName(contact: AccountContact): string {
-  const name = [contact.last_name, contact.first_name].filter(Boolean).join(" ");
+  const name = [contact.lastName, contact.firstName].filter(Boolean).join(" ");
   return name || contact.email || "名前未設定";
 }
 

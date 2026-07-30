@@ -58,6 +58,30 @@ export const accountSchema = z.object({
 });
 export type Account = z.infer<typeof accountSchema>;
 
+export const accountSummarySchema = accountSchema.extend({
+  contactCount: z.number().int().nonnegative(),
+});
+export type AccountSummary = z.infer<typeof accountSummarySchema>;
+
+/** A contact as listed on an account, with its account-specific role fields. */
+export const accountContactSchema = z.object({
+  id: z.string(),
+  email: z.string().nullable(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+  stage: z.string(),
+  score: z.number(),
+  status: z.enum(["active", "archived", "anonymous"]),
+  title: z.string().nullable(),
+  isPrimary: z.boolean(),
+});
+export type AccountContact = z.infer<typeof accountContactSchema>;
+
+export const accountDetailSchema = accountSchema.extend({
+  contacts: z.array(accountContactSchema),
+});
+export type AccountDetail = z.infer<typeof accountDetailSchema>;
+
 export const sourceNodeSchema = z.object({
   id: z.string().min(1),
   type: z.literal("source"),

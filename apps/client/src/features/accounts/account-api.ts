@@ -1,31 +1,9 @@
-import { rpc } from "@/rpc";
+import { orpc, orpcQuery } from "@/lib/orpc";
+import type { AccountContact, AccountDetail, AccountSummary } from "@kaenma/shared";
 
-export interface AccountSummary {
-  id: string;
-  workspaceId: string;
-  name: string;
-  domain: string | null;
-  contactCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
+export type { AccountContact, AccountDetail, AccountSummary };
 
-export interface AccountContact {
-  id: string;
-  email: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  stage: string;
-  score: number;
-  status: "active" | "archived" | "anonymous";
-  title: string | null;
-  is_primary: boolean;
-}
-
-export interface AccountDetail extends Omit<AccountSummary, "contactCount"> {
-  contacts: AccountContact[];
-}
-
+/** A contact offered when attaching one to an account. */
 export interface ContactOption {
   id: string;
   email: string | null;
@@ -44,13 +22,21 @@ export interface AccountSearch {
 
 export const accountSearchDefaults: AccountSearch = { q: "" };
 
-export async function loadAccounts(query = "", signal?: AbortSignal): Promise<AccountSummary[]> {
-  const params = new URLSearchParams({ limit: "200" });
-  if (query.trim()) params.set("q", query.trim());
-  const response = await rpc<AccountSummary[]>(`/accounts?${params.toString()}`, {
-    signal: signal ?? null,
+export function accountsQueryOptions(query = "") {
+  return orpcQuery.accounts.list.queryOptions({
+    input: { limit: 200, ...(query.trim() ? { query: query.trim() } : {}) },
   });
-  return response.data;
+}
+
+export function accountQueryOptions(accountId: string) {
+  return orpcQuery.accounts.get.queryOptions({ input: { id: accountId } });
+}
+
+export async function loadAccounts(query = "", signal?: AbortSignal): Promise<AccountSummary[]> {
+  return orpc.accounts.list(
+    { limit: 200, ...(query.trim() ? { query: query.trim() } : {}) },
+    signal ? { signal } : undefined,
+  );
 }
 
 export async function loadAccountDetail(
@@ -58,12 +44,19 @@ export async function loadAccountDetail(
   signal?: AbortSignal,
 ): Promise<AccountDetailData> {
   const [account, contacts] = await Promise.all([
-    rpc<AccountDetail>(`/accounts/${accountId}`, {
-      signal: signal ?? null,
-    }),
-    rpc<ContactOption[]>("/contacts?limit=100&status=active&sort=name&direction=asc", {
-      signal: signal ?? null,
-    }),
+    orpc.accounts.get({ id: accountId }, signal ? { signal } : undefined),
+    orpc.contacts.list(
+      { limit: 100, status: "active", sort: "name", direction: "asc" },
+      signal ? { signal } : undefined,
+    ),
   ]);
-  return { account: account.data, contacts: contacts.data };
+  return {
+    account,
+    contacts: contacts.items.map((contact) => ({
+      id: contact.id,
+      email: contact.email,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+    })),
+  };
 }

@@ -1,3 +1,11 @@
+import {
+  assignAccountContactProcedure,
+  createAccountProcedure,
+  getAccountProcedure,
+  listAccountsProcedure,
+  removeAccountContactProcedure,
+  updateAccountProcedure,
+} from "../accounts/router";
 import { adminRequestProcedure } from "../admin/router";
 import { createContactProcedure, listContactsProcedure } from "../contacts/router";
 import { getWorkspaceProcedure } from "../workspaces/router";
@@ -15,5 +23,13 @@ export const orpcRouter = os.router({
   contacts: {
     list: listContactsProcedure,
     create: createContactProcedure,
+  },
+  accounts: {
+    list: listAccountsProcedure,
+    get: getAccountProcedure,
+    create: createAccountProcedure,
+    update: updateAccountProcedure,
+    assignContact: assignAccountContactProcedure,
+    removeContact: removeAccountContactProcedure,
   },
 });

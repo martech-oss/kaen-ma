@@ -1,4 +1,6 @@
 export * from "./contract";
+export * from "./accounts/contract";
+export * from "./accounts/schema";
 export * from "./admin/contract";
 export * from "./admin/schema";
 export * from "./contacts/contract";
