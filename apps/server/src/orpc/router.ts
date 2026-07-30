@@ -28,6 +28,13 @@ import {
   listContactsProcedure,
   updateContactProcedure,
 } from "../contacts/router";
+import {
+  automationsReportProcedure,
+  contactsReportProcedure,
+  dealsReportProcedure,
+  emailsReportProcedure,
+  siteReportProcedure,
+} from "../reports/router";
 import { createSegmentProcedure, refreshSegmentProcedure } from "../segments/router";
 import {
   archiveFormProcedure,
@@ -62,6 +69,13 @@ export const orpcRouter = os.router({
     create: createContactProcedure,
     update: updateContactProcedure,
     archive: archiveContactProcedure,
+  },
+  reports: {
+    contacts: contactsReportProcedure,
+    automations: automationsReportProcedure,
+    emails: emailsReportProcedure,
+    deals: dealsReportProcedure,
+    site: siteReportProcedure,
   },
   segments: {
     create: createSegmentProcedure,
