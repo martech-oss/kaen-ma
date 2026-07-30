@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import { uuidv7 } from "@kaenma/database";
 import { workspaceRoleSchema } from "@kaenma/shared";

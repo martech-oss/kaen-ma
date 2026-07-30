@@ -101,7 +101,8 @@ import {
 import { orpcQuery } from "@/lib/orpc";
 import { cn, getFormString } from "@/lib/utils";
 import { rpc } from "@/rpc";
-import type { Contact, SegmentFilter } from "@kaenma/shared";
+import type { Contact } from "@kaenma/shared/contacts";
+import type { SegmentFilter } from "@kaenma/shared/segments";
 
 interface ContactProfile {
   contact: Contact;

@@ -98,6 +98,28 @@ describe("segment compiler", () => {
     expect(result.sql).not.toContain("' OR 1=1");
     expect(result.params).toEqual(["workspace", "%' OR 1=1 --%", 10]);
   });
+
+  it("rejects operators that are invalid for the selected field", () => {
+    expect(() =>
+      compileSegmentFilter("workspace", {
+        kind: "condition",
+        field: "score",
+        operator: "contains",
+        value: "10",
+      }),
+    ).toThrow("contains is not supported for score");
+  });
+
+  it("requires keys for keyed segment fields", () => {
+    expect(() =>
+      compileSegmentFilter("workspace", {
+        kind: "condition",
+        field: "event",
+        operator: "eq",
+        value: null,
+      }),
+    ).toThrow("event requires key");
+  });
 });
 
 describe("delivery safeguards", () => {

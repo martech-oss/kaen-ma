@@ -1,4 +1,5 @@
-import type { SegmentCondition, SegmentFilter } from "@kaenma/shared";
+import type { SegmentCondition, SegmentFilter } from "@kaenma/shared/segments";
+import { isSegmentOperatorAllowed } from "@kaenma/shared/segments/fields";
 
 export interface CompiledSegment {
   sql: string;
@@ -39,6 +40,10 @@ function compileCondition(
   condition: SegmentCondition,
   params: Array<string | number | null>,
 ): string {
+  if (!isSegmentOperatorAllowed(condition.field, condition.operator)) {
+    throw new Error(`${condition.operator} is not supported for ${condition.field}`);
+  }
+
   const column = contactColumns[condition.field];
   if (column) return scalarExpression(column, condition, params);
 

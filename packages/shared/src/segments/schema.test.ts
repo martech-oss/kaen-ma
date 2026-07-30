@@ -1,0 +1,108 @@
+import { describe, expect, it } from "vitest";
+
+import { segmentFieldDefinitions, segmentOperatorValues } from "./fields";
+import { segmentConditionSchema } from "./schema";
+
+describe("segment condition schema", () => {
+  it("defines every supported segment field exactly once", () => {
+    const fields = segmentFieldDefinitions.map((definition) => definition.field);
+
+    expect(fields).toHaveLength(16);
+    expect(new Set(fields).size).toBe(fields.length);
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        "email",
+        "score",
+        "tag",
+        "list",
+        "company",
+        "subscription",
+        "event",
+        "custom_field",
+      ]),
+    );
+  });
+
+  it("accepts operators supported by the field value type", () => {
+    expect(
+      segmentConditionSchema.safeParse({
+        kind: "condition",
+        field: "email",
+        operator: "contains",
+        value: "@example.com",
+      }).success,
+    ).toBe(true);
+    expect(
+      segmentConditionSchema.safeParse({
+        kind: "condition",
+        field: "score",
+        operator: "gte",
+        value: 10,
+      }).success,
+    ).toBe(true);
+  });
+
+  it.each(segmentFieldDefinitions)(
+    "enforces the declared operator set for $field",
+    (definition) => {
+      for (const operator of segmentOperatorValues) {
+        const result = segmentConditionSchema.safeParse({
+          kind: "condition",
+          field: definition.field,
+          ...(definition.keyRequirement === "required" ? { key: "example.key" } : {}),
+          operator,
+          value: 10,
+        });
+
+        expect(result.success, `${definition.field}:${operator}`).toBe(
+          (definition.operators as readonly string[]).includes(operator),
+        );
+      }
+    },
+  );
+
+  it("rejects operators that do not apply to a field", () => {
+    const numericResult = segmentConditionSchema.safeParse({
+      kind: "condition",
+      field: "score",
+      operator: "contains",
+      value: "10",
+    });
+    const relationResult = segmentConditionSchema.safeParse({
+      kind: "condition",
+      field: "tag",
+      operator: "gte",
+      value: "customers",
+    });
+
+    expect(numericResult.success).toBe(false);
+    expect(relationResult.success).toBe(false);
+  });
+
+  it.each(["event", "custom_field"] as const)("requires key for %s conditions", (field) => {
+    const missingKey = segmentConditionSchema.safeParse({
+      kind: "condition",
+      field,
+      operator: "eq",
+      value: null,
+    });
+    const blankKey = segmentConditionSchema.safeParse({
+      kind: "condition",
+      field,
+      key: "  ",
+      operator: "eq",
+      value: null,
+    });
+    const valid = segmentConditionSchema.safeParse({
+      kind: "condition",
+      field,
+      key: "purchase.completed",
+      operator: "eq",
+      value: null,
+    });
+
+    expect(missingKey.success).toBe(false);
+    expect(blankKey.success).toBe(false);
+    expect(valid.success).toBe(true);
+  });
+});

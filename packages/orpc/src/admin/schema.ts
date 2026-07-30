@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 function isAdminRequestPath(path: string): boolean {
   if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) {

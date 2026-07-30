@@ -1,12 +1,6 @@
-import type {
-  ApiResponse,
-  CampaignDefinition,
-  Contact,
-  ContactCreate,
-  ContactUpdate,
-  SegmentFilter,
-  WorkspaceRole,
-} from "@kaenma/shared";
+import type { ApiResponse, CampaignDefinition, WorkspaceRole } from "@kaenma/shared";
+import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/shared/contacts";
+import type { SegmentFilter } from "@kaenma/shared/segments";
 
 export interface KaenmaClientOptions {
   baseUrl: string;

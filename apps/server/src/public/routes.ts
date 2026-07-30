@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
 import { renderContent } from "@kaenma/email-renderer";

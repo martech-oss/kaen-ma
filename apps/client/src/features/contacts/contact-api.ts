@@ -3,7 +3,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { orpcQuery } from "@/lib/orpc";
 import { rpc } from "@/rpc";
 import type { ContactListInput } from "@kaenma/orpc";
-import type { SegmentFilter } from "@kaenma/shared";
+import type { SegmentFilter } from "@kaenma/shared/segments";
 
 export interface TagOption {
   id: string;

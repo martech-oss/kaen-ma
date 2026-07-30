@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import { ContactRepository, uuidv7, type DrizzleRawStatement } from "@kaenma/database";
 

@@ -5,7 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./openapi": "./src/openapi.ts"
+    "./contacts": "./src/contacts/index.ts",
+    "./openapi": "./src/openapi.ts",
+    "./segments": "./src/segments/index.ts",
+    "./segments/fields": "./src/segments/fields.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

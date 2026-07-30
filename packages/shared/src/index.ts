@@ -1,4 +1,9 @@
-import { z } from "zod";
+import * as z from "zod";
+
+import { segmentOperatorSchema, segmentValueSchema } from "./segments/schema";
+
+export * from "./contacts/index";
+export * from "./segments/index";
 
 export const workspaceRoleSchema = z.enum(["owner", "admin", "marketer", "analyst", "viewer"]);
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
@@ -21,67 +26,6 @@ export const deliveryEventTypeSchema = z.enum([
   "failed",
 ]);
 export type DeliveryEventType = z.infer<typeof deliveryEventTypeSchema>;
-
-const contactFieldsSchema = z.object({
-  email: z.email().optional(),
-  firstName: z.string().trim().max(120).optional(),
-  lastName: z.string().trim().max(120).optional(),
-  phone: z.string().trim().max(40).optional(),
-  externalId: z.string().trim().max(191).optional(),
-  stage: z.string().trim().min(1).max(80).optional(),
-  customFields: z.record(z.string(), z.unknown()).default({}),
-});
-
-export const contactCreateSchema = contactFieldsSchema.refine(
-  (value) => value.email || value.externalId,
-  {
-    message: "email or externalId is required for a known contact",
-  },
-);
-export type ContactCreate = z.infer<typeof contactCreateSchema>;
-
-export const contactUpdateSchema = contactFieldsSchema.partial().extend({
-  email: z.email().nullable().optional(),
-  firstName: z.string().trim().max(120).nullable().optional(),
-  lastName: z.string().trim().max(120).nullable().optional(),
-  phone: z.string().trim().max(40).nullable().optional(),
-  externalId: z.string().trim().max(191).nullable().optional(),
-  customFields: z.record(z.string(), z.unknown()).optional(),
-});
-export type ContactUpdate = z.infer<typeof contactUpdateSchema>;
-
-export const contactSchema = z.object({
-  id: z.string(),
-  workspaceId: z.string(),
-  visitorId: z.string().nullable(),
-  email: z.string().nullable(),
-  firstName: z.string().nullable(),
-  lastName: z.string().nullable(),
-  phone: z.string().nullable(),
-  externalId: z.string().nullable(),
-  stage: z.string(),
-  score: z.number().int(),
-  status: z.enum(["active", "archived", "anonymous"]),
-  archivedAt: z.string().nullable(),
-  customFields: z.record(z.string(), z.unknown()),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type Contact = z.infer<typeof contactSchema>;
-
-export const contactAttributeDefinitions = [
-  { key: "email", label: "メールアドレス", dataType: "text" },
-  { key: "first_name", label: "名", dataType: "text" },
-  { key: "last_name", label: "姓", dataType: "text" },
-  { key: "phone", label: "電話番号", dataType: "text" },
-  { key: "external_id", label: "外部ID", dataType: "text" },
-  { key: "stage", label: "ステージ", dataType: "text" },
-  { key: "score", label: "スコア", dataType: "number" },
-  { key: "status", label: "ステータス", dataType: "text" },
-  { key: "created_at", label: "作成日時", dataType: "date" },
-  { key: "updated_at", label: "更新日時", dataType: "date" },
-] as const;
-export type ContactAttributeKey = (typeof contactAttributeDefinitions)[number]["key"];
 
 const accountFieldsSchema = z.object({
   name: z.string().trim().min(1).max(191),
@@ -113,71 +57,6 @@ export const accountSchema = z.object({
   updatedAt: z.string(),
 });
 export type Account = z.infer<typeof accountSchema>;
-
-const segmentFieldSchema = z.enum([
-  "email",
-  "first_name",
-  "last_name",
-  "phone",
-  "external_id",
-  "stage",
-  "score",
-  "status",
-  "created_at",
-  "updated_at",
-  "tag",
-  "list",
-  "company",
-  "subscription",
-  "event",
-  "custom_field",
-]);
-
-export const segmentConditionSchema = z.object({
-  kind: z.literal("condition"),
-  field: segmentFieldSchema,
-  key: z.string().max(191).optional(),
-  operator: z.enum([
-    "eq",
-    "neq",
-    "contains",
-    "starts_with",
-    "in",
-    "gt",
-    "gte",
-    "lt",
-    "lte",
-    "exists",
-    "not_exists",
-  ]),
-  value: z.union([
-    z.string(),
-    z.number(),
-    z.boolean(),
-    z.array(z.union([z.string(), z.number()])),
-    z.null(),
-  ]),
-});
-export type SegmentCondition = z.infer<typeof segmentConditionSchema>;
-
-export interface SegmentGroup {
-  kind: "group";
-  combinator: "and" | "or";
-  children: SegmentFilter[];
-}
-
-export type SegmentFilter = SegmentCondition | SegmentGroup;
-
-export const segmentFilterSchema: z.ZodType<SegmentFilter> = z.lazy(() =>
-  z.union([
-    segmentConditionSchema,
-    z.object({
-      kind: z.literal("group"),
-      combinator: z.enum(["and", "or"]),
-      children: z.array(segmentFilterSchema).min(1).max(25),
-    }),
-  ]),
-);
 
 export const sourceNodeSchema = z.object({
   id: z.string().min(1),
@@ -244,8 +123,8 @@ export const actionNodeSchema = z.object({
 
 const predicateSchema = z.object({
   field: z.string().min(1).max(191),
-  operator: segmentConditionSchema.shape.operator,
-  value: segmentConditionSchema.shape.value,
+  operator: segmentOperatorSchema,
+  value: segmentValueSchema,
 });
 
 export const conditionNodeSchema = z.object({

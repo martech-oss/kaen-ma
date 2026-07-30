@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import { compileSegmentFilter } from "@kaenma/core";
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import { segmentFilterSchema } from "@kaenma/shared";
+import { segmentFilterSchema } from "@kaenma/shared/segments";
 
 import { type AppEnvironment } from "../env";
 import { parseJsonColumns, safeJson, validationError } from "../http/helpers";

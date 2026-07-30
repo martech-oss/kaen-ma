@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
 
-import { contactCreateSchema, contactSchema } from "@kaenma/shared";
+import { contactCreateSchema, contactSchema } from "@kaenma/shared/contacts";
 
 import { workspaceErrors } from "../shared/errors";
 import { contactListInputSchema, contactListResultSchema } from "./schema";

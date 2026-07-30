@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 import { apiError } from "../middleware";
 import { isRecord } from "../public/routes";

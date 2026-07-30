@@ -1,4 +1,5 @@
-import type { Contact, ContactCreate, ContactUpdate, WorkspaceContext } from "@kaenma/shared";
+import type { WorkspaceContext } from "@kaenma/shared";
+import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/shared/contacts";
 
 import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
 import { uuidv7 } from "../shared/uuid";

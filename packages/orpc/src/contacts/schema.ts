@@ -1,6 +1,6 @@
-import { z } from "zod";
+import * as z from "zod";
 
-import { contactSchema } from "@kaenma/shared";
+import { contactSchema } from "@kaenma/shared/contacts";
 
 export const contactTagSchema = z.object({
   id: z.string(),

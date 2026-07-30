@@ -4,6 +4,7 @@ import { type FormEvent, type ReactNode, useState } from "react";
 
 import {
   AppDialog,
+  ErrorAlert,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
@@ -14,11 +15,22 @@ import {
   SimpleEmpty,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
+import {
+  createSegmentCondition,
+  getSegmentOperatorOptions,
+  normalizeSegmentOperator,
+  segmentConditionNeedsValue,
+  segmentFieldOptions,
+} from "@/features/segments/segment-fields";
 import { formatDateTime } from "@/lib/format";
 import { getFormString, slugify } from "@/lib/utils";
 import { rpc } from "@/rpc";
-import type { SegmentFilter } from "@kaenma/shared";
-import { contactAttributeDefinitions } from "@kaenma/shared";
+import type { SegmentFilter } from "@kaenma/shared/segments";
+import {
+  getSegmentFieldDefinition,
+  type SegmentField,
+  type SegmentOperator,
+} from "@kaenma/shared/segments/fields";
 
 export interface SegmentRow {
   id: string;
@@ -73,32 +85,41 @@ export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNod
 }
 
 function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
-  const [field, setField] = useState("stage");
-  const [operator, setOperator] = useState("eq");
+  const [field, setField] = useState<SegmentField>("stage");
+  const [operator, setOperator] = useState<SegmentOperator>("eq");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fieldDefinition = getSegmentFieldDefinition(field);
+  const operatorOptions = getSegmentOperatorOptions(field);
+  const needsValue = segmentConditionNeedsValue(field, operator);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = getFormString(form, "name");
-    const filter: SegmentFilter = {
-      kind: "condition",
-      field: field as Extract<SegmentFilter, { kind: "condition" }>["field"],
-      operator: operator as Extract<SegmentFilter, { kind: "condition" }>["operator"],
-      value: getFormString(form, "value"),
-    };
+    const filter: SegmentFilter = createSegmentCondition(
+      field,
+      operator,
+      getFormString(form, "value"),
+    );
     setBusy(true);
-    await rpc("/segments", {
-      method: "POST",
-      body: JSON.stringify({
-        name,
-        slug: slugify(name),
-        kind: "dynamic",
-        filter,
-      }),
-    });
-    setBusy(false);
-    await onSaved();
+    setError("");
+    try {
+      await rpc("/segments", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          slug: slugify(name),
+          kind: "dynamic",
+          filter,
+        }),
+      });
+      await onSaved();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "セグメントを作成できませんでした");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -109,30 +130,51 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
           label="フィールド"
           name="field"
           value={field}
-          onChange={(event) => setField(event.target.value)}
+          onChange={(event) => {
+            const nextField = event.target.value as SegmentField;
+            setField(nextField);
+            setOperator((current) => normalizeSegmentOperator(nextField, current));
+          }}
         >
-          {contactAttributeDefinitions.map((attribute) => (
-            <FormSelectOption key={attribute.key} value={attribute.key}>
-              {attribute.label}
+          {segmentFieldOptions.map((option) => (
+            <FormSelectOption key={option.field} value={option.field}>
+              {option.label}
             </FormSelectOption>
           ))}
-          <FormSelectOption value="company">アカウント</FormSelectOption>
-          <FormSelectOption value="tag">タグ</FormSelectOption>
-          <FormSelectOption value="event">イベント</FormSelectOption>
         </FormNativeSelect>
         <FormNativeSelect
           label="演算子"
           name="operator"
           value={operator}
-          onChange={(event) => setOperator(event.target.value)}
+          onChange={(event) => setOperator(event.target.value as SegmentOperator)}
         >
-          <FormSelectOption value="eq">等しい</FormSelectOption>
-          <FormSelectOption value="neq">等しくない</FormSelectOption>
-          <FormSelectOption value="contains">含む</FormSelectOption>
-          <FormSelectOption value="gte">以上</FormSelectOption>
+          {operatorOptions.map((option) => (
+            <FormSelectOption key={option.operator} value={option.operator}>
+              {option.label}
+            </FormSelectOption>
+          ))}
         </FormNativeSelect>
       </div>
-      <FormInput label="値" name="value" required />
+      {needsValue ? (
+        <FormInput
+          label="値"
+          name="value"
+          type={
+            operator === "in"
+              ? "text"
+              : fieldDefinition.valueType === "number"
+                ? "number"
+                : fieldDefinition.valueType === "date"
+                  ? "datetime-local"
+                  : "text"
+          }
+          {...(operator === "in" ? { description: "複数の値はカンマで区切って入力します。" } : {})}
+          required
+        />
+      ) : (
+        <input type="hidden" name="value" value="" />
+      )}
+      {error ? <ErrorAlert>{error}</ErrorAlert> : null}
       <LoadingButton busy={busy} className="w-full" type="submit">
         作成
       </LoadingButton>

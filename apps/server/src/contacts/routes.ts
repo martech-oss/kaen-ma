@@ -1,8 +1,8 @@
 import type { Hono } from "hono";
-import { z } from "zod";
+import * as z from "zod";
 
 import { ContactRepository, writeAuditLog } from "@kaenma/database";
-import { contactCreateSchema, contactUpdateSchema } from "@kaenma/shared";
+import { contactCreateSchema, contactUpdateSchema } from "@kaenma/shared/contacts";
 
 import type { AppEnvironment } from "../env";
 import { recordContactEvent } from "../events/service";

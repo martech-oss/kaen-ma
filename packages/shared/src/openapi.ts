@@ -3,15 +3,11 @@ import {
   OpenApiGeneratorV31,
   extendZodWithOpenApi,
 } from "@asteasolutions/zod-to-openapi";
-import { z } from "zod";
+import * as z from "zod";
 
-import {
-  campaignDefinitionSchema,
-  contactCreateSchema,
-  contactSchema,
-  contactUpdateSchema,
-  segmentFilterSchema,
-} from "./index";
+import { contactCreateSchema, contactSchema, contactUpdateSchema } from "./contacts";
+import { campaignDefinitionSchema } from "./index";
+import { segmentFilterSchema } from "./segments";
 
 extendZodWithOpenApi(z);
 
