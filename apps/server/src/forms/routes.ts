@@ -6,7 +6,7 @@ import { uuidv7 } from "@kaenma/database";
 import { type AppEnvironment } from "../env";
 import { parseJsonColumns, safeJson, validationError } from "../http/helpers";
 import { apiError, requireRole } from "../middleware";
-import { isValidDomain, normalizeDomain } from "../public/routes";
+import { isValidDomain, normalizeDomain } from "../public/domain";
 
 export function registerFormRoutes(api: Hono<AppEnvironment>): void {
   const allowedDomainsSchema = z
