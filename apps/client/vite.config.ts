@@ -15,7 +15,12 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     cloudflare({
-      configPath: "../server/wrangler.jsonc",
+      configPath: "./wrangler.jsonc",
+      auxiliaryWorkers: [
+        {
+          configPath: "../server/wrangler.jsonc",
+        },
+      ],
       viteEnvironment: { name: "ssr" },
     }),
     tanstackStart(),

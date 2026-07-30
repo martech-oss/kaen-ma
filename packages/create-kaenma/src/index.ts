@@ -102,18 +102,25 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
       projectDirectory,
     );
   }
-  const configPath = resolve(projectDirectory, "apps/server/wrangler.jsonc");
-  let config = await readFile(configPath, "utf8");
-  config = config
-    .replaceAll('"name": "kaenma"', `"name": "${projectName}"`)
+  const serverConfigPath = resolve(projectDirectory, "apps/server/wrangler.jsonc");
+  let serverConfig = await readFile(serverConfigPath, "utf8");
+  serverConfig = serverConfig
+    .replaceAll('"name": "kaenma-server"', `"name": "${projectName}-server"`)
     .replaceAll('"database_name": "kaenma"', `"database_name": "${projectName}-db"`)
     .replaceAll("00000000-0000-0000-0000-000000000000", databaseId)
     .replaceAll("kaenma-assets", `${projectName}-assets`)
     .replaceAll("kaenma-campaign", `${projectName}-campaign`)
     .replaceAll("kaenma-delivery", `${projectName}-delivery`)
     .replaceAll("kaenma-dead-letter", `${projectName}-dead-letter`)
-    .replaceAll('"APP_URL": "http://localhost:8787"', `"APP_URL": "${appUrl}"`);
-  await writeFile(configPath, config);
+    .replaceAll('"APP_URL": "http://localhost:5173"', `"APP_URL": "${appUrl}"`);
+  await writeFile(serverConfigPath, serverConfig);
+
+  const clientConfigPath = resolve(projectDirectory, "apps/client/wrangler.jsonc");
+  let clientConfig = await readFile(clientConfigPath, "utf8");
+  clientConfig = clientConfig
+    .replaceAll('"name": "kaenma"', `"name": "${projectName}"`)
+    .replaceAll('"service": "kaenma-server"', `"service": "${projectName}-server"`);
+  await writeFile(clientConfigPath, clientConfig);
 
   const betterAuthSecret = randomSecret();
   const encryptionKey = randomSecret();
@@ -157,7 +164,7 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
     { cwd: projectDirectory, input: "y\n" },
   );
   await execa("pnpm", ["deploy"], { cwd: projectDirectory });
-  progress.stop("Infrastructure and Worker are ready");
+  progress.stop("Infrastructure and Workers are ready");
 }
 
 async function doctor(): Promise<void> {
@@ -166,14 +173,7 @@ async function doctor(): Promise<void> {
   checks.push(
     await commandCheck("Cloudflare login", "pnpm", ["wrangler", "whoami"], projectDirectory),
   );
-  checks.push(
-    await commandCheck(
-      "Worker bindings",
-      "pnpm",
-      ["--filter", "@kaenma/server", "cf:types"],
-      projectDirectory,
-    ),
-  );
+  checks.push(await commandCheck("Worker bindings", "pnpm", ["cf:types"], projectDirectory));
   checks.push(
     await commandCheck(
       "D1 schema",
@@ -277,7 +277,7 @@ async function addDomain(): Promise<void> {
       /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(value) ? undefined : "Enter a hostname",
   });
   if (isCancel(domainAnswer)) return abort();
-  const configPath = resolve(process.cwd(), "apps/server/wrangler.jsonc");
+  const configPath = resolve(process.cwd(), "apps/client/wrangler.jsonc");
   let config = await readFile(configPath, "utf8");
   if (!config.includes('"routes"')) {
     config = config.replace(

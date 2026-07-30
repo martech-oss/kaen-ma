@@ -9,7 +9,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」と
 
 ## 特徴
 
-- 単一のCloudflare WorkerからoRPC・REST APIとTanStack Start管理画面を配信
+- TanStack Startの公開Workerと、Service Binding経由でのみ呼び出すAPI Workerを分離
 - D1を業務データとキャンペーン状態機械の正本として使用
 - R2によるAsset、CSV、受信添付ファイル、イベントアーカイブの保存
 - Queuesと1分Cronによる再開可能なキャンペーン実行
@@ -35,17 +35,18 @@ Cloudflare Email ServiceをMarketing用途で選択すると、キャンペー�
 
 ```mermaid
 flowchart LR
-    A["管理者・マーケター"] --> W["Cloudflare Worker<br>Hono API + TanStack Start"]
-    V["訪問者・フォーム・Tracking"] --> W
-    C["Cron Scheduler"] --> W
-    W --> D["D1<br>業務データ・実行状態"]
-    W --> R["R2<br>Asset・CSV・Archive"]
-    W --> Q["Queues<br>Campaign・Delivery"]
-    Q --> W
-    W --> CF["Cloudflare Email Service<br>Transactional"]
-    W --> RE["Resend<br>Marketing"]
-    W --> WH["Outbound Webhook"]
-    ER["Cloudflare Email Routing"] --> W
+    A["管理者・マーケター"] --> C["Client Worker<br>TanStack Start"]
+    V["訪問者・フォーム・Tracking"] --> C
+    C -->|"Service Binding"| S["Server Worker<br>Hono / oRPC / REST"]
+    CR["Cron Scheduler"] --> S
+    S --> D["D1<br>業務データ・実行状態"]
+    S --> R["R2<br>Asset・CSV・Archive"]
+    S --> Q["Queues<br>Campaign・Delivery"]
+    Q --> S
+    S --> CF["Cloudflare Email Service<br>Transactional"]
+    S --> RE["Resend<br>Marketing"]
+    S --> WH["Outbound Webhook"]
+    ER["Cloudflare Email Routing"] --> S
 ```
 
 長時間のDelayはQueueに保持せず、D1の`campaign_jobs.due_at`に保存します。Cronが期限到達Jobをleaseし、Queueへ渡します。Queue consumerは送信直前に同意、抑止、購読Topic、頻度上限、キャンセル状態を再確認します。
@@ -54,10 +55,10 @@ flowchart LR
 
 ```text
 apps/
-  client/                TanStack Start/Query、Vite、Tailwind、React Flow
-  server/                Hono API、Cron、Queue、Email Routing
+  client/                公開Worker、TanStack Start/Query、Vite、Tailwind、React Flow
+  server/                内部API Worker、Hono、Cron、Queue、Email Routing
 packages/
-  contract/              管理画面とWorkerで共有するoRPC contract
+  orpc/                  管理画面とWorkerで共有するドメイン別oRPC contract
   channels/              Cloudflare、Resend、Webhook adapter
   core/                  Segment、Campaign、Consent、Schedule
   create-kaenma/         Setup、doctor、backup、update CLI
@@ -158,7 +159,10 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 
 ### Wrangler設定
 
-`apps/server/wrangler.jsonc`に以下のBindingsが定義されています。
+`apps/client/wrangler.jsonc`は公開Worker `kaenma` と、内部Worker
+`kaenma-server`を呼び出す`SERVER` Service Bindingを定義します。
+
+`apps/server/wrangler.jsonc`には以下のBindingsが定義されています。
 
 - `DB`: D1
 - `ASSETS_BUCKET`: R2
@@ -166,7 +170,9 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 - `DELIVERY_QUEUE`: Email、Webhook delivery
 - `EMAIL`: Cloudflare Email Service
 
-TanStack StartのSSR WorkerとクライアントアセットはCloudflare Viteプラグインが同じデプロイ成果物へまとめます。
+ローカル開発ではCloudflare Viteプラグインの`auxiliaryWorkers`により両Workerを
+同時に起動します。`kaenma-server`は`workers_dev: false`のため公開URLを持たず、
+APIリクエストは`kaenma`からService Bindingで転送されます。
 
 初期状態のD1 `database_id` はプレースホルダーです。実際のD1 IDへ置き換えてください。
 
@@ -191,7 +197,8 @@ pnpm db:migrate:remote
 pnpm deploy
 ```
 
-Worker build時にTanStack StartのSSR bundleとクライアントアセットもビルドされ、同時にデプロイされます。
+`pnpm deploy`はService Bindingの参照先である`kaenma-server`を先にデプロイし、
+続いてTanStack Startとクライアントアセットを含む`kaenma`をデプロイします。
 
 ## 初回セットアップ
 
@@ -386,7 +393,7 @@ node packages/create-kaenma/dist/index.js update
 node packages/create-kaenma/dist/index.js domain add
 ```
 
-`create-kaenma`はD1、R2、Queues、Secrets、Migration、Worker deploymentを順番に構成します。
+`create-kaenma`はD1、R2、Queues、Secrets、Migration、2つのWorker deploymentを順番に構成します。
 
 開発中のローカルテンプレートを使う場合:
 

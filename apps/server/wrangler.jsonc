@@ -1,10 +1,10 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "kaenma",
-  "main": "../client/src/server.ts",
+  "name": "kaenma-server",
+  "main": "src/index.ts",
   "compatibility_date": "2026-07-28",
   "compatibility_flags": ["nodejs_compat"],
-  "workers_dev": true,
+  "workers_dev": false,
   "d1_databases": [
     {
       "binding": "DB",

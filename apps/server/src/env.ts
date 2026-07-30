@@ -10,7 +10,7 @@ export interface RuntimeSecrets {
   RESEND_WEBHOOK_SECRET?: string;
 }
 
-export type RuntimeEnv = CloudflareBindings & RuntimeSecrets;
+export type RuntimeEnv = ServerBindings & RuntimeSecrets;
 
 export interface SessionValue {
   user: {
