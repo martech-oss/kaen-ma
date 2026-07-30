@@ -1,9 +1,9 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { WorkspaceRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/database";
+import { ContactRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/database";
 
-import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth";
+import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
 import { sha256Hex } from "../src/crypto";
 
 declare module "cloudflare:workers" {
@@ -56,12 +56,12 @@ describe("Kaenma Worker", () => {
          VALUES (?, 'Second', 'second', ?, 'UTC')`,
       ).bind(secondWorkspace, now),
     ]);
-    const first = new WorkspaceRepository(env.DB, {
+    const first = new ContactRepository(env.DB, {
       workspaceId: firstWorkspace,
       userId: "user-one",
       role: "owner",
     });
-    const second = new WorkspaceRepository(env.DB, {
+    const second = new ContactRepository(env.DB, {
       workspaceId: secondWorkspace,
       userId: "user-two",
       role: "owner",
@@ -86,7 +86,7 @@ describe("Kaenma Worker", () => {
     )
       .bind(workspaceId, `contacts-${workspaceId}`, Date.now())
       .run();
-    const repository = new WorkspaceRepository(env.DB, {
+    const repository = new ContactRepository(env.DB, {
       workspaceId,
       userId: "contacts-owner",
       role: "owner",

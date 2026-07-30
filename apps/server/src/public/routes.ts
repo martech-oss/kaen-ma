@@ -10,7 +10,8 @@ import { type AppEnvironment } from "../env";
 import { recordContactEvent } from "../events/service";
 import { safeJson } from "../http/helpers";
 import { apiError } from "../middleware";
-import { primitiveString } from "../values";
+import { isRecord, primitiveString, stringOrNull } from "../values";
+import { escapeHtml } from "./html";
 
 export function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/p/:workspaceSlug/:pageSlug", async (context) => {
@@ -859,23 +860,6 @@ export function redactFormPayload(value: Record<string, unknown>): Record<string
 
 export async function hashIp(value?: string): Promise<string | null> {
   return value ? sha256Hex(value) : null;
-}
-
-export function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim().slice(0, 191) : null;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-export function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 export function renderPublicForm(

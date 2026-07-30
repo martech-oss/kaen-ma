@@ -1,7 +1,7 @@
 import * as z from "zod";
 
 import { apiError } from "../middleware";
-import { isRecord } from "../public/routes";
+import { isRecord } from "../values";
 
 export function resourceSlug(value: string, fallbackId: string): string {
   const slug = value
