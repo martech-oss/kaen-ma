@@ -4,8 +4,8 @@ import { timingSafeEqual } from "@kaenma/channels";
 import { createDatabase, resolveMemberContext, type KaenmaDatabase } from "@kaenma/database";
 import type { WorkspaceContext, WorkspaceRole } from "@kaenma/shared";
 
-import { createAuth } from "./auth";
-import { hasWorkspaceRole } from "./authorization";
+import { hasWorkspaceRole } from "./auth/authorization";
+import { createAuth } from "./auth/service";
 import { sha256Hex } from "./crypto";
 import type { AppEnvironment, SessionValue } from "./env";
 

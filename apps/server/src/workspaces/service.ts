@@ -1,5 +1,5 @@
-import type { Workspace } from "@kaenma/contract";
 import type { KaenmaDatabase } from "@kaenma/database";
+import type { Workspace } from "@kaenma/orpc";
 import type { WorkspaceContext } from "@kaenma/shared";
 
 type WorkspaceRow = Omit<Workspace, "role">;

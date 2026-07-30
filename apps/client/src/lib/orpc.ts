@@ -5,7 +5,7 @@ import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestHeaders, getRequestUrl } from "@tanstack/react-start/server";
 
-import { contract } from "@kaenma/contract";
+import { contract } from "@kaenma/orpc";
 
 const getRpcUrl = createIsomorphicFn()
   .client(() => new URL("/api/rpc", window.location.origin))

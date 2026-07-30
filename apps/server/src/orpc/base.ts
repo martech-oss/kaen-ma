@@ -1,0 +1,35 @@
+import { implement } from "@orpc/server";
+
+import { contract } from "@kaenma/orpc";
+
+import { resolveWorkspaceAccess, WorkspaceAccessError } from "../middleware";
+import type { OrpcInitialContext } from "./context";
+
+export const os = implement(contract).$context<OrpcInitialContext>();
+
+const requireWorkspace = os.middleware(async ({ context, next, errors }) => {
+  try {
+    const access = await resolveWorkspaceAccess({
+      database: context.database,
+      env: context.env,
+      headers: context.headers,
+      method: context.method,
+      executionContext: context.executionContext,
+    });
+    return next({ context: access });
+  } catch (error) {
+    if (!(error instanceof WorkspaceAccessError)) throw error;
+    switch (error.code) {
+      case "invalid_api_key":
+        throw errors.INVALID_API_KEY();
+      case "origin_mismatch":
+        throw errors.ORIGIN_MISMATCH();
+      case "workspace_required":
+        throw errors.WORKSPACE_REQUIRED();
+      case "unauthorized":
+        throw errors.UNAUTHORIZED();
+    }
+  }
+});
+
+export const authed = os.use(requireWorkspace);

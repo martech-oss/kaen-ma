@@ -4,8 +4,8 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { contract } from "@kaenma/contract";
 import { uuidv7 } from "@kaenma/database";
+import { contract } from "@kaenma/orpc";
 
 import { sha256Hex } from "../src/crypto";
 

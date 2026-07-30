@@ -1,5 +1,5 @@
-import type { ContactListInput, ContactListResult, ContactSummary } from "@kaenma/contract";
-import { WorkspaceRepository, type KaenmaDatabase } from "@kaenma/database";
+import { ContactRepository, type KaenmaDatabase } from "@kaenma/database";
+import type { ContactListInput, ContactListResult, ContactSummary } from "@kaenma/orpc";
 import type { Contact, ContactCreate, WorkspaceContext } from "@kaenma/shared";
 
 export async function listContacts(
@@ -7,7 +7,7 @@ export async function listContacts(
   workspace: WorkspaceContext,
   input: ContactListInput,
 ): Promise<ContactListResult> {
-  const repository = new WorkspaceRepository(database, workspace);
+  const repository = new ContactRepository(database, workspace);
   const page = await repository.listContacts(input);
   const items = await attachContactRelations(database, workspace.workspaceId, page.items);
 
@@ -23,7 +23,7 @@ export async function createContact(
   workspace: WorkspaceContext,
   input: ContactCreate,
 ): Promise<Contact> {
-  const repository = new WorkspaceRepository(database, workspace);
+  const repository = new ContactRepository(database, workspace);
   return repository.createContact(input);
 }
 

@@ -1,5 +1,5 @@
 import { orpc } from "@/lib/orpc";
-import type { AdminRequestInput } from "@kaenma/contract";
+import type { AdminRequestInput } from "@kaenma/orpc";
 
 export class RpcClientError extends Error {
   public constructor(
