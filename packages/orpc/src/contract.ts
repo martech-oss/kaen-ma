@@ -2,6 +2,7 @@ import { accountsContract } from "./accounts/contract";
 import { adminContract } from "./admin/contract";
 import { contactResourcesContract } from "./contact-resources/contract";
 import { contactsContract } from "./contacts/contract";
+import { dealsContract } from "./deals/contract";
 import { emailsContract } from "./emails/contract";
 import { reportsContract } from "./reports/contract";
 import { segmentsContract } from "./segments/contract";
@@ -14,6 +15,7 @@ export const contract = {
   workspace: workspaceContract,
   contacts: contactsContract,
   contactResources: contactResourcesContract,
+  deals: dealsContract,
   emails: emailsContract,
   reports: reportsContract,
   segments: segmentsContract,

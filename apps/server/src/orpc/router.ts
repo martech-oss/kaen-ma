@@ -29,6 +29,18 @@ import {
   updateContactProcedure,
 } from "../contacts/router";
 import {
+  archiveDealProcedure,
+  createDealProcedure,
+  createDealTaskProcedure,
+  dealOptionsProcedure,
+  deleteDealTaskProcedure,
+  getDealProcedure,
+  listDealsProcedure,
+  moveDealProcedure,
+  updateDealProcedure,
+  updateDealTaskProcedure,
+} from "../deals/router";
+import {
   archiveCampaignProcedure,
   archiveTemplateProcedure,
   archiveVariableProcedure,
@@ -86,6 +98,18 @@ export const orpcRouter = os.router({
     create: createContactProcedure,
     update: updateContactProcedure,
     archive: archiveContactProcedure,
+  },
+  deals: {
+    options: dealOptionsProcedure,
+    list: listDealsProcedure,
+    get: getDealProcedure,
+    create: createDealProcedure,
+    update: updateDealProcedure,
+    move: moveDealProcedure,
+    archive: archiveDealProcedure,
+    createTask: createDealTaskProcedure,
+    updateTask: updateDealTaskProcedure,
+    deleteTask: deleteDealTaskProcedure,
   },
   emails: {
     listCampaigns: listCampaignsProcedure,

@@ -41,7 +41,7 @@ export function taskTypeLabel(type: DealTaskType): ReactNode {
 }
 
 export function contactOptionLabel(contact: DealOptions["contacts"][number]): string {
-  const name = [contact.last_name, contact.first_name].filter(Boolean).join(" ");
+  const name = [contact.lastName, contact.firstName].filter(Boolean).join(" ");
   return name
     ? `${name}${contact.email ? `（${contact.email}）` : ""}`
     : (contact.email ?? "名前未設定");

@@ -63,3 +63,119 @@ export const dealTaskUpdateSchema = dealTaskFieldsSchema.partial().extend({
   status: dealTaskStatusSchema.optional(),
 });
 export type DealTaskUpdate = z.infer<typeof dealTaskUpdateSchema>;
+
+export const dealStageSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  color: z.string(),
+  position: z.number().int(),
+  probability: z.number(),
+});
+export type DealStage = z.infer<typeof dealStageSchema>;
+
+export const dealPipelineSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  isDefault: z.boolean(),
+  stages: z.array(dealStageSchema),
+});
+export type DealPipeline = z.infer<typeof dealPipelineSchema>;
+
+export const dealContactOptionSchema = z.object({
+  id: z.string(),
+  email: z.string().nullable(),
+  firstName: z.string().nullable(),
+  lastName: z.string().nullable(),
+});
+
+export const dealAccountOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  domain: z.string().nullable(),
+});
+
+export const dealMemberOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  email: z.string(),
+});
+
+export const dealOptionsSchema = z.object({
+  pipelines: z.array(dealPipelineSchema),
+  contacts: z.array(dealContactOptionSchema),
+  accounts: z.array(dealAccountOptionSchema),
+  members: z.array(dealMemberOptionSchema),
+});
+export type DealOptions = z.infer<typeof dealOptionsSchema>;
+
+export const dealSummarySchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  pipelineId: z.string(),
+  pipelineName: z.string(),
+  stageId: z.string(),
+  stageName: z.string(),
+  stageColor: z.string(),
+  stagePosition: z.number().int(),
+  stageProbability: z.number(),
+  name: z.string(),
+  value: z.number(),
+  currency: z.string(),
+  status: dealStatusSchema,
+  ownerUserId: z.string().nullable(),
+  ownerName: z.string().nullable(),
+  ownerEmail: z.string().nullable(),
+  contactId: z.string().nullable(),
+  contactEmail: z.string().nullable(),
+  contactFirstName: z.string().nullable(),
+  contactLastName: z.string().nullable(),
+  accountId: z.string().nullable(),
+  accountName: z.string().nullable(),
+  expectedCloseDate: z.string().nullable(),
+  description: z.string(),
+  wonAt: z.string().nullable(),
+  lostAt: z.string().nullable(),
+  archivedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  openTaskCount: z.number().int().nonnegative(),
+  nextTaskAt: z.string().nullable(),
+});
+export type DealSummary = z.infer<typeof dealSummarySchema>;
+
+export const dealTaskSchema = z.object({
+  id: z.string(),
+  dealId: z.string(),
+  type: dealTaskTypeSchema,
+  title: z.string(),
+  notes: z.string(),
+  dueAt: z.string().nullable(),
+  status: dealTaskStatusSchema,
+  assignedUserId: z.string().nullable(),
+  assigneeName: z.string().nullable(),
+  assigneeEmail: z.string().nullable(),
+  completedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type DealTask = z.infer<typeof dealTaskSchema>;
+
+export const dealListSummarySchema = z.object({
+  openCount: z.number().int().nonnegative(),
+  openValue: z.number(),
+  wonCount: z.number().int().nonnegative(),
+  wonValue: z.number(),
+  lostCount: z.number().int().nonnegative(),
+});
+
+export const dealListDataSchema = z.object({
+  items: z.array(dealSummarySchema),
+  summary: dealListSummarySchema,
+});
+export type DealListData = z.infer<typeof dealListDataSchema>;
+
+export const dealDetailDataSchema = z.object({
+  deal: dealSummarySchema,
+  tasks: z.array(dealTaskSchema),
+});
+export type DealDetailData = z.infer<typeof dealDetailDataSchema>;
