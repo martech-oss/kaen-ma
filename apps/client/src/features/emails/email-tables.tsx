@@ -33,7 +33,7 @@ import {
   type MessageVariableRow,
 } from "@/features/emails/email-api";
 import { formatDateTime } from "@/lib/format";
-import { rpc } from "@/rpc";
+import { orpc } from "@/lib/orpc";
 
 import { ArchiveConfirm } from "./email-forms";
 
@@ -50,7 +50,7 @@ export function CampaignTable({
 }): ReactNode {
   async function start(campaign: EmailCampaignRow) {
     try {
-      await rpc(`/broadcasts/${campaign.id}/start`, { method: "POST" });
+      await orpc.emails.startCampaign({ id: campaign.id });
       toast.success("メールキャンペーンの送信を開始しました");
       await onChanged();
     } catch (caught) {
@@ -60,7 +60,7 @@ export function CampaignTable({
 
   async function archive(campaign: EmailCampaignRow) {
     try {
-      await rpc(`/broadcasts/${campaign.id}/archive`, { method: "POST" });
+      await orpc.emails.archiveCampaign({ id: campaign.id });
       toast.success("メールキャンペーンをアーカイブしました");
       await onChanged();
     } catch (caught) {
@@ -107,15 +107,15 @@ export function CampaignTable({
                     <div className="flex min-w-48 flex-col gap-1">
                       <span className="font-medium">{campaign.name}</span>
                       <span className="truncate text-xs text-muted-foreground">
-                        {campaign.template_name} · {campaign.subject}
+                        {campaign.templateName} · {campaign.subject}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex flex-col gap-1">
-                      <span>{campaign.segment_name}</span>
+                      <span>{campaign.segmentName}</span>
                       <span className="text-xs text-muted-foreground">
-                        {campaign.member_count.toLocaleString()}件
+                        {campaign.memberCount.toLocaleString()}件
                       </span>
                     </div>
                   </TableCell>
@@ -123,14 +123,14 @@ export function CampaignTable({
                     <EmailCampaignStatusBadge status={campaign.status} />
                   </TableCell>
                   <TableCell>
-                    {campaign.sent_count.toLocaleString()} /{" "}
-                    {campaign.delivered_count.toLocaleString()}
+                    {campaign.sentCount.toLocaleString()} /{" "}
+                    {campaign.deliveredCount.toLocaleString()}
                   </TableCell>
                   <TableCell>
-                    {campaign.scheduled_at
-                      ? formatDateTime(campaign.scheduled_at)
-                      : campaign.started_at
-                        ? formatDateTime(campaign.started_at)
+                    {campaign.scheduledAt
+                      ? formatDateTime(campaign.scheduledAt)
+                      : campaign.startedAt
+                        ? formatDateTime(campaign.startedAt)
                         : "未設定"}
                   </TableCell>
                   <TableCell>
@@ -153,7 +153,7 @@ export function CampaignTable({
                                 </AlertDialogMedia>
                                 <AlertDialogTitle>配信を開始しますか？</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  「{campaign.segment_name}
+                                  「{campaign.segmentName}
                                   」の現在の対象者を確定し、 Resendから送信します。
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
@@ -194,9 +194,7 @@ export function TemplateTable({
 }): ReactNode {
   async function sync(template: EmailTemplateRow) {
     try {
-      await rpc(`/email-templates/${template.id}/sync`, {
-        method: "POST",
-      });
+      await orpc.emails.syncTemplate({ id: template.id });
       toast.success("Resend Templateを同期しました");
       await onChanged();
     } catch (caught) {
@@ -206,9 +204,7 @@ export function TemplateTable({
 
   async function archive(template: EmailTemplateRow) {
     try {
-      await rpc(`/email-templates/${template.id}/archive`, {
-        method: "POST",
-      });
+      await orpc.emails.archiveTemplate({ id: template.id });
       toast.success("テンプレートをアーカイブしました");
       await onChanged();
     } catch (caught) {
@@ -254,7 +250,7 @@ export function TemplateTable({
                     <div className="flex min-w-48 flex-col gap-1">
                       <span className="font-medium">{template.name}</span>
                       <span className="text-xs text-muted-foreground">
-                        {template.resend_alias ?? template.resend_template_id}
+                        {template.resendAlias ?? template.resendTemplateId}
                       </span>
                     </div>
                   </TableCell>
@@ -269,20 +265,20 @@ export function TemplateTable({
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       <Badge
-                        variant={template.remote_status === "published" ? "secondary" : "outline"}
+                        variant={template.remoteStatus === "published" ? "secondary" : "outline"}
                       >
-                        {template.remote_status === "published" ? "公開済み" : "下書き"}
+                        {template.remoteStatus === "published" ? "公開済み" : "下書き"}
                       </Badge>
-                      {template.has_unpublished_versions ? (
+                      {template.hasUnpublishedVersions ? (
                         <Badge variant="outline">未公開の変更あり</Badge>
                       ) : null}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex min-w-44 flex-col gap-1">
-                      <span>{formatDateTime(template.last_synced_at)}</span>
-                      {template.sync_error ? (
-                        <span className="text-xs text-destructive">{template.sync_error}</span>
+                      <span>{formatDateTime(template.lastSyncedAt)}</span>
+                      {template.syncError ? (
+                        <span className="text-xs text-destructive">{template.syncError}</span>
                       ) : (
                         <span className="text-xs text-muted-foreground">送信可能</span>
                       )}
@@ -359,9 +355,7 @@ export function VariableTable({
 }): ReactNode {
   async function archive(variable: MessageVariableRow) {
     try {
-      await rpc(`/message-variables/${variable.id}/archive`, {
-        method: "POST",
-      });
+      await orpc.emails.archiveVariable({ id: variable.id });
       toast.success("メッセージ変数をアーカイブしました");
       await onChanged();
     } catch (caught) {
@@ -422,7 +416,7 @@ export function VariableTable({
                     <TableCell className="max-w-80 truncate">
                       {variable.value || "空の値"}
                     </TableCell>
-                    <TableCell>{formatDateTime(variable.updated_at)}</TableCell>
+                    <TableCell>{formatDateTime(variable.updatedAt)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="outline" onClick={() => onEdit(variable)}>
@@ -485,7 +479,7 @@ export function ArchivedResources({
               <div className="min-w-0">
                 <p className="truncate font-medium">{campaign.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {campaign.segment_name} · {formatDateTime(campaign.updated_at)}
+                  {campaign.segmentName} · {formatDateTime(campaign.updatedAt)}
                 </p>
               </div>
               <EmailCampaignStatusBadge status={campaign.status} />
@@ -511,7 +505,7 @@ export function ArchivedResources({
                 </p>
               </div>
               <Badge variant="secondary">
-                {template.remote_status === "published" ? "公開済み" : "下書き"}
+                {template.remoteStatus === "published" ? "公開済み" : "下書き"}
               </Badge>
             </div>
           ))}

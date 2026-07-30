@@ -1,75 +1,21 @@
-import { rpc } from "@/rpc";
+import { orpc } from "@/lib/orpc";
+import type {
+  BroadcastSegmentOption,
+  EmailCampaign,
+  EmailTemplate,
+  MessageVariable,
+  ResendTemplateVariable,
+  SubscriptionTopicOption,
+} from "@kaenma/shared/emails";
 
-export interface EmailCampaignRow {
-  id: string;
-  name: string;
-  segment_id: string;
-  template_id: string;
-  topic_id: string | null;
-  status: "draft" | "scheduled" | "sending" | "completed" | "cancelled";
-  scheduled_at: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-  segment_name: string;
-  member_count: number;
-  template_name: string;
-  subject: string | null;
-  recipient_count: number;
-  sent_count: number;
-  delivered_count: number;
-}
+export type { EmailCampaign, EmailTemplate, MessageVariable, ResendTemplateVariable };
 
-export interface ResendTemplateVariable {
-  key: string;
-  type: "string" | "number";
-  fallbackValue: string | number | null;
-}
-
-export interface EmailTemplateRow {
-  id: string;
-  name: string;
-  purpose: "marketing" | "transactional";
-  resend_template_id: string;
-  resend_alias: string | null;
-  subject: string | null;
-  remote_status: "draft" | "published";
-  remote_current_version_id: string;
-  has_unpublished_versions: boolean;
-  variables: ResendTemplateVariable[];
-  published_at: string | null;
-  last_synced_at: string;
-  sync_error: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-  sendable: boolean;
-}
-
-export interface MessageVariableRow {
-  id: string;
-  key: string;
-  name: string;
-  value: string;
-  description: string;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface SegmentOption {
-  id: string;
-  name: string;
-  member_count: number;
-}
-
-export interface TopicOption {
-  id: string;
-  name: string;
-  is_default: number;
-}
+/** Retained aliases so the table and form components read the same. */
+export type EmailCampaignRow = EmailCampaign;
+export type EmailTemplateRow = EmailTemplate;
+export type MessageVariableRow = MessageVariable;
+export type SegmentOption = BroadcastSegmentOption;
+export type TopicOption = SubscriptionTopicOption;
 
 export interface EmailCampaignsData {
   campaigns: EmailCampaignRow[];
@@ -93,51 +39,39 @@ export interface EmailArchiveData {
 }
 
 export async function loadEmailCampaigns(signal?: AbortSignal): Promise<EmailCampaignsData> {
+  const options = signal ? { signal } : undefined;
   const [campaigns, templates, segments, topics] = await Promise.all([
-    rpc<EmailCampaignRow[]>("/broadcasts", { signal: signal ?? null }),
-    rpc<EmailTemplateRow[]>("/email-templates", {
-      signal: signal ?? null,
-    }),
-    rpc<SegmentOption[]>("/segments", { signal: signal ?? null }),
-    rpc<TopicOption[]>("/subscription-topics", {
-      signal: signal ?? null,
-    }),
+    orpc.emails.listCampaigns({ archived: false }, options),
+    orpc.emails.listTemplates({ archived: false }, options),
+    orpc.emails.listSegmentOptions(undefined, options),
+    orpc.emails.listTopicOptions(undefined, options),
   ]);
-  return {
-    campaigns: campaigns.data,
-    templates: templates.data,
-    segments: segments.data,
-    topics: topics.data,
-  };
+  return { campaigns, templates, segments, topics };
 }
 
 export async function loadEmailTemplates(signal?: AbortSignal): Promise<EmailTemplatesData> {
+  const options = signal ? { signal } : undefined;
   const [templates, variables] = await Promise.all([
-    rpc<EmailTemplateRow[]>("/email-templates", {
-      signal: signal ?? null,
-    }),
-    rpc<MessageVariableRow[]>("/message-variables", {
-      signal: signal ?? null,
-    }),
+    orpc.emails.listTemplates({ archived: false }, options),
+    orpc.emails.listVariables({ archived: false }, options),
   ]);
-  return { templates: templates.data, variables: variables.data };
+  return { templates, variables };
 }
 
 export async function loadEmailVariables(signal?: AbortSignal): Promise<EmailVariablesData> {
-  const variables = await rpc<MessageVariableRow[]>("/message-variables", {
-    signal: signal ?? null,
-  });
-  return { variables: variables.data };
+  return {
+    variables: await orpc.emails.listVariables(
+      { archived: false },
+      signal ? { signal } : undefined,
+    ),
+  };
 }
 
 export async function loadEmailArchive(signal?: AbortSignal): Promise<EmailArchiveData> {
+  const options = signal ? { signal } : undefined;
   const [campaigns, templates] = await Promise.all([
-    rpc<EmailCampaignRow[]>("/broadcasts?archived=true", {
-      signal: signal ?? null,
-    }),
-    rpc<EmailTemplateRow[]>("/email-templates?archived=true", {
-      signal: signal ?? null,
-    }),
+    orpc.emails.listCampaigns({ archived: true }, options),
+    orpc.emails.listTemplates({ archived: true }, options),
   ]);
-  return { campaigns: campaigns.data, templates: templates.data };
+  return { campaigns, templates };
 }

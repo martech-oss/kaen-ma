@@ -33,8 +33,8 @@ import {
 } from "@/features/emails/email-api";
 import { nullableString } from "@/lib/form-data";
 import { toDateTimeLocal } from "@/lib/format";
+import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
-import { rpc } from "@/rpc";
 
 export function CampaignForm({
   campaign,
@@ -58,16 +58,16 @@ export function CampaignForm({
     const form = new FormData(event.currentTarget);
     const scheduledAt = getFormString(form, "scheduledAt").trim();
     try {
-      await rpc(campaign ? `/broadcasts/${campaign.id}` : "/broadcasts", {
-        method: campaign ? "PATCH" : "POST",
-        body: JSON.stringify({
-          name: form.get("name"),
-          segmentId: form.get("segmentId"),
-          templateId: form.get("templateId"),
-          topicId: nullableString(form.get("topicId")),
-          scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-        }),
-      });
+      const payload = {
+        name: getFormString(form, "name"),
+        segmentId: getFormString(form, "segmentId"),
+        templateId: getFormString(form, "templateId"),
+        topicId: nullableString(form.get("topicId")),
+        scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
+      };
+      await (campaign
+        ? orpc.emails.updateCampaign({ id: campaign.id, ...payload })
+        : orpc.emails.createCampaign(payload));
       toast.success(
         campaign ? "メールキャンペーンを更新しました" : "メールキャンペーンを作成しました",
       );
@@ -94,20 +94,20 @@ export function CampaignForm({
         <FormNativeSelect
           label="配信対象セグメント"
           name="segmentId"
-          defaultValue={campaign?.segment_id}
+          defaultValue={campaign?.segmentId}
           required
         >
           <FormSelectOption value="">選択してください</FormSelectOption>
           {segments.map((segment) => (
             <FormSelectOption key={segment.id} value={segment.id}>
-              {segment.name}（{segment.member_count.toLocaleString()}件）
+              {segment.name}（{segment.memberCount.toLocaleString()}件）
             </FormSelectOption>
           ))}
         </FormNativeSelect>
         <FormNativeSelect
           label="メールテンプレート"
           name="templateId"
-          defaultValue={campaign?.template_id}
+          defaultValue={campaign?.templateId}
           required
         >
           <FormSelectOption value="">選択してください</FormSelectOption>
@@ -120,14 +120,14 @@ export function CampaignForm({
         <FormNativeSelect
           label="配信トピック"
           name="topicId"
-          defaultValue={campaign?.topic_id ?? ""}
+          defaultValue={campaign?.topicId ?? ""}
           description="未設定の場合はグローバルな配信停止設定を使用します。"
         >
           <FormSelectOption value="">グローバル</FormSelectOption>
           {topics.map((topic) => (
             <FormSelectOption key={topic.id} value={topic.id}>
               {topic.name}
-              {topic.is_default ? "（既定）" : ""}
+              {topic.isDefault ? "（既定）" : ""}
             </FormSelectOption>
           ))}
         </FormNativeSelect>
@@ -135,7 +135,7 @@ export function CampaignForm({
           label="予約配信"
           name="scheduledAt"
           type="datetime-local"
-          defaultValue={toDateTimeLocal(campaign?.scheduled_at)}
+          defaultValue={toDateTimeLocal(campaign?.scheduledAt)}
           description="空欄で保存すると下書きになります。"
         />
         <LoadingButton busy={busy} type="submit" className="w-full">
@@ -155,12 +155,9 @@ export function TemplateForm({ onSaved }: { onSaved: () => Promise<void> }): Rea
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await rpc("/email-templates", {
-        method: "POST",
-        body: JSON.stringify({
-          resendTemplateId: form.get("resendTemplateId"),
-          purpose: form.get("purpose"),
-        }),
+      await orpc.emails.importTemplate({
+        resendTemplateId: getFormString(form, "resendTemplateId"),
+        purpose: getFormString(form, "purpose") === "transactional" ? "transactional" : "marketing",
       });
       toast.success("Resend Templateを登録しました");
       await onSaved();
@@ -223,15 +220,15 @@ export function VariableForm({
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await rpc(variable ? `/message-variables/${variable.id}` : "/message-variables", {
-        method: variable ? "PATCH" : "POST",
-        body: JSON.stringify({
-          key: form.get("key"),
-          name: form.get("name"),
-          value: form.get("value"),
-          description: form.get("description"),
-        }),
-      });
+      const payload = {
+        key: getFormString(form, "key"),
+        name: getFormString(form, "name"),
+        value: getFormString(form, "value"),
+        description: getFormString(form, "description"),
+      };
+      await (variable
+        ? orpc.emails.updateVariable({ id: variable.id, ...payload })
+        : orpc.emails.createVariable(payload));
       toast.success(variable ? "メッセージ変数を更新しました" : "メッセージ変数を作成しました");
       await onSaved();
     } catch (caught) {

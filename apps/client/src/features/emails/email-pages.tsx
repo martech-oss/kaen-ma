@@ -268,8 +268,8 @@ function EmailSummary({
   templates: EmailTemplateRow[];
 }): ReactNode {
   const scheduled = campaigns.filter((item) => item.status === "scheduled").length;
-  const sent = campaigns.reduce((total, item) => total + item.sent_count, 0);
-  const delivered = campaigns.reduce((total, item) => total + item.delivered_count, 0);
+  const sent = campaigns.reduce((total, item) => total + item.sentCount, 0);
+  const delivered = campaigns.reduce((total, item) => total + item.deliveredCount, 0);
   const cards = [
     {
       label: "稼働中・予約",

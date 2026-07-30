@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./contacts": "./src/contacts/index.ts",
     "./deals": "./src/deals/index.ts",
+    "./emails": "./src/emails/index.ts",
     "./openapi": "./src/openapi.ts",
     "./reports": "./src/reports/index.ts",
     "./segments": "./src/segments/index.ts",
