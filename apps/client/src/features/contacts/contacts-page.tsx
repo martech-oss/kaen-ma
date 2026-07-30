@@ -98,6 +98,8 @@ import {
   type SegmentOption,
   type TagOption,
 } from "@/features/contacts/contact-api";
+import { nullableString, optionalString } from "@/lib/form-data";
+import { formatLongDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { cn, getFormString } from "@/lib/utils";
 import { rpc } from "@/rpc";
@@ -747,7 +749,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1.5">
-                          <StatusBadge status={contact.status} />
+                          <ContactStatusBadge status={contact.status} />
                           <Badge variant="outline">{contact.stage}</Badge>
                         </div>
                       </TableCell>
@@ -786,7 +788,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                         </Badge>
                       </TableCell>
                       <TableCell className="px-5 text-right text-xs text-muted-foreground">
-                        {formatDate(contact.updatedAt)}
+                        {formatLongDateTime(contact.updatedAt)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1079,7 +1081,7 @@ function ContactDrawer({
                     <SheetTitle className="truncate text-xl">
                       {contactName(profile.contact)}
                     </SheetTitle>
-                    <StatusBadge status={profile.contact.status} />
+                    <ContactStatusBadge status={profile.contact.status} />
                   </div>
                   <SheetDescription>
                     {profile.contact.email ?? profile.contact.phone ?? "連絡先情報なし"}
@@ -1261,11 +1263,11 @@ function ProfileEditForm({
       await rpc(`/contacts/${contact.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          firstName: optionalString(form.get("firstName")) ?? null,
-          lastName: optionalString(form.get("lastName")) ?? null,
-          email: optionalString(form.get("email")) ?? null,
-          phone: optionalString(form.get("phone")) ?? null,
-          externalId: optionalString(form.get("externalId")) ?? null,
+          firstName: nullableString(form.get("firstName")),
+          lastName: nullableString(form.get("lastName")),
+          email: nullableString(form.get("email")),
+          phone: nullableString(form.get("phone")),
+          externalId: nullableString(form.get("externalId")),
           stage: form.get("stage"),
         }),
       });
@@ -1681,7 +1683,9 @@ function ActivityTimeline({ profile }: { profile: ContactProfile }): ReactNode {
               <div className="text-sm font-medium">{entry.type}</div>
               <div className="truncate text-xs text-muted-foreground">{entry.description}</div>
             </div>
-            <time className="shrink-0 text-xs text-muted-foreground">{formatDate(entry.at)}</time>
+            <time className="shrink-0 text-xs text-muted-foreground">
+              {formatLongDateTime(entry.at)}
+            </time>
           </div>
         ))}
         {entries.length === 0 && (
@@ -1716,7 +1720,7 @@ function ContactAvatar({
   );
 }
 
-function StatusBadge({ status }: { status: Contact["status"] }): ReactNode {
+function ContactStatusBadge({ status }: { status: Contact["status"] }): ReactNode {
   const classes = (
     {
       active: "bg-success text-success-foreground",
@@ -1837,21 +1841,6 @@ function contactName(contact: Contact): string {
     contact.externalId ||
     "匿名Contact"
   );
-}
-
-function optionalString(value: FormDataEntryValue | null): string | undefined {
-  const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || undefined;
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 function slugify(value: string): string {

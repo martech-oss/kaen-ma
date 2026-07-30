@@ -59,6 +59,7 @@ import {
   type AccountSummary,
   type ContactOption,
 } from "@/features/accounts/account-api";
+import { formatDate } from "@/lib/format";
 import { getFormString } from "@/lib/utils";
 import { rpc } from "@/rpc";
 
@@ -579,12 +580,4 @@ function contactOptionLabel(contact: ContactOption): string {
   return name
     ? `${name}${contact.email ? `（${contact.email}）` : ""}`
     : (contact.email ?? "名前未設定");
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
 }

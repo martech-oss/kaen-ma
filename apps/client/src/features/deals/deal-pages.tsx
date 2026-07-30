@@ -65,6 +65,7 @@ import {
   type DealTaskCreate,
   type DealTaskType,
 } from "@/features/deals/deal-api";
+import { formatDate, formatMoney, formatMonthDayTime, toDateTimeLocal } from "@/lib/format";
 import { getFormString } from "@/lib/utils";
 
 export function DealsPage({
@@ -342,7 +343,7 @@ function DealBoard({
                       {deal.nextTaskAt ? (
                         <span className="flex items-center gap-1.5">
                           <Clock3 className="size-3.5" />
-                          次のタスク {formatDateTime(deal.nextTaskAt)}
+                          次のタスク {formatMonthDayTime(deal.nextTaskAt)}
                         </span>
                       ) : deal.openTaskCount > 0 ? (
                         <span>{deal.openTaskCount}件の未完了タスク</span>
@@ -524,7 +525,7 @@ export function DealDetailPage({
         <MetricCard
           label="未完了タスク"
           value={`${deal.openTaskCount.toLocaleString()}件`}
-          detail={deal.nextTaskAt ? `次回 ${formatDateTime(deal.nextTaskAt)}` : "予定なし"}
+          detail={deal.nextTaskAt ? `次回 ${formatMonthDayTime(deal.nextTaskAt)}` : "予定なし"}
           icon={<Clock3 />}
         />
       </div>
@@ -978,7 +979,7 @@ function TaskRow({
           {overdue ? <Badge variant="destructive">期限超過</Badge> : null}
         </div>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span>{task.dueAt ? formatDateTime(task.dueAt) : "期限なし"}</span>
+          <span>{task.dueAt ? formatMonthDayTime(task.dueAt) : "期限なし"}</span>
           <span>{task.assigneeName ?? "担当者未設定"}</span>
         </div>
         {task.notes ? (
@@ -1091,40 +1092,4 @@ function contactOptionLabel(contact: DealOptions["contacts"][number]): string {
 
 function contactLabel(deal: DealSummary): string {
   return [deal.contactLastName, deal.contactFirstName].filter(Boolean).join(" ");
-}
-
-function formatMoney(value: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("ja-JP", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: currency === "JPY" ? 0 : 2,
-    }).format(value);
-  } catch {
-    return `${value.toLocaleString()} ${currency}`;
-  }
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function toDateTimeLocal(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }

@@ -51,6 +51,8 @@ import type {
   ReportWorkspace,
   SiteReport,
 } from "@/features/reports/report-api";
+import { exportCsv } from "@/lib/csv";
+import { formatMoney, formatPercent, formatShortDate, rate } from "@/lib/format";
 import { getFormString } from "@/lib/utils";
 
 const reportNavigation: Array<{
@@ -403,7 +405,7 @@ function AutomationsReportView({ report }: { report: AutomationsReport }): React
                   </Link>
                 </TableCell>
                 <TableCell>
-                  <StatusBadge status={automation.status} />
+                  <ReportStatusBadge status={automation.status} />
                 </TableCell>
                 <NumberCell value={automation.entries} />
                 <NumberCell value={automation.completions} />
@@ -700,7 +702,7 @@ function SiteReportView({ report }: { report: SiteReport }): ReactNode {
                 <TableRow key={form.id}>
                   <TableCell className="px-4 font-medium">{form.name}</TableCell>
                   <TableCell>
-                    <StatusBadge status={form.status} />
+                    <ReportStatusBadge status={form.status} />
                   </TableCell>
                   <NumberCell value={form.submissions} />
                   <TableCell className="px-4 text-right tabular-nums">
@@ -730,7 +732,7 @@ function SiteReportView({ report }: { report: SiteReport }): ReactNode {
               <TableRow key={message.id}>
                 <TableCell className="px-4 font-medium">{message.name}</TableCell>
                 <TableCell>
-                  <StatusBadge status={message.status} />
+                  <ReportStatusBadge status={message.status} />
                 </TableCell>
                 <NumberCell value={message.impressions} />
                 <NumberCell value={message.clicks} />
@@ -910,7 +912,7 @@ function NumberCell({ value }: { value: number }): ReactNode {
   return <TableCell className="text-right tabular-nums">{value.toLocaleString()}</TableCell>;
 }
 
-function StatusBadge({ status }: { status: string }): ReactNode {
+function ReportStatusBadge({ status }: { status: string }): ReactNode {
   const labels: Record<string, string> = {
     active: "有効",
     paused: "一時停止",
@@ -1041,55 +1043,8 @@ function reportExport(
   return null;
 }
 
-function exportCsv(filename: string, rows: Array<Record<string, string | number>>): void {
-  if (rows.length === 0) return;
-  const headers = Object.keys(rows[0]!);
-  const csv = [
-    headers.map(csvCell).join(","),
-    ...rows.map((row) => headers.map((header) => csvCell(row[header] ?? "")).join(",")),
-  ].join("\r\n");
-  const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function csvCell(value: string | number): string {
-  let text = String(value);
-  if (/^[=+\-@]/.test(text)) text = `'${text}`;
-  return `"${text.replaceAll('"', '""')}"`;
-}
-
 function sourceTypeLabel(type: string): string {
   if (type === "broadcast") return "一斉配信";
   if (type === "automation") return "オートメーション";
   return "Transactional";
-}
-
-function formatPercent(value: number): string {
-  return `${value.toLocaleString("ja-JP", { maximumFractionDigits: 2 })}%`;
-}
-
-function formatMoney(value: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("ja-JP", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: currency === "JPY" ? 0 : 2,
-    }).format(value);
-  } catch {
-    return `${value.toLocaleString()} ${currency}`;
-  }
-}
-
-function formatShortDate(value: string): string {
-  return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric" }).format(
-    new Date(`${value}T00:00:00`),
-  );
-}
-
-function rate(numerator: number, denominator: number): number {
-  return denominator > 0 ? Math.round((numerator / denominator) * 10_000) / 100 : 0;
 }

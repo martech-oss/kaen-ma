@@ -205,7 +205,7 @@ export function CampaignsPage({
               <CardTitle>{campaign.name}</CardTitle>
               <CardDescription>{triggerLabel(campaign.trigger_source)}</CardDescription>
               <CardAction>
-                <StatusBadge status={campaign.status} />
+                <CampaignStatusBadge status={campaign.status} />
               </CardAction>
             </CardHeader>
             <CardContent className="grid grid-cols-3 gap-3">
@@ -539,7 +539,7 @@ export function CampaignBuilder({
             }
           />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <StatusBadge status={status} />
+            <CampaignStatusBadge status={status} />
             <span>{definition.timezone}</span>
           </div>
         </div>
@@ -1247,7 +1247,7 @@ function SettingSelect({
   );
 }
 
-function StatusBadge({ status }: { status: CampaignRow["status"] }): ReactNode {
+function CampaignStatusBadge({ status }: { status: CampaignRow["status"] }): ReactNode {
   const label = {
     draft: "下書き",
     active: "稼働中",

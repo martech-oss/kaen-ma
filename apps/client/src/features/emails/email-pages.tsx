@@ -64,6 +64,8 @@ import {
   type SegmentOption,
   type TopicOption,
 } from "@/features/emails/email-api";
+import { nullableString } from "@/lib/form-data";
+import { formatDateTime, toDateTimeLocal } from "@/lib/format";
 import { getFormString } from "@/lib/utils";
 import { rpc } from "@/rpc";
 
@@ -435,7 +437,7 @@ function CampaignTable({
                     </div>
                   </TableCell>
                   <TableCell>
-                    <CampaignStatusBadge status={campaign.status} />
+                    <EmailCampaignStatusBadge status={campaign.status} />
                   </TableCell>
                   <TableCell>
                     {campaign.sent_count.toLocaleString()} /{" "}
@@ -443,9 +445,9 @@ function CampaignTable({
                   </TableCell>
                   <TableCell>
                     {campaign.scheduled_at
-                      ? formatDate(campaign.scheduled_at)
+                      ? formatDateTime(campaign.scheduled_at)
                       : campaign.started_at
-                        ? formatDate(campaign.started_at)
+                        ? formatDateTime(campaign.started_at)
                         : "未設定"}
                   </TableCell>
                   <TableCell>
@@ -595,7 +597,7 @@ function TemplateTable({
                   </TableCell>
                   <TableCell>
                     <div className="flex min-w-44 flex-col gap-1">
-                      <span>{formatDate(template.last_synced_at)}</span>
+                      <span>{formatDateTime(template.last_synced_at)}</span>
                       {template.sync_error ? (
                         <span className="text-xs text-destructive">{template.sync_error}</span>
                       ) : (
@@ -737,7 +739,7 @@ function VariableTable({
                     <TableCell className="max-w-80 truncate">
                       {variable.value || "空の値"}
                     </TableCell>
-                    <TableCell>{formatDate(variable.updated_at)}</TableCell>
+                    <TableCell>{formatDateTime(variable.updated_at)}</TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-2">
                         <Button size="sm" variant="outline" onClick={() => onEdit(variable)}>
@@ -800,10 +802,10 @@ function ArchivedResources({
               <div className="min-w-0">
                 <p className="truncate font-medium">{campaign.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {campaign.segment_name} · {formatDate(campaign.updated_at)}
+                  {campaign.segment_name} · {formatDateTime(campaign.updated_at)}
                 </p>
               </div>
-              <CampaignStatusBadge status={campaign.status} />
+              <EmailCampaignStatusBadge status={campaign.status} />
             </div>
           ))}
         </CardContent>
@@ -864,7 +866,7 @@ function CampaignForm({
           name: form.get("name"),
           segmentId: form.get("segmentId"),
           templateId: form.get("templateId"),
-          topicId: optionalFormValue(form.get("topicId")),
+          topicId: nullableString(form.get("topicId")),
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
         }),
       });
@@ -1104,7 +1106,7 @@ function ArchiveConfirm({ label, onConfirm }: { label: string; onConfirm: () => 
   );
 }
 
-function CampaignStatusBadge({ status }: { status: EmailCampaignRow["status"] }): ReactNode {
+function EmailCampaignStatusBadge({ status }: { status: EmailCampaignRow["status"] }): ReactNode {
   const labels: Record<EmailCampaignRow["status"], string> = {
     draft: "下書き",
     scheduled: "予約済み",
@@ -1145,23 +1147,4 @@ async function copyValue(value: string): Promise<void> {
 function messageVariableToken(key: string): string {
   const normalized = key.replaceAll(/[^A-Za-z0-9]+/g, "_").toUpperCase();
   return `{{{MESSAGE_${normalized}}}}`;
-}
-
-function optionalFormValue(value: FormDataEntryValue | null): string | null {
-  const rendered = typeof value === "string" ? value.trim() : "";
-  return rendered || null;
-}
-
-function toDateTimeLocal(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
