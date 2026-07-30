@@ -5,17 +5,16 @@ import { requireRole } from "../middleware";
 
 export function registerAnalyticsRoutes(api: Hono<AppEnvironment>): void {
   api.get("/analytics/campaigns/:id", requireRole("analyst"), async (context) => {
+    const database = context.get("database");
     const workspaceId = context.get("workspace").workspaceId;
-    const [enrollments, deliveries] = await context.get("database").batch([
-      context
-        .get("database")
+    const [enrollments, deliveries] = await database.batch([
+      database
         .prepare(
           `SELECT status, COUNT(*) AS count FROM campaign_enrollments
            WHERE workspace_id = ? AND campaign_id = ? GROUP BY status`,
         )
         .bind(workspaceId, context.req.param("id")),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT d.status, COUNT(*) AS count FROM deliveries d
            JOIN campaign_enrollments ce

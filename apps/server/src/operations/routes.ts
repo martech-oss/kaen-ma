@@ -17,6 +17,7 @@ import { apiError, requireRole } from "../middleware";
 
 export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   api.post("/contacts/import", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const contentLength = Number(context.req.header("content-length") ?? 0);
     if (contentLength > 25 * 1024 * 1024) {
       return apiError(context, 422, "csv_too_large", "CSVは25MB以下にしてください");
@@ -66,8 +67,7 @@ export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
       { httpMetadata: { contentType: "application/json" } },
     );
     const now = new Date().toISOString();
-    await context
-      .get("database")
+    await database
       .prepare(
         `INSERT INTO import_jobs
        (id, workspace_id, kind, r2_key, status, cursor, created_at, updated_at)
@@ -90,8 +90,7 @@ export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
         totalParts: parts.length,
       });
     } else {
-      await context
-        .get("database")
+      await database
         .prepare("UPDATE import_jobs SET status = 'completed', updated_at = ? WHERE id = ?")
         .bind(now, jobId)
         .run();
@@ -165,22 +164,20 @@ export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/dashboard", async (context) => {
+    const database = context.get("database");
     const workspaceId = context.get("workspace").workspaceId;
-    const batch = await context.get("database").batch([
-      context
-        .get("database")
+    const batch = await database.batch([
+      database
         .prepare(
           "SELECT COUNT(*) AS count FROM contacts WHERE workspace_id = ? AND status = 'active'",
         )
         .bind(workspaceId),
-      context
-        .get("database")
+      database
         .prepare(
           "SELECT COUNT(*) AS count FROM campaigns WHERE workspace_id = ? AND status = 'active'",
         )
         .bind(workspaceId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT COUNT(*) AS sent,
           SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
@@ -188,8 +185,7 @@ export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
          FROM deliveries WHERE workspace_id = ? AND created_at >= datetime('now', '-30 day')`,
         )
         .bind(workspaceId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT type, occurred_at, contact_id, properties FROM contact_events
          WHERE workspace_id = ? ORDER BY occurred_at DESC LIMIT 20`,
@@ -259,8 +255,8 @@ export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/dead-letters/:id/replay", requireRole("admin"), async (context) => {
-    const row = await context
-      .get("database")
+    const database = context.get("database");
+    const row = await database
       .prepare(
         `SELECT id, source_queue, message_body FROM dead_letters
        WHERE workspace_id = ? AND id = ? AND status = 'pending'`,
@@ -274,8 +270,7 @@ export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
     } else {
       await context.env.DELIVERY_QUEUE.send(body);
     }
-    await context
-      .get("database")
+    await database
       .prepare(
         "UPDATE dead_letters SET status = 'replayed', replayed_at = ? WHERE id = ? AND status = 'pending'",
       )

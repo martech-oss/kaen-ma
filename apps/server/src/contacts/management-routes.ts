@@ -11,10 +11,10 @@ import { updateSegmentMemberCount } from "../segments/routes";
 
 export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void {
   api.get("/contact-options", async (context) => {
+    const database = context.get("database");
     const workspaceId = context.get("workspace").workspaceId;
-    const optionResults = await context.get("database").batch([
-      context
-        .get("database")
+    const optionResults = await database.batch([
+      database
         .prepare(
           `SELECT t.id, t.name, t.slug, t.color, COUNT(ct.contact_id) AS contact_count
          FROM tags t
@@ -24,8 +24,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
          GROUP BY t.id ORDER BY t.name`,
         )
         .bind(workspaceId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT cl.id, cl.name, cl.slug, cl.description, cl.color,
                 COUNT(CASE WHEN clm.status = 'active' THEN 1 END) AS contact_count
@@ -36,15 +35,13 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
          GROUP BY cl.id ORDER BY cl.name`,
         )
         .bind(workspaceId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT id, name, slug, kind, filter_ast, member_count, evaluated_at
          FROM segments WHERE workspace_id = ? ORDER BY name`,
         )
         .bind(workspaceId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT stage, COUNT(*) AS contact_count
          FROM contacts
@@ -52,8 +49,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
          GROUP BY stage ORDER BY stage`,
         )
         .bind(workspaceId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT co.id, co.name, co.domain,
                 COUNT(CASE WHEN c.status != 'archived' THEN 1 END) AS contact_count
@@ -154,14 +150,14 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
   });
 
   api.get("/contacts/:id/profile", async (context) => {
+    const database = context.get("database");
     const workspaceId = context.get("workspace").workspaceId;
     const contactId = context.req.param("id");
-    const repository = new ContactRepository(context.get("database"), context.get("workspace"));
+    const repository = new ContactRepository(database, context.get("workspace"));
     const contact = await repository.getContact(contactId);
     if (!contact) return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
-    const profileResults = await context.get("database").batch([
-      context
-        .get("database")
+    const profileResults = await database.batch([
+      database
         .prepare(
           `SELECT t.id, t.name, t.slug, t.color
          FROM tags t JOIN contact_tags ct
@@ -170,8 +166,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
          ORDER BY t.name`,
         )
         .bind(workspaceId, contactId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT cl.id, cl.name, cl.slug, cl.color, clm.status, clm.updated_at
          FROM contact_lists cl JOIN contact_list_memberships clm
@@ -180,8 +175,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
          ORDER BY cl.name`,
         )
         .bind(workspaceId, contactId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT s.id, s.name, s.kind, sm.source, sm.joined_at
          FROM segments s JOIN segment_memberships sm
@@ -190,8 +184,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
          ORDER BY s.name`,
         )
         .bind(workspaceId, contactId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT co.id, co.name, co.domain, cc.title, cc.is_primary
          FROM companies co JOIN company_contacts cc
@@ -200,8 +193,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
          ORDER BY cc.is_primary DESC, co.name`,
         )
         .bind(workspaceId, contactId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT id, delta, total, reason, created_at
          FROM score_events
@@ -209,8 +201,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
          ORDER BY created_at DESC LIMIT 100`,
         )
         .bind(workspaceId, contactId),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT id, type, resource_type, resource_id, properties, occurred_at
          FROM contact_events
@@ -338,11 +329,11 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
   });
 
   api.post("/contacts/:id/segments", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = z.object({ segmentId: z.string().min(1) }).safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
-    const result = await context
-      .get("database")
+    const result = await database
       .prepare(
         `INSERT OR IGNORE INTO segment_memberships
        (workspace_id, segment_id, contact_id, source, joined_at)
@@ -361,8 +352,8 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
         "静的セグメントへ追加できませんでした",
       );
     }
-    await updateSegmentMemberCount(context.get("database"), workspaceId, parsed.data.segmentId);
-    await recordContactEvent(context.get("database"), {
+    await updateSegmentMemberCount(database, workspaceId, parsed.data.segmentId);
+    await recordContactEvent(database, {
       workspaceId,
       contactId: context.req.param("id"),
       type: "segment_joined",
@@ -373,9 +364,9 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
   });
 
   api.delete("/contacts/:id/segments/:segmentId", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const workspaceId = context.get("workspace").workspaceId;
-    const result = await context
-      .get("database")
+    const result = await database
       .prepare(
         `DELETE FROM segment_memberships
          WHERE workspace_id = ? AND contact_id = ? AND segment_id = ? AND source = 'static'
@@ -388,16 +379,13 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
       .bind(workspaceId, context.req.param("id"), context.req.param("segmentId"))
       .run();
     if (result.meta.changes > 0) {
-      await updateSegmentMemberCount(
-        context.get("database"),
-        workspaceId,
-        context.req.param("segmentId"),
-      );
+      await updateSegmentMemberCount(database, workspaceId, context.req.param("segmentId"));
     }
     return context.json({ data: { removed: true } });
   });
 
   api.post("/contacts/:id/score", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = z
       .object({
         delta: z
@@ -413,8 +401,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
     const workspaceId = context.get("workspace").workspaceId;
     const contactId = context.req.param("id");
     const now = new Date().toISOString();
-    const result = await context
-      .get("database")
+    const result = await database
       .prepare(
         `UPDATE contacts SET score = score + ?, updated_at = ?
        WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
@@ -424,8 +411,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
     if (result.meta.changes === 0) {
       return apiError(context, 409, "score_not_adjustable", "スコアを変更できませんでした");
     }
-    await context
-      .get("database")
+    await database
       .prepare(
         `INSERT INTO score_events
        (id, workspace_id, contact_id, delta, total, reason, created_at)
@@ -434,10 +420,9 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
       )
       .bind(uuidv7(), parsed.data.delta, parsed.data.reason, now, workspaceId, contactId)
       .run();
-    const contact = await new ContactRepository(
-      context.get("database"),
-      context.get("workspace"),
-    ).getContact(contactId);
+    const contact = await new ContactRepository(database, context.get("workspace")).getContact(
+      contactId,
+    );
     return context.json({ data: contact });
   });
 
@@ -452,6 +437,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
   });
 
   api.post("/contact-actions", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = z
       .object({
         contactIds: z.array(z.string().min(1)).min(1).max(100),
@@ -479,8 +465,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
     let statement: DrizzleRawStatement;
     if (parsed.data.action === "archive" || parsed.data.action === "restore") {
       const archived = parsed.data.action === "archive";
-      statement = context
-        .get("database")
+      statement = database
         .prepare(
           `UPDATE contacts
          SET status = ?, archived_at = ?, updated_at = ?
@@ -494,8 +479,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
           ...contactIds,
         );
     } else if (parsed.data.action === "add_tag") {
-      statement = context
-        .get("database")
+      statement = database
         .prepare(
           `INSERT OR IGNORE INTO contact_tags (workspace_id, contact_id, tag_id, created_at)
          SELECT c.workspace_id, c.id, t.id, ?
@@ -505,8 +489,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
         )
         .bind(now, workspaceId, ...contactIds, parsed.data.resourceId);
     } else if (parsed.data.action === "remove_tag") {
-      statement = context
-        .get("database")
+      statement = database
         .prepare(
           `DELETE FROM contact_tags
          WHERE workspace_id = ? AND contact_id IN (${placeholders}) AND tag_id = ?
@@ -518,8 +501,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
         )
         .bind(workspaceId, ...contactIds, parsed.data.resourceId);
     } else if (parsed.data.action === "add_list") {
-      statement = context
-        .get("database")
+      statement = database
         .prepare(
           `INSERT INTO contact_list_memberships
          (workspace_id, list_id, contact_id, status, source, created_at, updated_at)
@@ -532,8 +514,7 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
         )
         .bind(now, now, workspaceId, ...contactIds, parsed.data.resourceId);
     } else {
-      statement = context
-        .get("database")
+      statement = database
         .prepare(
           `DELETE FROM contact_list_memberships
          WHERE workspace_id = ? AND contact_id IN (${placeholders}) AND list_id = ?

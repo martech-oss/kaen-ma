@@ -68,15 +68,14 @@ export function registerContactRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/contacts/:id/timeline", async (context) => {
+    const database = context.get("database");
     const workspace = context.get("workspace");
-    const exists = await context
-      .get("database")
+    const exists = await database
       .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND id = ?")
       .bind(workspace.workspaceId, context.req.param("id"))
       .first();
     if (!exists) return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
-    const result = await context
-      .get("database")
+    const result = await database
       .prepare(
         `SELECT id, type, resource_type, resource_id, properties, occurred_at
          FROM contact_events WHERE workspace_id = ? AND contact_id = ?
@@ -90,6 +89,7 @@ export function registerContactRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/contacts/:id/events", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = z
       .object({
         eventName: z.string().trim().min(1).max(120),
@@ -100,13 +100,12 @@ export function registerContactRoutes(api: Hono<AppEnvironment>): void {
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
-    const contact = await context
-      .get("database")
+    const contact = await database
       .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND id = ? AND status != 'archived'")
       .bind(workspaceId, context.req.param("id"))
       .first<{ id: string }>();
     if (!contact) return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
-    const result = await recordContactEvent(context.get("database"), {
+    const result = await recordContactEvent(database, {
       workspaceId,
       contactId: contact.id,
       type: parsed.data.source === "webhook" ? "webhook_event" : "custom_event",
@@ -119,16 +118,13 @@ export function registerContactRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/contacts", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = contactCreateSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     try {
-      const contact = await createContactService(
-        context.get("database"),
-        context.get("workspace"),
-        parsed.data,
-      );
+      const contact = await createContactService(database, context.get("workspace"), parsed.data);
       context.executionCtx.waitUntil(
-        writeAuditLog(context.get("database"), context.get("workspace"), {
+        writeAuditLog(database, context.get("workspace"), {
           action: "contact.create",
           resourceType: "contact",
           resourceId: contact.id,

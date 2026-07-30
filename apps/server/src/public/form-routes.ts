@@ -85,8 +85,8 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
   });
 
   publicApp.post("/f/:workspaceSlug/:formSlug", async (context) => {
-    const form = await context
-      .get("database")
+    const database = context.get("database");
+    const form = await database
       .prepare(
         `SELECT f.id, f.workspace_id, f.allowed_domains, f.turnstile_enabled, f.success_message
        FROM forms f JOIN organization o ON o.id = f.workspace_id
@@ -136,15 +136,13 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
     let contactId: string | null = null;
     let contactCreated = false;
     if (email && z.email().safeParse(email).success) {
-      const existing = await context
-        .get("database")
+      const existing = await database
         .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND email = ?")
         .bind(form.workspace_id, email)
         .first<{ id: string }>();
       contactId = existing?.id ?? uuidv7();
       if (existing) {
-        await context
-          .get("database")
+        await database
           .prepare(
             `UPDATE contacts SET first_name = COALESCE(?, first_name),
            last_name = COALESCE(?, last_name), phone = COALESCE(?, phone),
@@ -162,8 +160,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
           .run();
       } else {
         contactCreated = true;
-        await context
-          .get("database")
+        await database
           .prepare(
             `INSERT INTO contacts
            (id, workspace_id, email, first_name, last_name, phone, stage, score,
@@ -184,7 +181,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       }
     }
     if (contactCreated && contactId) {
-      await recordContactEvent(context.get("database"), {
+      await recordContactEvent(database, {
         workspaceId: form.workspace_id,
         contactId,
         type: "contact_created",
@@ -194,8 +191,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       });
     }
     try {
-      await context
-        .get("database")
+      await database
         .prepare(
           `INSERT INTO form_submissions
            (id, workspace_id, form_id, contact_id, idempotency_key, payload, ip_hash, created_at)
@@ -215,7 +211,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
     } catch {
       return context.json({ data: { accepted: true, duplicate: true } }, 202);
     }
-    await recordContactEvent(context.get("database"), {
+    await recordContactEvent(database, {
       workspaceId: form.workspace_id,
       contactId,
       type: "form_submitted",

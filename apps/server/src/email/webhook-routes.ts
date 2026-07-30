@@ -9,6 +9,7 @@ import { apiError } from "../middleware";
 
 export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
   api.post("/api/webhooks/resend", async (context) => {
+    const database = context.get("database");
     const webhookSecret = context.env.RESEND_WEBHOOK_SECRET;
     if (!webhookSecret) {
       return apiError(
@@ -43,8 +44,7 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
             ? "failed"
             : null;
       const statements: DrizzleRawStatement[] = [
-        context
-          .get("database")
+        database
           .prepare(
             `INSERT OR IGNORE INTO delivery_events
            (id, workspace_id, delivery_id, provider, provider_event_id,
@@ -67,8 +67,7 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
       ];
       if (status) {
         statements.push(
-          context
-            .get("database")
+          database
             .prepare(
               `UPDATE deliveries SET status = ?, updated_at = ?
              WHERE workspace_id = ? AND id = ?`,
@@ -78,8 +77,7 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
       }
       if (["bounced", "complained", "unsubscribed"].includes(event.type)) {
         statements.push(
-          context
-            .get("database")
+          database
             .prepare(
               `INSERT OR IGNORE INTO suppressions
              (id, workspace_id, contact_id, email, reason, provider, created_at)
@@ -99,7 +97,7 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
             ),
         );
       }
-      const results = await context.get("database").batch(statements);
+      const results = await database.batch(statements);
       const contactEventType =
         event.type === "opened"
           ? "email_opened"
@@ -109,8 +107,7 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
               ? "email_replied"
               : null;
       if (results[0]?.meta.changes === 1 && contactEventType) {
-        const delivery = await context
-          .get("database")
+        const delivery = await database
           .prepare(
             `SELECT contact_id FROM deliveries
              WHERE workspace_id = ? AND id = ? AND contact_id IS NOT NULL`,
@@ -118,7 +115,7 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
           .bind(workspaceId, event.deliveryId)
           .first<{ contact_id: string }>();
         if (delivery) {
-          await recordContactEvent(context.get("database"), {
+          await recordContactEvent(database, {
             id: `resend:${event.id}`,
             workspaceId,
             contactId: delivery.contact_id,

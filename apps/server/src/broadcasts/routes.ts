@@ -79,12 +79,13 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/broadcasts", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = broadcastInputSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspace = context.get("workspace");
     if (
       !(await hasValidBroadcastResources(
-        context.get("database"),
+        database,
         workspace.workspaceId,
         parsed.data.segmentId,
         parsed.data.templateId,
@@ -99,8 +100,7 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
     }
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context
-      .get("database")
+    await database
       .prepare(
         `INSERT INTO broadcasts
        (id, workspace_id, name, segment_id, template_id, topic_id,
@@ -124,12 +124,13 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.patch("/broadcasts/:id", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = broadcastInputSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
     if (
       !(await hasValidBroadcastResources(
-        context.get("database"),
+        database,
         workspaceId,
         parsed.data.segmentId,
         parsed.data.templateId,
@@ -143,8 +144,7 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
       );
     }
     const now = new Date().toISOString();
-    const result = await context
-      .get("database")
+    const result = await database
       .prepare(
         `UPDATE broadcasts
        SET name = ?, segment_id = ?, template_id = ?, topic_id = ?,

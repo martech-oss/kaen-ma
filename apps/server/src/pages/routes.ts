@@ -29,6 +29,7 @@ export function registerPageRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/pages", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = z
       .object({
         name: z.string().trim().min(1).max(191),
@@ -42,9 +43,8 @@ export function registerPageRoutes(api: Hono<AppEnvironment>): void {
     const id = uuidv7();
     const versionId = uuidv7();
     const now = new Date().toISOString();
-    await context.get("database").batch([
-      context
-        .get("database")
+    await database.batch([
+      database
         .prepare(
           `INSERT INTO landing_pages
            (id, workspace_id, name, slug, status, current_version_id, created_at, updated_at)
@@ -60,8 +60,7 @@ export function registerPageRoutes(api: Hono<AppEnvironment>): void {
           now,
           now,
         ),
-      context
-        .get("database")
+      database
         .prepare(
           `INSERT INTO landing_page_versions
            (id, workspace_id, page_id, version, content_document, published_at, created_at)
@@ -80,6 +79,7 @@ export function registerPageRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.patch("/pages/:id", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = z
       .object({
         name: z.string().trim().min(1).max(191),
@@ -90,8 +90,7 @@ export function registerPageRoutes(api: Hono<AppEnvironment>): void {
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
-    const page = await context
-      .get("database")
+    const page = await database
       .prepare(
         `SELECT id, status,
                 COALESCE((SELECT MAX(version) FROM landing_page_versions
@@ -106,9 +105,8 @@ export function registerPageRoutes(api: Hono<AppEnvironment>): void {
     }
     const versionId = uuidv7();
     const now = new Date().toISOString();
-    await context.get("database").batch([
-      context
-        .get("database")
+    await database.batch([
+      database
         .prepare(
           `INSERT INTO landing_page_versions
            (id, workspace_id, page_id, version, content_document, published_at, created_at)
@@ -123,8 +121,7 @@ export function registerPageRoutes(api: Hono<AppEnvironment>): void {
           parsed.data.status === "published" ? now : null,
           now,
         ),
-      context
-        .get("database")
+      database
         .prepare(
           `UPDATE landing_pages
            SET name = ?, slug = ?, status = ?, current_version_id = ?, updated_at = ?

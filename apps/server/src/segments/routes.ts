@@ -24,6 +24,7 @@ export function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/segments", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const schema = z.object({
       name: z.string().trim().min(1).max(191),
       slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
@@ -38,8 +39,7 @@ export function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
     const workspace = context.get("workspace");
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context
-      .get("database")
+    await database
       .prepare(
         `INSERT INTO segments
        (id, workspace_id, name, slug, kind, filter_ast, created_at, updated_at)
@@ -57,7 +57,7 @@ export function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
       )
       .run();
     if (parsed.data.kind === "dynamic") {
-      await refreshSegmentMemberships(context.get("database"), workspace.workspaceId, id);
+      await refreshSegmentMemberships(database, workspace.workspaceId, id);
     }
     return context.json({ data: { id, ...parsed.data, createdAt: now, updatedAt: now } }, 201);
   });

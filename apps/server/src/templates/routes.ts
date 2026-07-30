@@ -70,13 +70,13 @@ export function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/email-templates", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = importTemplateSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
     const remote = await getRemoteTemplate(context, parsed.data.resendTemplateId);
     if (remote instanceof Response) return remote;
-    const existing = await context
-      .get("database")
+    const existing = await database
       .prepare("SELECT id FROM email_templates WHERE resend_template_id = ?")
       .bind(remote.id)
       .first<{ id: string }>();
@@ -90,8 +90,7 @@ export function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
     }
     const id = uuidv7();
     const now = new Date().toISOString();
-    await context
-      .get("database")
+    await database
       .prepare(
         `INSERT INTO email_templates
          (id, workspace_id, name, purpose, resend_template_id, resend_alias, subject,
@@ -122,8 +121,9 @@ export function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/email-templates/:id/sync", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const workspaceId = context.get("workspace").workspaceId;
-    const local = await readTemplate(context.get("database"), workspaceId, context.req.param("id"));
+    const local = await readTemplate(database, workspaceId, context.req.param("id"));
     if (!local) {
       return apiError(
         context,
@@ -135,8 +135,7 @@ export function registerTemplateRoutes(api: Hono<AppEnvironment>): void {
     const remote = await getRemoteTemplate(context, local.resend_template_id);
     if (remote instanceof Response) return remote;
     const now = new Date().toISOString();
-    await context
-      .get("database")
+    await database
       .prepare(
         `UPDATE email_templates
          SET name = ?, resend_alias = ?, subject = ?, remote_status = ?,

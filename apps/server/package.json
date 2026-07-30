@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.25",
-    "@hono/zod-validator": "^0.7.6",
     "@kaenma/channels": "workspace:*",
     "@kaenma/core": "workspace:*",
     "@kaenma/database": "workspace:*",

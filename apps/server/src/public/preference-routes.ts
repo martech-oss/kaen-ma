@@ -9,6 +9,7 @@ import { escapeHtml } from "./html";
 
 export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/u/:token", async (context) => {
+    const database = context.get("database");
     const payload = await verifySignedToken(
       context.env.TRACKING_SIGNING_SECRET,
       context.req.param("token"),
@@ -18,17 +19,15 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
       return apiError(context, 400, "invalid_unsubscribe_token", "解除リンクが無効です");
     }
     const now = new Date().toISOString();
-    await context.get("database").batch([
-      context
-        .get("database")
+    await database.batch([
+      database
         .prepare(
           `INSERT OR IGNORE INTO suppressions
          (id, workspace_id, contact_id, reason, created_at)
          VALUES (?, ?, ?, 'global_unsubscribe', ?)`,
         )
         .bind(uuidv7(), payload.workspaceId, payload.contactId, now),
-      context
-        .get("database")
+      database
         .prepare(
           `INSERT INTO consent_events
          (id, workspace_id, contact_id, action, source, created_at)
@@ -46,6 +45,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
   });
 
   publicApp.get("/preference/:token", async (context) => {
+    const database = context.get("database");
     const payload = await verifySignedToken(
       context.env.TRACKING_SIGNING_SECRET,
       context.req.param("token"),
@@ -54,8 +54,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
     if (!payload?.contactId) {
       return apiError(context, 400, "invalid_preference_token", "設定リンクが無効です");
     }
-    const topics = await context
-      .get("database")
+    const topics = await database
       .prepare(
         `SELECT st.id, st.name, st.description,
               COALESCE(cs.status, 'unsubscribed') AS status
@@ -66,8 +65,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
       )
       .bind(payload.contactId, payload.workspaceId)
       .all<{ id: string; name: string; description: string; status: string }>();
-    const globalSuppression = await context
-      .get("database")
+    const globalSuppression = await database
       .prepare(
         `SELECT id FROM suppressions
        WHERE workspace_id = ? AND contact_id = ? AND reason = 'global_unsubscribe' LIMIT 1`,
@@ -93,6 +91,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
   });
 
   publicApp.post("/preference/:token", async (context) => {
+    const database = context.get("database");
     const payload = await verifySignedToken(
       context.env.TRACKING_SIGNING_SECRET,
       context.req.param("token"),
@@ -105,15 +104,13 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
     const selected = new Set(
       form.getAll("topic").filter((value): value is string => typeof value === "string"),
     );
-    const topics = await context
-      .get("database")
+    const topics = await database
       .prepare("SELECT id FROM subscription_topics WHERE workspace_id = ?")
       .bind(payload.workspaceId)
       .all<{ id: string }>();
     const now = new Date().toISOString();
     const statements = topics.results.map((topic) =>
-      context
-        .get("database")
+      database
         .prepare(
           `INSERT INTO contact_subscriptions
          (workspace_id, contact_id, topic_id, status, source, updated_at)
@@ -132,8 +129,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
     );
     if (form.get("globalStop")) {
       statements.push(
-        context
-          .get("database")
+        database
           .prepare(
             `INSERT OR IGNORE INTO suppressions
            (id, workspace_id, contact_id, reason, created_at)
@@ -143,8 +139,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
       );
     } else {
       statements.push(
-        context
-          .get("database")
+        database
           .prepare(
             `DELETE FROM suppressions
            WHERE workspace_id = ? AND contact_id = ? AND reason = 'global_unsubscribe'`,
@@ -153,8 +148,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
       );
     }
     statements.push(
-      context
-        .get("database")
+      database
         .prepare(
           `INSERT INTO consent_events
          (id, workspace_id, contact_id, action, source, proof, created_at)
@@ -169,7 +163,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
           now,
         ),
     );
-    await context.get("database").batch(statements);
+    await database.batch(statements);
     return context.html(
       '<!doctype html><html lang="ja"><meta charset="utf-8"><body><main><h1>設定を保存しました</h1><p>変更は次回の送信判定から反映されます。</p></main></body></html>',
     );

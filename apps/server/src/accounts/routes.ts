@@ -21,14 +21,14 @@ export function registerAccountRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/accounts/:id", async (context) => {
+    const database = context.get("database");
     const workspaceId = context.get("workspace").workspaceId;
-    const repository = new AccountRepository(context.get("database"), context.get("workspace"));
+    const repository = new AccountRepository(database, context.get("workspace"));
     const account = await repository.getAccount(context.req.param("id"));
     if (!account) {
       return apiError(context, 404, "account_not_found", "アカウントが見つかりません");
     }
-    const contacts = await context
-      .get("database")
+    const contacts = await database
       .prepare(
         `SELECT c.id, c.email, c.first_name, c.last_name, c.stage, c.score,
               c.status, cc.title, cc.is_primary
@@ -53,13 +53,14 @@ export function registerAccountRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/accounts", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = accountCreateSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const repository = new AccountRepository(context.get("database"), context.get("workspace"));
+    const repository = new AccountRepository(database, context.get("workspace"));
     try {
       const account = await repository.createAccount(parsed.data);
       context.executionCtx.waitUntil(
-        writeAuditLog(context.get("database"), context.get("workspace"), {
+        writeAuditLog(database, context.get("workspace"), {
           action: "account.create",
           resourceType: "account",
           resourceId: account.id,
@@ -98,6 +99,7 @@ export function registerAccountRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/accounts/:id/contacts", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = z
       .object({
         contactId: z.string().min(1),
@@ -108,8 +110,7 @@ export function registerAccountRoutes(api: Hono<AppEnvironment>): void {
     if (!parsed.success) return validationError(context, parsed.error);
     const workspaceId = context.get("workspace").workspaceId;
     const accountId = context.req.param("id");
-    const relationExists = await context
-      .get("database")
+    const relationExists = await database
       .prepare(
         `SELECT co.id
          FROM companies co
@@ -128,8 +129,7 @@ export function registerAccountRoutes(api: Hono<AppEnvironment>): void {
       );
     }
     const now = new Date().toISOString();
-    const assign = context
-      .get("database")
+    const assign = database
       .prepare(
         `INSERT INTO company_contacts
          (workspace_id, company_id, contact_id, title, is_primary, created_at)
@@ -146,9 +146,8 @@ export function registerAccountRoutes(api: Hono<AppEnvironment>): void {
         now,
       );
     if (parsed.data.isPrimary) {
-      await context.get("database").batch([
-        context
-          .get("database")
+      await database.batch([
+        database
           .prepare(
             `UPDATE company_contacts SET is_primary = 0
              WHERE workspace_id = ? AND contact_id = ?`,

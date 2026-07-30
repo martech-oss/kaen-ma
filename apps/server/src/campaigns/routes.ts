@@ -39,15 +39,15 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/campaigns", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = campaignDefinitionSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspace = context.get("workspace");
     const id = uuidv7();
     const versionId = uuidv7();
     const now = new Date().toISOString();
-    await context.get("database").batch([
-      context
-        .get("database")
+    await database.batch([
+      database
         .prepare(
           `INSERT INTO campaigns
          (id, workspace_id, name, description, status, draft_version_id, created_at, updated_at)
@@ -62,8 +62,7 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
           now,
           now,
         ),
-      context
-        .get("database")
+      database
         .prepare(
           `INSERT INTO campaign_versions
          (id, workspace_id, campaign_id, version, status, timezone, graph, created_at)
@@ -99,10 +98,10 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.put("/campaigns/:id/draft", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = campaignDefinitionSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const result = await context
-      .get("database")
+    const result = await database
       .prepare(
         `UPDATE campaign_versions SET timezone = ?, graph = ?
        WHERE workspace_id = ? AND id = (
@@ -120,8 +119,7 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     if (result.meta.changes === 0) {
       return apiError(context, 404, "campaign_not_found", "編集可能な下書きが見つかりません");
     }
-    await context
-      .get("database")
+    await database
       .prepare(
         "UPDATE campaigns SET name = ?, description = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
       )
@@ -137,9 +135,9 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/campaigns/:id/publish", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const workspace = context.get("workspace");
-    const row = await context
-      .get("database")
+    const row = await database
       .prepare(
         `SELECT c.draft_version_id, cv.version, cv.graph
        FROM campaigns c JOIN campaign_versions cv
@@ -165,8 +163,7 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
       ),
     ];
     if (templateIds.length > 0) {
-      const available = await context
-        .get("database")
+      const available = await database
         .prepare(
           `SELECT id FROM email_templates
            WHERE workspace_id = ? AND archived_at IS NULL
@@ -192,16 +189,14 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     const source = parsed.data.nodes.find((node) => node.type === "source");
     if (!source) return apiError(context, 422, "source_missing", "開始条件がありません");
     const trigger = campaignTrigger(source.config);
-    await context.get("database").batch([
-      context
-        .get("database")
+    await database.batch([
+      database
         .prepare(
           `UPDATE campaign_versions SET status = 'published', published_at = ?
          WHERE workspace_id = ? AND id = ? AND status = 'draft'`,
         )
         .bind(now, workspace.workspaceId, row.draft_version_id),
-      context
-        .get("database")
+      database
         .prepare(
           `INSERT INTO campaign_versions
          (id, workspace_id, campaign_id, version, status, timezone, graph, created_at)
@@ -216,8 +211,7 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
           row.graph,
           now,
         ),
-      context
-        .get("database")
+      database
         .prepare(
           `UPDATE campaigns SET status = 'active', published_version_id = ?,
          draft_version_id = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`,
@@ -229,12 +223,10 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
           workspace.workspaceId,
           context.req.param("id"),
         ),
-      context
-        .get("database")
+      database
         .prepare("DELETE FROM campaign_triggers WHERE workspace_id = ? AND campaign_id = ?")
         .bind(workspace.workspaceId, context.req.param("id")),
-      context
-        .get("database")
+      database
         .prepare(
           `INSERT INTO campaign_triggers
            (campaign_version_id, workspace_id, campaign_id, source_node_id, source,
@@ -260,13 +252,13 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/campaigns/:id/enroll", requireRole("marketer"), async (context) => {
+    const database = context.get("database");
     const parsed = z
       .object({ contactId: z.string().min(1), sourceEventId: z.string().optional() })
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
     const workspace = context.get("workspace");
-    const campaign = await context
-      .get("database")
+    const campaign = await database
       .prepare(
         `SELECT c.published_version_id, cv.graph
        FROM campaigns c JOIN campaign_versions cv
@@ -283,7 +275,7 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     if (!source) return apiError(context, 422, "source_missing", "Sourceノードがありません");
     const sourceEventId =
       parsed.data.sourceEventId ?? context.req.header("idempotency-key") ?? uuidv7();
-    const result = await enrollPublishedCampaign(context.get("database"), {
+    const result = await enrollPublishedCampaign(database, {
       workspaceId: workspace.workspaceId,
       campaignId: context.req.param("id"),
       campaignVersionId: campaign.published_version_id,

@@ -117,10 +117,10 @@ export function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/site-tracking", async (context) => {
+    const database = context.get("database");
     const workspace = context.get("workspace");
     const [settings, summary, topPages, recentEvents, organization] = await Promise.all([
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT enabled, allowed_domains, consent_mode, created_at, updated_at
          FROM site_tracking_settings WHERE workspace_id = ?`,
@@ -133,8 +133,7 @@ export function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
           created_at: string;
           updated_at: string;
         }>(),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT COUNT(*) AS page_views,
                 COUNT(DISTINCT visitor_id) AS unique_visitors,
@@ -149,8 +148,7 @@ export function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
           unique_visitors: number;
           identified_contacts: number;
         }>(),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT resource_id AS url, COUNT(*) AS views
          FROM contact_events
@@ -161,8 +159,7 @@ export function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
         )
         .bind(workspace.workspaceId)
         .all(),
-      context
-        .get("database")
+      database
         .prepare(
           `SELECT visitor_id, contact_id, resource_id, properties, occurred_at
          FROM contact_events
@@ -171,8 +168,7 @@ export function registerWebsiteRoutes(api: Hono<AppEnvironment>): void {
         )
         .bind(workspace.workspaceId)
         .all(),
-      context
-        .get("database")
+      database
         .prepare("SELECT slug FROM organization WHERE id = ?")
         .bind(workspace.workspaceId)
         .first<{ slug: string }>(),

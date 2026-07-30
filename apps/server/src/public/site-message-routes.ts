@@ -11,8 +11,9 @@ import { loadPublicTrackingWorkspace } from "./shared";
 
 export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/api/public/site-messages/:workspaceSlug", async (context) => {
+    const database = context.get("database");
     const workspace = await loadPublicTrackingWorkspace(
-      context.get("database"),
+      database,
       context.req.param("workspaceSlug"),
     );
     const visitorId = context.req.query("visitorId");
@@ -24,8 +25,7 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     if (origin && !originAllowed(origin, workspace.allowedDomains)) {
       return context.json({ data: [] });
     }
-    const identity = await context
-      .get("database")
+    const identity = await database
       .prepare(
         `SELECT contact_id FROM contact_events
        WHERE workspace_id = ? AND visitor_id = ? AND contact_id IS NOT NULL
@@ -34,8 +34,7 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
       .bind(workspace.id, visitorId)
       .first<{ contact_id: string }>();
     if (!identity) return context.json({ data: [] });
-    const result = await context
-      .get("database")
+    const result = await database
       .prepare(
         `SELECT id, headline, body, cta_label, cta_url, page_pattern
        FROM site_messages
@@ -61,8 +60,9 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
   });
 
   publicApp.post("/api/public/site-messages/:workspaceSlug/:messageId/events", async (context) => {
+    const database = context.get("database");
     const workspace = await loadPublicTrackingWorkspace(
-      context.get("database"),
+      database,
       context.req.param("workspaceSlug"),
     );
     if (!workspace) return context.json({ data: { accepted: false } }, 202);
@@ -77,8 +77,7 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return context.json({ data: { accepted: false } }, 202);
-    const identity = await context
-      .get("database")
+    const identity = await database
       .prepare(
         `SELECT contact_id FROM contact_events
          WHERE workspace_id = ? AND visitor_id = ? AND contact_id IS NOT NULL
@@ -90,8 +89,7 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     const now = new Date().toISOString();
     const messageId = context.req.param("messageId");
     const counter = parsed.data.type === "impression" ? "impression_count" : "click_count";
-    const result = await context
-      .get("database")
+    const result = await database
       .prepare(
         `UPDATE site_messages SET ${counter} = ${counter} + 1, updated_at = updated_at
          WHERE workspace_id = ? AND id = ? AND status = 'published'`,
@@ -101,8 +99,7 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     if (result.meta.changes !== 1) {
       return context.json({ data: { accepted: false } }, 202);
     }
-    await context
-      .get("database")
+    await database
       .prepare(
         `INSERT INTO contact_events
          (id, workspace_id, contact_id, visitor_id, type, resource_type,

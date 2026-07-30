@@ -35,8 +35,9 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
   });
 
   publicApp.post("/api/public/track/:workspaceSlug", async (context) => {
+    const database = context.get("database");
     const workspace = await loadPublicTrackingWorkspace(
-      context.get("database"),
+      database,
       context.req.param("workspaceSlug"),
     );
     if (!workspace) {
@@ -62,8 +63,7 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
     const visitorId = parsed.data.visitorId ?? crypto.randomUUID();
     const now = new Date().toISOString();
     const contact = parsed.data.email
-      ? await context
-          .get("database")
+      ? await database
           .prepare(
             `SELECT id FROM contacts
            WHERE workspace_id = ? AND email = ? AND status != 'archived'`,
@@ -71,7 +71,7 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
           .bind(workspace.id, parsed.data.email.toLowerCase())
           .first<{ id: string }>()
       : null;
-    await recordContactEvent(context.get("database"), {
+    await recordContactEvent(database, {
       workspaceId: workspace.id,
       contactId: contact?.id ?? null,
       visitorId,
