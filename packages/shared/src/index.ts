@@ -184,11 +184,35 @@ export const sourceNodeSchema = z.object({
   type: z.literal("source"),
   position: z.object({ x: z.number(), y: z.number() }),
   config: z.discriminatedUnion("source", [
-    z.object({ source: z.literal("segment_joined"), segmentId: z.string() }),
-    z.object({ source: z.literal("form_submitted"), formId: z.string() }),
-    z.object({ source: z.literal("contact_created") }),
-    z.object({ source: z.literal("api_event"), eventName: z.string().min(1).max(120) }),
-    z.object({ source: z.literal("webhook_event"), eventName: z.string().min(1).max(120) }),
+    z.object({
+      source: z.literal("segment_joined"),
+      segmentId: z.string().min(1),
+      reentry: z.enum(["once", "every_time"]).default("once"),
+    }),
+    z.object({
+      source: z.literal("form_submitted"),
+      formId: z.string().min(1),
+      reentry: z.enum(["once", "every_time"]).default("once"),
+    }),
+    z.object({
+      source: z.literal("contact_created"),
+      reentry: z.literal("once").default("once"),
+    }),
+    z.object({
+      source: z.literal("api_event"),
+      eventName: z.string().trim().min(1).max(120),
+      reentry: z.enum(["once", "every_time"]).default("every_time"),
+    }),
+    z.object({
+      source: z.literal("webhook_event"),
+      eventName: z.string().trim().min(1).max(120),
+      reentry: z.enum(["once", "every_time"]).default("every_time"),
+    }),
+    z.object({
+      source: z.literal("contact_inactive"),
+      days: z.number().int().min(1).max(3_650),
+      reentry: z.literal("once").default("once"),
+    }),
   ]),
 });
 
@@ -236,7 +260,14 @@ export const decisionNodeSchema = z.object({
   type: z.literal("decision"),
   position: z.object({ x: z.number(), y: z.number() }),
   config: z.object({
-    event: z.enum(["opened", "clicked", "replied", "page_viewed", "form_submitted"]),
+    event: z.enum([
+      "opened",
+      "clicked",
+      "replied",
+      "page_viewed",
+      "form_submitted",
+      "custom_event",
+    ]),
     resourceId: z.string().optional(),
     withinMinutes: z.number().int().positive().max(525_600),
   }),

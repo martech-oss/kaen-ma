@@ -1,9 +1,11 @@
 import type { Hono } from "hono";
+import { z } from "zod";
 
 import { ContactRepository, writeAuditLog } from "@kaenma/database";
 import { contactCreateSchema, contactUpdateSchema } from "@kaenma/shared";
 
 import type { AppEnvironment } from "../env";
+import { recordContactEvent } from "../events/service";
 import { numberQuery, parseJsonColumns, safeJson, validationError } from "../http/helpers";
 import { apiError, requireRole } from "../middleware";
 import {
@@ -85,6 +87,35 @@ export function registerContactRoutes(api: Hono<AppEnvironment>): void {
     return context.json({
       data: result.results.map(parseJsonColumns(["properties"])),
     });
+  });
+
+  api.post("/contacts/:id/events", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({
+        eventName: z.string().trim().min(1).max(120),
+        source: z.enum(["api", "webhook"]).default("api"),
+        properties: z.record(z.string(), z.unknown()).default({}),
+        occurredAt: z.iso.datetime().optional(),
+      })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const workspaceId = context.get("workspace").workspaceId;
+    const contact = await context
+      .get("database")
+      .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND id = ? AND status != 'archived'")
+      .bind(workspaceId, context.req.param("id"))
+      .first<{ id: string }>();
+    if (!contact) return apiError(context, 404, "contact_not_found", "連絡先が見つかりません");
+    const result = await recordContactEvent(context.get("database"), {
+      workspaceId,
+      contactId: contact.id,
+      type: parsed.data.source === "webhook" ? "webhook_event" : "custom_event",
+      resourceType: parsed.data.source,
+      resourceId: parsed.data.eventName,
+      properties: parsed.data.properties,
+      ...(parsed.data.occurredAt ? { occurredAt: parsed.data.occurredAt } : {}),
+    });
+    return context.json({ data: result }, 202);
   });
 
   api.post("/contacts", requireRole("marketer"), async (context) => {

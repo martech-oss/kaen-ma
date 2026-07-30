@@ -2,6 +2,8 @@ import { ContactRepository, type KaenmaDatabase } from "@kaenma/database";
 import type { ContactListInput, ContactListResult, ContactSummary } from "@kaenma/orpc";
 import type { Contact, ContactCreate, WorkspaceContext } from "@kaenma/shared";
 
+import { recordContactEvent } from "../events/service";
+
 export async function listContacts(
   database: KaenmaDatabase,
   workspace: WorkspaceContext,
@@ -24,7 +26,15 @@ export async function createContact(
   input: ContactCreate,
 ): Promise<Contact> {
   const repository = new ContactRepository(database, workspace);
-  return repository.createContact(input);
+  const contact = await repository.createContact(input);
+  await recordContactEvent(database, {
+    workspaceId: workspace.workspaceId,
+    contactId: contact.id,
+    type: "contact_created",
+    resourceType: "contact",
+    resourceId: contact.id,
+  });
+  return contact;
 }
 
 async function attachContactRelations(

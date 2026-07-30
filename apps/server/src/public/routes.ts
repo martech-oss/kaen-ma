@@ -7,6 +7,7 @@ import { contentDocumentSchema } from "@kaenma/shared";
 
 import { sha256Hex, verifySignedToken } from "../crypto";
 import { type AppEnvironment } from "../env";
+import { recordContactEvent } from "../events/service";
 import { safeJson } from "../http/helpers";
 import { apiError } from "../middleware";
 import { primitiveString } from "../values";
@@ -158,6 +159,7 @@ export function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     const email = typeof body["email"] === "string" ? body["email"].trim().toLowerCase() : null;
     const now = new Date().toISOString();
     let contactId: string | null = null;
+    let contactCreated = false;
     if (email && z.email().safeParse(email).success) {
       const existing = await context
         .get("database")
@@ -184,6 +186,7 @@ export function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
           )
           .run();
       } else {
+        contactCreated = true;
         await context
           .get("database")
           .prepare(
@@ -205,46 +208,47 @@ export function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
           .run();
       }
     }
+    if (contactCreated && contactId) {
+      await recordContactEvent(context.get("database"), {
+        workspaceId: form.workspace_id,
+        contactId,
+        type: "contact_created",
+        resourceType: "contact",
+        resourceId: contactId,
+        occurredAt: now,
+      });
+    }
     try {
-      await context.get("database").batch([
-        context
-          .get("database")
-          .prepare(
-            `INSERT INTO form_submissions
+      await context
+        .get("database")
+        .prepare(
+          `INSERT INTO form_submissions
            (id, workspace_id, form_id, contact_id, idempotency_key, payload, ip_hash, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(
-            uuidv7(),
-            form.workspace_id,
-            form.id,
-            contactId,
-            idempotencyKey,
-            JSON.stringify(redactFormPayload(body)),
-            await hashIp(context.req.header("cf-connecting-ip")),
-            now,
-          ),
-        context
-          .get("database")
-          .prepare(
-            `INSERT INTO contact_events
-           (id, workspace_id, contact_id, type, resource_type, resource_id,
-            properties, occurred_at, created_at)
-           VALUES (?, ?, ?, 'form_submitted', 'form', ?, ?, ?, ?)`,
-          )
-          .bind(
-            uuidv7(),
-            form.workspace_id,
-            contactId,
-            form.id,
-            JSON.stringify({ formId: form.id }),
-            now,
-            now,
-          ),
-      ]);
+        )
+        .bind(
+          uuidv7(),
+          form.workspace_id,
+          form.id,
+          contactId,
+          idempotencyKey,
+          JSON.stringify(redactFormPayload(body)),
+          await hashIp(context.req.header("cf-connecting-ip")),
+          now,
+        )
+        .run();
     } catch {
       return context.json({ data: { accepted: true, duplicate: true } }, 202);
     }
+    await recordContactEvent(context.get("database"), {
+      workspaceId: form.workspace_id,
+      contactId,
+      type: "form_submitted",
+      resourceType: "form",
+      resourceId: form.id,
+      properties: { formId: form.id },
+      occurredAt: now,
+    });
     return context.json({ data: { accepted: true, message: form.success_message } }, 202);
   });
 
@@ -303,26 +307,16 @@ export function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
           .bind(workspace.id, parsed.data.email.toLowerCase())
           .first<{ id: string }>()
       : null;
-    await context
-      .get("database")
-      .prepare(
-        `INSERT INTO contact_events
-       (id, workspace_id, contact_id, visitor_id, type, resource_type,
-        resource_id, properties, occurred_at, created_at)
-       VALUES (?, ?, ?, ?, ?, 'page', ?, ?, ?, ?)`,
-      )
-      .bind(
-        uuidv7(),
-        workspace.id,
-        contact?.id ?? null,
-        visitorId,
-        parsed.data.type,
-        parsed.data.resourceId ?? null,
-        JSON.stringify(parsed.data.properties),
-        now,
-        now,
-      )
-      .run();
+    await recordContactEvent(context.get("database"), {
+      workspaceId: workspace.id,
+      contactId: contact?.id ?? null,
+      visitorId,
+      type: parsed.data.type,
+      resourceType: "page",
+      ...(parsed.data.resourceId ? { resourceId: parsed.data.resourceId } : {}),
+      properties: parsed.data.properties,
+      occurredAt: now,
+    });
     return context.json(
       {
         data: {
@@ -457,24 +451,13 @@ export function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
     );
     if (payload) {
       context.executionCtx.waitUntil(
-        context
-          .get("database")
-          .prepare(
-            `INSERT INTO contact_events
-           (id, workspace_id, contact_id, type, resource_type, resource_id,
-            properties, occurred_at, created_at)
-           VALUES (?, ?, ?, 'email_opened', 'delivery', ?, '{}', ?, ?)`,
-          )
-          .bind(
-            uuidv7(),
-            payload.workspaceId,
-            payload.contactId ?? null,
-            payload.resourceId,
-            new Date().toISOString(),
-            new Date().toISOString(),
-          )
-          .run()
-          .then(() => undefined),
+        recordContactEvent(context.get("database"), {
+          workspaceId: payload.workspaceId,
+          contactId: payload.contactId ?? null,
+          type: "email_opened",
+          resourceType: "delivery",
+          resourceId: payload.resourceId,
+        }).then(() => undefined),
       );
     }
     return new Response(transparentGif, {

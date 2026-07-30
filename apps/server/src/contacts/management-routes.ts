@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ContactRepository, uuidv7, type DrizzleRawStatement } from "@kaenma/database";
 
 import { type AppEnvironment } from "../env";
+import { recordContactEvent } from "../events/service";
 import { parseJsonColumns, resourceSlug, safeJson, validationError } from "../http/helpers";
 import { apiError, requireRole } from "../middleware";
 import { updateSegmentMemberCount } from "../segments/routes";
@@ -361,6 +362,13 @@ export function registerContactManagementRoutes(api: Hono<AppEnvironment>): void
       );
     }
     await updateSegmentMemberCount(context.get("database"), workspaceId, parsed.data.segmentId);
+    await recordContactEvent(context.get("database"), {
+      workspaceId,
+      contactId: context.req.param("id"),
+      type: "segment_joined",
+      resourceType: "segment",
+      resourceId: parsed.data.segmentId,
+    });
     return context.json({ data: { assigned: true } }, 201);
   });
 

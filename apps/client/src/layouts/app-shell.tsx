@@ -70,7 +70,7 @@ const contactNavigation = linkOptions([
 ]);
 
 const automationNavigation = linkOptions([
-  { to: "/campaigns", label: "キャンペーン", icon: GitBranch },
+  { to: "/campaigns", label: "オートメーション", icon: GitBranch },
 ]);
 
 const emailNavigation = linkOptions([

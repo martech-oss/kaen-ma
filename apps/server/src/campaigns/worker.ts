@@ -10,6 +10,7 @@ import {
 
 import { createEmailDelivery, createWebhookDelivery } from "../deliveries/worker";
 import { type RuntimeEnv } from "../env";
+import { recordContactEvent } from "../events/service";
 import { safeRecord } from "../runtime/helpers";
 import { primitiveString } from "../values";
 
@@ -26,6 +27,7 @@ export interface CampaignJobRow {
   lease_id: string | null;
   attempts: number;
   created_at: string;
+  entered_at: string;
   graph: string;
   contact_email: string | null;
   first_name: string | null;
@@ -43,12 +45,14 @@ export async function processCampaignJob(
 ): Promise<void> {
   const job = await createDatabase(env.DB)
     .prepare(
-      `SELECT j.*, cv.graph,
+      `SELECT j.*, cv.graph, enrollment.entered_at,
             c.email AS contact_email, c.first_name, c.last_name, c.phone,
             c.stage, c.score, c.custom_fields
      FROM campaign_jobs j
      JOIN campaign_versions cv ON cv.id = j.campaign_version_id
        AND cv.workspace_id = j.workspace_id
+     JOIN campaign_enrollments enrollment ON enrollment.id = j.enrollment_id
+       AND enrollment.workspace_id = j.workspace_id
      JOIN contacts c ON c.id = j.recipient_id AND c.workspace_id = j.workspace_id
      WHERE j.id = ? AND j.lease_id = ? AND j.status IN ('leased', 'running')`,
     )
@@ -127,6 +131,7 @@ export async function executeNode(
       replied: "email_replied",
       page_viewed: "page_viewed",
       form_submitted: "form_submitted",
+      custom_event: "custom_event",
     }[node.config.event];
     const found = await createDatabase(env.DB)
       .prepare(
@@ -139,7 +144,7 @@ export async function executeNode(
         job.workspace_id,
         job.recipient_id,
         eventType,
-        job.created_at,
+        job.entered_at,
         node.config.resourceId ?? null,
         node.config.resourceId ?? null,
       )
@@ -179,14 +184,26 @@ export async function executeNode(
         .run();
       break;
     case "add_segment":
-      await createDatabase(env.DB)
-        .prepare(
-          `INSERT OR IGNORE INTO segment_memberships
+      if (
+        (
+          await createDatabase(env.DB)
+            .prepare(
+              `INSERT OR IGNORE INTO segment_memberships
          (workspace_id, segment_id, contact_id, source, joined_at)
          VALUES (?, ?, ?, 'campaign', ?)`,
-        )
-        .bind(job.workspace_id, action.segmentId, job.recipient_id, now)
-        .run();
+            )
+            .bind(job.workspace_id, action.segmentId, job.recipient_id, now)
+            .run()
+        ).meta.changes === 1
+      ) {
+        await recordContactEvent(createDatabase(env.DB), {
+          workspaceId: job.workspace_id,
+          contactId: job.recipient_id,
+          type: "segment_joined",
+          resourceType: "segment",
+          resourceId: action.segmentId,
+        });
+      }
       break;
     case "remove_segment":
       await createDatabase(env.DB)

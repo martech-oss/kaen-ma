@@ -8,6 +8,7 @@ import { campaignDefinitionSchema, type CampaignDefinition } from "@kaenma/share
 import { type AppEnvironment } from "../env";
 import { safeJson, validationError } from "../http/helpers";
 import { apiError, requireRole } from "../middleware";
+import { enrollPublishedCampaign } from "./enrollment";
 
 export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   api.get("/campaigns", async (context) => {
@@ -15,7 +16,21 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
       .get("database")
       .prepare(
         `SELECT id, name, description, status, draft_version_id, published_version_id,
-              created_at, updated_at
+              created_at, updated_at,
+              (SELECT COUNT(*) FROM campaign_enrollments ce
+               WHERE ce.workspace_id = campaigns.workspace_id
+                 AND ce.campaign_id = campaigns.id) AS enrollment_count,
+              (SELECT COUNT(*) FROM campaign_enrollments ce
+               WHERE ce.workspace_id = campaigns.workspace_id
+                 AND ce.campaign_id = campaigns.id
+                 AND ce.status = 'active') AS active_count,
+              (SELECT COUNT(*) FROM campaign_enrollments ce
+               WHERE ce.workspace_id = campaigns.workspace_id
+                 AND ce.campaign_id = campaigns.id
+                 AND ce.status = 'completed') AS completed_count,
+              (SELECT ct.source FROM campaign_triggers ct
+               WHERE ct.workspace_id = campaigns.workspace_id
+                 AND ct.campaign_version_id = campaigns.published_version_id) AS trigger_source
        FROM campaigns WHERE workspace_id = ? ORDER BY updated_at DESC LIMIT 200`,
       )
       .bind(context.get("workspace").workspaceId)
@@ -70,14 +85,14 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     const row = await context
       .get("database")
       .prepare(
-        `SELECT cv.id, cv.version, cv.graph
+        `SELECT cv.id, cv.version, cv.graph, c.status
        FROM campaigns c
        JOIN campaign_versions cv ON cv.id = c.draft_version_id
         AND cv.workspace_id = c.workspace_id
        WHERE c.workspace_id = ? AND c.id = ?`,
       )
       .bind(context.get("workspace").workspaceId, context.req.param("id"))
-      .first<{ id: string; version: number; graph: string }>();
+      .first<{ id: string; version: number; graph: string; status: string }>();
     return row
       ? context.json({ data: { ...row, graph: JSON.parse(row.graph) as unknown } })
       : apiError(context, 404, "campaign_not_found", "キャンペーンが見つかりません");
@@ -142,6 +157,9 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     }
     const nextDraftId = uuidv7();
     const now = new Date().toISOString();
+    const source = parsed.data.nodes.find((node) => node.type === "source");
+    if (!source) return apiError(context, 422, "source_missing", "開始条件がありません");
+    const trigger = campaignTrigger(source.config);
     await context.get("database").batch([
       context
         .get("database")
@@ -179,6 +197,30 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
           workspace.workspaceId,
           context.req.param("id"),
         ),
+      context
+        .get("database")
+        .prepare("DELETE FROM campaign_triggers WHERE workspace_id = ? AND campaign_id = ?")
+        .bind(workspace.workspaceId, context.req.param("id")),
+      context
+        .get("database")
+        .prepare(
+          `INSERT INTO campaign_triggers
+           (campaign_version_id, workspace_id, campaign_id, source_node_id, source,
+            event_type, resource_id, reentry, inactivity_days, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          row.draft_version_id,
+          workspace.workspaceId,
+          context.req.param("id"),
+          source.id,
+          source.config.source,
+          trigger.eventType,
+          trigger.resourceId,
+          source.config.reentry,
+          trigger.inactivityDays,
+          now,
+        ),
     ]);
     return context.json({
       data: { publishedVersionId: row.draft_version_id, draftVersionId: nextDraftId },
@@ -207,62 +249,62 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     const graph = JSON.parse(campaign.graph) as CampaignDefinition;
     const source = graph.nodes.find((node) => node.type === "source");
     if (!source) return apiError(context, 422, "source_missing", "Sourceノードがありません");
-    const enrollmentId = uuidv7();
-    const jobId = uuidv7();
     const sourceEventId =
       parsed.data.sourceEventId ?? context.req.header("idempotency-key") ?? uuidv7();
-    const now = new Date().toISOString();
-    try {
-      await context.get("database").batch([
-        context
-          .get("database")
-          .prepare(
-            `INSERT INTO campaign_enrollments
-           (id, workspace_id, campaign_id, campaign_version_id, contact_id,
-            source_event_id, status, current_node_id, entered_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
-          )
-          .bind(
-            enrollmentId,
-            workspace.workspaceId,
-            context.req.param("id"),
-            campaign.published_version_id,
-            parsed.data.contactId,
-            sourceEventId,
-            source.id,
-            now,
-            now,
-          ),
-        context
-          .get("database")
-          .prepare(
-            `INSERT INTO campaign_jobs
-           (id, workspace_id, enrollment_id, campaign_version_id, node_id,
-            recipient_id, idempotency_key, status, due_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
-          )
-          .bind(
-            jobId,
-            workspace.workspaceId,
-            enrollmentId,
-            campaign.published_version_id,
-            source.id,
-            parsed.data.contactId,
-            `${enrollmentId}:${source.id}:${parsed.data.contactId}`,
-            now,
-            now,
-            now,
-          ),
-      ]);
-    } catch (error) {
-      return apiError(
-        context,
-        409,
-        "already_enrolled",
-        "このイベントでは既に参加済みです",
-        error instanceof Error ? error.message : undefined,
-      );
+    const result = await enrollPublishedCampaign(context.get("database"), {
+      workspaceId: workspace.workspaceId,
+      campaignId: context.req.param("id"),
+      campaignVersionId: campaign.published_version_id,
+      contactId: parsed.data.contactId,
+      sourceNodeId: source.id,
+      sourceEventId,
+    });
+    if (!result) {
+      return apiError(context, 409, "already_enrolled", "このイベントでは既に参加済みです");
     }
-    return context.json({ data: { enrollmentId, jobId } }, 202);
+    return context.json({ data: result }, 202);
   });
+
+  api.post("/campaigns/:id/status", requireRole("marketer"), async (context) => {
+    const parsed = z
+      .object({ status: z.enum(["active", "paused"]) })
+      .safeParse(await safeJson(context));
+    if (!parsed.success) return validationError(context, parsed.error);
+    const result = await context
+      .get("database")
+      .prepare(
+        `UPDATE campaigns SET status = ?, updated_at = ?
+         WHERE workspace_id = ? AND id = ? AND published_version_id IS NOT NULL
+           AND status IN ('active', 'paused')`,
+      )
+      .bind(
+        parsed.data.status,
+        new Date().toISOString(),
+        context.get("workspace").workspaceId,
+        context.req.param("id"),
+      )
+      .run();
+    return result.meta.changes === 1
+      ? context.json({ data: { status: parsed.data.status } })
+      : apiError(context, 409, "campaign_status_not_changeable", "公開済みフローがありません");
+  });
+}
+
+function campaignTrigger(
+  config: Extract<CampaignDefinition["nodes"][number], { type: "source" }>["config"],
+): { eventType: string | null; resourceId: string | null; inactivityDays: number | null } {
+  switch (config.source) {
+    case "contact_created":
+      return { eventType: "contact_created", resourceId: null, inactivityDays: null };
+    case "segment_joined":
+      return { eventType: "segment_joined", resourceId: config.segmentId, inactivityDays: null };
+    case "form_submitted":
+      return { eventType: "form_submitted", resourceId: config.formId, inactivityDays: null };
+    case "api_event":
+      return { eventType: "custom_event", resourceId: config.eventName, inactivityDays: null };
+    case "webhook_event":
+      return { eventType: "webhook_event", resourceId: config.eventName, inactivityDays: null };
+    case "contact_inactive":
+      return { eventType: null, resourceId: null, inactivityDays: config.days };
+  }
 }

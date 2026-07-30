@@ -120,6 +120,42 @@ export const campaignVersions = sqliteTable(
   ],
 );
 
+export const campaignTriggers = sqliteTable(
+  "campaign_triggers",
+  {
+    campaignVersionId: text("campaign_version_id")
+      .primaryKey()
+      .notNull()
+      .references(() => campaignVersions.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    campaignId: text("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    sourceNodeId: text("source_node_id").notNull(),
+    source: text().notNull(),
+    eventType: text("event_type"),
+    resourceId: text("resource_id"),
+    reentry: text().default("once").notNull(),
+    inactivityDays: integer("inactivity_days"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("campaign_triggers_workspace_event_idx").on(
+      table.workspaceId,
+      table.eventType,
+      table.resourceId,
+    ),
+    index("campaign_triggers_source_idx").on(table.source, table.workspaceId),
+    check(
+      "campaign_triggers_source_check",
+      sql`${table.source} IN ('segment_joined', 'form_submitted', 'contact_created', 'api_event', 'webhook_event', 'contact_inactive')`,
+    ),
+    check("campaign_triggers_reentry_check", sql`${table.reentry} IN ('once', 'every_time')`),
+  ],
+);
+
 export const campaignEnrollments = sqliteTable(
   "campaign_enrollments",
   {
@@ -151,7 +187,7 @@ export const campaignEnrollments = sqliteTable(
     ),
     uniqueIndex("campaign_enrollment_source_unique").on(
       table.workspaceId,
-      table.campaignVersionId,
+      table.campaignId,
       table.contactId,
       table.sourceEventId,
     ),

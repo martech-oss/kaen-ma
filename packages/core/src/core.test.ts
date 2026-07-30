@@ -21,7 +21,7 @@ describe("campaign validation", () => {
           id: "source",
           type: "source",
           position: { x: 0, y: 0 },
-          config: { source: "contact_created" },
+          config: { source: "contact_created", reentry: "once" },
         },
         {
           id: "send",
@@ -55,7 +55,7 @@ describe("campaign validation", () => {
           id: "source",
           type: "source",
           position: { x: 0, y: 0 },
-          config: { source: "contact_created" },
+          config: { source: "contact_created", reentry: "once" },
         },
         {
           id: "send",

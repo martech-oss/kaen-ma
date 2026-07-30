@@ -4,6 +4,7 @@ import { ResendEmailAdapter } from "@kaenma/channels";
 import { uuidv7, type DrizzleRawStatement } from "@kaenma/database";
 
 import type { AppEnvironment } from "../env";
+import { recordContactEvent } from "../events/service";
 import { apiError } from "../middleware";
 
 export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
@@ -98,7 +99,37 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
             ),
         );
       }
-      await context.get("database").batch(statements);
+      const results = await context.get("database").batch(statements);
+      const contactEventType =
+        event.type === "opened"
+          ? "email_opened"
+          : event.type === "clicked"
+            ? "email_clicked"
+            : event.type === "replied"
+              ? "email_replied"
+              : null;
+      if (results[0]?.meta.changes === 1 && contactEventType) {
+        const delivery = await context
+          .get("database")
+          .prepare(
+            `SELECT contact_id FROM deliveries
+             WHERE workspace_id = ? AND id = ? AND contact_id IS NOT NULL`,
+          )
+          .bind(workspaceId, event.deliveryId)
+          .first<{ contact_id: string }>();
+        if (delivery) {
+          await recordContactEvent(context.get("database"), {
+            id: `resend:${event.id}`,
+            workspaceId,
+            contactId: delivery.contact_id,
+            type: contactEventType,
+            resourceType: "delivery",
+            resourceId: event.deliveryId,
+            properties: event.metadata,
+            occurredAt: event.occurredAt,
+          });
+        }
+      }
     }
     return context.json({ data: { accepted: events.length } }, 202);
   });

@@ -1,16 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RouteError, RoutePending } from "@/components/route-status";
-import { CampaignBuilder } from "@/features/campaigns/campaign-pages";
+import {
+  CampaignBuilder,
+  type AutomationOptions,
+  type CampaignDraft,
+} from "@/features/campaigns/campaign-pages";
 import { rpc } from "@/rpc";
-import type { CampaignDefinition } from "@kaenma/shared";
 
 export const Route = createFileRoute("/_app/campaigns/$id")({
   loader: async ({ params, abortController }) => {
-    const response = await rpc<{ graph: CampaignDefinition }>(`/campaigns/${params.id}/draft`, {
-      signal: abortController.signal,
-    });
-    return response.data.graph;
+    const request = { signal: abortController.signal };
+    const [draft, templates, forms, segments] = await Promise.all([
+      rpc<CampaignDraft>(`/campaigns/${params.id}/draft`, request),
+      rpc<AutomationOptions["templates"]>("/email-templates", request),
+      rpc<AutomationOptions["forms"]>("/forms", request),
+      rpc<AutomationOptions["segments"]>("/segments", request),
+    ]);
+    return {
+      draft: draft.data,
+      options: {
+        templates: templates.data.filter((template) => template.current_version_id),
+        forms: forms.data,
+        segments: segments.data,
+      },
+    };
   },
   pendingComponent: RoutePending,
   errorComponent: RouteError,
@@ -19,6 +33,6 @@ export const Route = createFileRoute("/_app/campaigns/$id")({
 
 function CampaignRoute() {
   const { id } = Route.useParams();
-  const definition = Route.useLoaderData();
-  return <CampaignBuilder id={id} initialDefinition={definition} />;
+  const data = Route.useLoaderData();
+  return <CampaignBuilder id={id} initialDraft={data.draft} options={data.options} />;
 }

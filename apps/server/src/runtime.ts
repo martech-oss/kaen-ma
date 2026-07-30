@@ -11,6 +11,7 @@ import {
 } from "@kaenma/shared";
 
 import { processBroadcastBatch } from "./broadcasts/worker";
+import { enrollInactiveContacts } from "./campaigns/enrollment";
 import { processCampaignJob } from "./campaigns/worker";
 import { processContactExport, processContactImport } from "./contacts/worker";
 import { processDelivery } from "./deliveries/worker";
@@ -26,6 +27,7 @@ export async function scheduled(
     context.waitUntil(runDailyMaintenance(env));
     return;
   }
+  await enrollInactiveContacts(createDatabase(env.DB));
   const now = new Date().toISOString();
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();
   const workspaces = await createDatabase(env.DB)

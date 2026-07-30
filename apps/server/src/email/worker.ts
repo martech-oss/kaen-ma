@@ -2,6 +2,7 @@ import PostalMime from "postal-mime";
 
 import { createDatabase, uuidv7 } from "@kaenma/database";
 
+import { enrollAutomationsForEvent } from "../campaigns/enrollment";
 import { verifySignedToken } from "../crypto";
 import type { RuntimeEnv } from "../env";
 
@@ -64,6 +65,7 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
     });
   }
   const eventId = uuidv7();
+  const contactEventId = uuidv7();
   await createDatabase(env.DB).batch([
     createDatabase(env.DB)
       .prepare(
@@ -110,7 +112,7 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
        VALUES (?, ?, ?, 'email_replied', 'delivery', ?, ?, ?, ?)`,
       )
       .bind(
-        uuidv7(),
+        contactEventId,
         payload.workspaceId,
         payload.contactId,
         delivery.id,
@@ -119,6 +121,13 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
         receivedAt,
       ),
   ]);
+  await enrollAutomationsForEvent(createDatabase(env.DB), {
+    id: contactEventId,
+    workspaceId: payload.workspaceId,
+    contactId: payload.contactId,
+    type: "email_replied",
+    resourceId: delivery.id,
+  });
 }
 
 function sanitizeFilename(value: string): string {
