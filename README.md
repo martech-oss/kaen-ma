@@ -13,8 +13,8 @@ Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」と
 - D1を業務データとキャンペーン状態機械の正本として使用
 - R2によるAsset、CSV、受信添付ファイル、イベントアーカイブの保存
 - Queuesと1分Cronによる再開可能なキャンペーン実行
-- Cloudflare Email ServiceによるTransactionalメール
-- Resend Emails APIによるMarketingメール
+- Resend Hosted TemplatesによるTransactional・Marketingメール
+- React Emailで管理する認証メールテンプレート
 - React Flowを使ったビジュアルキャンペーンビルダー
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
 - Workspace限定APIキー、TypeScript SDK、MCPサーバー
@@ -24,12 +24,12 @@ Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」と
 
 Kaenmaはメールの用途を型と実行時検証の両方で分離します。
 
-| 用途            | 既定プロバイダー         | 使用例                                       |
-| --------------- | ------------------------ | -------------------------------------------- |
-| `transactional` | Cloudflare Email Service | メール確認、招待、パスワード再設定、申込確認 |
-| `marketing`     | Resend                   | Campaign、Segment配信、Broadcast             |
+| 用途            | プロバイダー | 使用例                                       |
+| --------------- | ------------ | -------------------------------------------- |
+| `transactional` | Resend       | メール確認、招待、パスワード再設定、申込確認 |
+| `marketing`     | Resend       | Campaign、Segment配信、Broadcast             |
 
-Cloudflare Email ServiceをMarketing用途で選択すると、キャンペーン公開時と送信時の両方で拒否されます。
+送信元アドレスは用途ごとに分けます。配信停止・購読Topic・同意状態はKaenmaを正本とし、配信と開封・クリック・Bounceなどのイベント取得にはResendを使います。
 
 ## アーキテクチャ
 
@@ -43,8 +43,7 @@ flowchart LR
     S --> R["R2<br>Asset・CSV・Archive"]
     S --> Q["Queues<br>Campaign・Delivery"]
     Q --> S
-    S --> CF["Cloudflare Email Service<br>Transactional"]
-    S --> RE["Resend<br>Marketing"]
+    S --> RE["Resend Hosted Templates<br>Transactional・Marketing"]
     S --> WH["Outbound Webhook"]
     ER["Cloudflare Email Routing"] --> S
 ```
@@ -59,11 +58,12 @@ apps/
   server/                内部API Worker、Hono、Cron、Queue、Email Routing
 packages/
   orpc/                  管理画面とWorkerで共有するドメイン別oRPC contract
-  channels/              Cloudflare、Resend、Webhook adapter
+  channels/              Resend、Webhook adapter
   core/                  Segment、Campaign、Consent、Schedule
   create-kaenma/         Setup、doctor、backup、update CLI
   database/              Drizzle schema/client、D1 migration、repository
   email-renderer/        安全なHTML/Text renderer
+  email-templates/       認証メール用React EmailとResend同期スクリプト
   mcp-server/            Kaenma MCP server
   sdk/                   TypeScript SDK
   shared/                Zod schema、DTO、公開型、OpenAPI
@@ -76,8 +76,8 @@ packages/
 - Cloudflareアカウント
 - Workers Paidプランを推奨
 - D1、R2、Queues
-- Cloudflare Email ServiceとEmail Routing
-- Marketingメールを送る場合はResend
+- Resend（送信ドメイン、送信用API key、Template管理用API key）
+- 受信メールを利用する場合はCloudflare Email Routing
 
 ## ローカル開発
 
@@ -100,12 +100,23 @@ BETTER_AUTH_SECRET=32文字以上のランダム値
 CREDENTIAL_ENCRYPTION_KEY=32バイト相当のランダム値
 TRACKING_SIGNING_SECRET=32文字以上のランダム値
 TURNSTILE_SECRET=任意
-RESEND_API_KEY=Marketingメールを利用する場合は必須
+RESEND_SEND_API_KEY=メール送信に必須
+RESEND_MANAGEMENT_API_KEY=Resend Templateの登録・同期に必須
 RESEND_WEBHOOK_SECRET=Resend Webhookを利用する場合は必須
 ```
 
 `CREDENTIAL_ENCRYPTION_KEY`は、Outbound Webhookの署名資格情報をD1へ保存する際のAES-GCMマスターキーです。運用開始後に不用意に変更すると、保存済み資格情報を復号できなくなります。
 Resendの資格情報はD1へ保存せず、WorkerのSecret bindingからのみ読み込みます。
+
+認証メールはReact Emailで編集し、Resend Hosted Templatesへ同期します。
+
+```bash
+RESEND_MANAGEMENT_API_KEY=re_xxx \
+  pnpm --filter @kaenma/email-templates resend:sync
+```
+
+このコマンドは`kaenma-password-reset`、`kaenma-email-verification`、
+`kaenma-organization-invitation`を作成または更新し、最新バージョンを公開します。
 
 ### 3. D1 migration
 
@@ -168,7 +179,6 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 - `ASSETS_BUCKET`: R2
 - `CAMPAIGN_QUEUE`: Campaign、Broadcast、Import/Export
 - `DELIVERY_QUEUE`: Email、Webhook delivery
-- `EMAIL`: Cloudflare Email Service
 
 ローカル開発ではCloudflare Viteプラグインの`auxiliaryWorkers`により両Workerを
 同時に起動します。`kaenma-server`は`workers_dev: false`のため公開URLを持たず、
@@ -184,11 +194,12 @@ pnpm wrangler secret put BETTER_AUTH_SECRET
 pnpm wrangler secret put CREDENTIAL_ENCRYPTION_KEY
 pnpm wrangler secret put TRACKING_SIGNING_SECRET
 pnpm wrangler secret put TURNSTILE_SECRET
-pnpm wrangler secret put RESEND_API_KEY
+pnpm wrangler secret put RESEND_SEND_API_KEY
+pnpm wrangler secret put RESEND_MANAGEMENT_API_KEY
 pnpm wrangler secret put RESEND_WEBHOOK_SECRET
 ```
 
-Resend Dashboardには`https://<APP_URL>/api/webhooks/resend/<WORKSPACE_ID>`をWebhook URLとして登録し、`email.sent`、`email.delivered`、`email.opened`、`email.clicked`、`email.bounced`、`email.complained`、`email.failed`、`email.suppressed`を購読します。発行されたSigning secretは`RESEND_WEBHOOK_SECRET`として登録してください。
+Resend Dashboardには`https://<APP_URL>/api/webhooks/resend`をWebhook URLとして登録し、`email.sent`、`email.delivered`、`email.opened`、`email.clicked`、`email.bounced`、`email.complained`、`email.failed`、`email.suppressed`を購読します。発行されたSigning secretは`RESEND_WEBHOOK_SECRET`として登録してください。Kaenmaは送信時に付与したWorkspace・Delivery tagから対象を特定します。
 
 ### Migrationとデプロイ
 
@@ -206,9 +217,9 @@ pnpm deploy
 2. 確認メールからメールアドレスを検証する
 3. OrganizationとしてWorkspaceを作成する
 4. 必要に応じて購読Topicを作成する
-5. WorkerのSecret bindingへResendのAPI keyとWebhook signing secretを登録する
+5. WorkerのSecret bindingへResendの送信・Template管理API keyとWebhook signing secretを登録する
 6. ContactまたはCSVを取り込む
-7. SegmentとEmail Templateを作成する
+7. ResendでTemplateを公開し、Kaenmaのメールテンプレート画面から登録する
 8. Campaignを作成・検証・公開する
 
 Better AuthのOrganizationをKaenmaのWorkspaceとして扱います。
@@ -239,7 +250,6 @@ Campaignは次のNodeから構成されます。
 - Node種別に対してBranchが正しい
 - 循環がない
 - Sourceから到達不能なNodeがない
-- MarketingメールがResendを使用している
 
 公開バージョンは不変です。公開後は同じグラフから新しいdraftが作られ、進行中Contactは参加時のバージョンを完走します。
 
@@ -251,7 +261,7 @@ BroadcastはMarketingメール専用です。
 2. Segmentの受信者を`broadcast_recipients`へ分割スナップショット
 3. 同じDelivery Queueへ投入
 4. 送信直前に同意と抑止を再評価
-5. Resend Emails APIで受信者ごとに送信
+5. Resendの公開済みHosted Templateを使って受信者ごとに送信
 
 CampaignメールとBroadcastは同じDeliveryテーブル、同意判定、イベント正規化を使用します。
 
@@ -315,6 +325,8 @@ POST   /api/v1/broadcasts/:id/start
 
 GET    /api/v1/email-templates
 POST   /api/v1/email-templates
+POST   /api/v1/email-templates/:id/sync
+POST   /api/v1/email-templates/:id/archive
 GET    /api/v1/forms
 POST   /api/v1/forms
 GET    /api/v1/pages
@@ -483,7 +495,7 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 ## 現在の制約
 
 - `wrangler.jsonc`のD1 ID、送信元ドメイン、Reply domainは環境ごとの設定が必要です。
-- Resend Webhookは`/api/webhooks/resend/:workspaceId`で受け取り、raw bodyと`svix-*`ヘッダーを使ってResend標準の署名を検証します。
+- Resend Webhookは`/api/webhooks/resend`で受け取り、raw bodyと`svix-*`ヘッダーを使ってResend標準の署名を検証します。
 - 大規模なCSVやSegmentは、実データ分布を使った負荷試験が必要です。
 - D1は唯一の業務DBですが、古い詳細イベントと大容量ファイルはR2へ退避します。
 - SMS、LINE、Push、Mautic API/PHPプラグイン互換、SAML/SCIMは対象外です。

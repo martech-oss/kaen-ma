@@ -11,7 +11,7 @@ import {
 } from "./index.js";
 
 describe("campaign validation", () => {
-  it("rejects cycles and Cloudflare marketing sends", () => {
+  it("rejects cycles", () => {
     const definition: CampaignDefinition = {
       name: "bad",
       description: "",
@@ -29,9 +29,7 @@ describe("campaign validation", () => {
           position: { x: 0, y: 100 },
           config: {
             action: "send_email",
-            templateVersionId: "template",
-            purpose: "marketing",
-            provider: "cloudflare",
+            templateId: "template",
           },
         },
       ],
@@ -40,12 +38,10 @@ describe("campaign validation", () => {
         { id: "two", source: "send", target: "source", branch: "next" },
       ],
     };
-    expect(validateCampaign(definition).map((issue) => issue.code)).toEqual(
-      expect.arrayContaining(["cycle", "marketing_provider_mismatch"]),
-    );
+    expect(validateCampaign(definition).map((issue) => issue.code)).toContain("cycle");
   });
 
-  it("accepts Resend for a marketing email action", () => {
+  it("accepts a hosted email template action", () => {
     const definition: CampaignDefinition = {
       name: "resend campaign",
       description: "",
@@ -63,9 +59,7 @@ describe("campaign validation", () => {
           position: { x: 0, y: 100 },
           config: {
             action: "send_email",
-            templateVersionId: "template",
-            purpose: "marketing",
-            provider: "resend",
+            templateId: "template",
           },
         },
       ],

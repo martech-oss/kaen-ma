@@ -6,10 +6,32 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+function splitClientVendorChunk(id: string): string | undefined {
+  const normalizedId = id.replaceAll("\\", "/");
+  if (/\/node_modules\/(?:react|react-dom|scheduler)\//.test(normalizedId)) {
+    return "vendor-react";
+  }
+  if (normalizedId.includes("/node_modules/zod/")) {
+    return "vendor-zod";
+  }
+  return undefined;
+}
+
 export default defineConfig({
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+    },
+  },
+  environments: {
+    client: {
+      build: {
+        rollupOptions: {
+          output: {
+            manualChunks: splitClientVendorChunk,
+          },
+        },
+      },
     },
   },
   plugins: [

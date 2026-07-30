@@ -102,9 +102,7 @@ export const actionNodeSchema = z.object({
   config: z.discriminatedUnion("action", [
     z.object({
       action: z.literal("send_email"),
-      templateVersionId: z.string(),
-      purpose: messagePurposeSchema,
-      provider: z.enum(["cloudflare", "resend"]),
+      templateId: z.string().min(1),
       topicId: z.string().optional(),
     }),
     z.object({ action: z.literal("send_webhook"), endpointId: z.string() }),
@@ -318,7 +316,7 @@ export interface DeliveryEvent {
   id: string;
   workspaceId: string;
   deliveryId: string;
-  provider: "cloudflare" | "resend" | "webhook";
+  provider: "resend" | "webhook";
   providerMessageId?: string;
   type: DeliveryEventType;
   occurredAt: string;

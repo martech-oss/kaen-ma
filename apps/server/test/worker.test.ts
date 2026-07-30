@@ -331,56 +331,45 @@ describe("Kaenma Worker", () => {
       ).status,
     ).toBe(200);
 
-    const content = {
-      schemaVersion: 1,
-      backgroundColor: "#f4f5f7",
-      contentColor: "#ffffff",
-      width: 600,
-      blocks: [
-        {
-          id: "message",
-          type: "text",
-          html: "<h1>{{ message.brand_name }}</h1><p>Hello {{ contact.first_name }}</p>",
-        },
-      ],
-    };
-    const templateResponse = await call("/email-templates", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "Welcome",
-        purpose: "marketing",
-        subject: "{{ message.brand_name }} news",
-        previewText: "Latest news",
-        content,
-      }),
-    });
-    expect(templateResponse.status).toBe(201);
-    const template = (await templateResponse.json()) as {
-      data: { id: string; versionId: string };
-    };
-    const templateUpdateResponse = await call(`/email-templates/${template.data.id}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        name: "Welcome updated",
-        purpose: "marketing",
-        subject: "{{ message.brand_name }} update",
-        previewText: "Updated news",
-        content,
-      }),
-    });
-    expect(templateUpdateResponse.status).toBe(200);
-    const templateUpdate = (await templateUpdateResponse.json()) as {
-      data: { versionId: string };
-    };
-    const templateDetailResponse = await call(`/email-templates/${template.data.id}`);
+    const templateId = uuidv7();
+    await env.DB.prepare(
+      `INSERT INTO email_templates
+       (id, workspace_id, name, purpose, resend_template_id, resend_alias, subject,
+        remote_status, remote_current_version_id, has_unpublished_versions,
+        variables, published_at, last_synced_at, created_at, updated_at)
+       VALUES (?, ?, 'Welcome', 'marketing', ?, 'welcome', ?, 'published',
+               'resend-version-id', 0, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        templateId,
+        workspaceId,
+        `resend-${templateId}`,
+        "{{{MESSAGE_BRAND_NAME}}} update",
+        JSON.stringify([
+          { key: "MESSAGE_BRAND_NAME", type: "string", fallbackValue: null },
+          { key: "KAENMA_UNSUBSCRIBE_URL", type: "string", fallbackValue: null },
+        ]),
+        now,
+        now,
+        now,
+        now,
+      )
+      .run();
+    const templateDetailResponse = await call(`/email-templates/${templateId}`);
     expect(templateDetailResponse.status).toBe(200);
     const templateDetail = (await templateDetailResponse.json()) as {
-      data: { version: number; subject: string; content_document: unknown };
+      data: {
+        resend_alias: string;
+        subject: string;
+        remote_status: string;
+        sendable: boolean;
+      };
     };
     expect(templateDetail.data).toMatchObject({
-      version: 2,
-      subject: "{{ message.brand_name }} update",
-      content_document: content,
+      resend_alias: "welcome",
+      subject: "{{{MESSAGE_BRAND_NAME}}} update",
+      remote_status: "published",
+      sendable: true,
     });
 
     const broadcastResponse = await call("/broadcasts", {
@@ -388,7 +377,7 @@ describe("Kaenma Worker", () => {
       body: JSON.stringify({
         name: "August update",
         segmentId: segment.data.id,
-        templateVersionId: templateUpdate.data.versionId,
+        templateId,
         topicId: null,
         scheduledAt: null,
       }),
@@ -404,7 +393,7 @@ describe("Kaenma Worker", () => {
           body: JSON.stringify({
             name: "August update edited",
             segmentId: segment.data.id,
-            templateVersionId: templateUpdate.data.versionId,
+            templateId,
             topicId: null,
             scheduledAt: null,
           }),
@@ -436,7 +425,7 @@ describe("Kaenma Worker", () => {
     expect(archivedBroadcasts.data).toEqual([expect.objectContaining({ id: broadcast.data.id })]);
     expect(
       (
-        await call(`/email-templates/${template.data.id}/archive`, {
+        await call(`/email-templates/${templateId}/archive`, {
           method: "POST",
         })
       ).status,

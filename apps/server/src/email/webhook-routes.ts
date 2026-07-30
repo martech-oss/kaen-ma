@@ -8,8 +8,7 @@ import { recordContactEvent } from "../events/service";
 import { apiError } from "../middleware";
 
 export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
-  api.post("/api/webhooks/resend/:workspaceId", async (context) => {
-    const workspaceId = context.req.param("workspaceId");
+  api.post("/api/webhooks/resend", async (context) => {
     const webhookSecret = context.env.RESEND_WEBHOOK_SECRET;
     if (!webhookSecret) {
       return apiError(
@@ -21,7 +20,7 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
     }
     const rawBody = await context.req.text();
     const adapter = new ResendEmailAdapter({
-      apiKey: context.env.RESEND_API_KEY ?? "",
+      apiKey: context.env.RESEND_SEND_API_KEY ?? "",
       webhookSecret,
     });
     const verification = await adapter.verifyWebhook(context.req.raw, rawBody);
@@ -34,8 +33,9 @@ export function registerEmailWebhookRoutes(api: Hono<AppEnvironment>): void {
     } catch {
       return apiError(context, 400, "invalid_json", "JSONが不正です");
     }
-    const events = adapter.normalizeEvents(body, workspaceId, verification.eventId);
+    const events = adapter.normalizeEvents(body, verification.eventId);
     for (const event of events) {
+      const workspaceId = event.workspaceId;
       const status =
         event.type === "delivered"
           ? "delivered"

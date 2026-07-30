@@ -22,45 +22,33 @@ export const emailTemplates = sqliteTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text().notNull(),
     purpose: text().notNull(),
-    status: text().default("draft").notNull(),
-    currentVersionId: text("current_version_id"),
+    resendTemplateId: text("resend_template_id").notNull(),
+    resendAlias: text("resend_alias"),
+    subject: text(),
+    remoteStatus: text("remote_status").default("draft").notNull(),
+    remoteCurrentVersionId: text("remote_current_version_id").notNull(),
+    hasUnpublishedVersions: integer("has_unpublished_versions", { mode: "boolean" })
+      .default(false)
+      .notNull(),
+    variables: text().default("[]").notNull(),
+    publishedAt: text("published_at"),
+    lastSyncedAt: text("last_synced_at").notNull(),
+    syncError: text("sync_error"),
+    archivedAt: text("archived_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    index("email_templates_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
+    index("email_templates_workspace_archived_updated_idx").on(
+      table.workspaceId,
+      table.archivedAt,
+      table.updatedAt,
+    ),
+    uniqueIndex("email_templates_resend_template_unique").on(table.resendTemplateId),
     check("email_templates_purpose_check", sql`${table.purpose} IN ('transactional', 'marketing')`),
     check(
-      "email_templates_status_check",
-      sql`${table.status} IN ('draft', 'published', 'archived')`,
-    ),
-  ],
-);
-
-export const emailTemplateVersions = sqliteTable(
-  "email_template_versions",
-  {
-    id: text().primaryKey().notNull(),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    templateId: text("template_id")
-      .notNull()
-      .references(() => emailTemplates.id, { onDelete: "cascade" }),
-    version: integer().notNull(),
-    subject: text().notNull(),
-    previewText: text("preview_text").default("").notNull(),
-    contentDocument: text("content_document").notNull(),
-    html: text(),
-    text: text(),
-    publishedAt: text("published_at"),
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [
-    uniqueIndex("email_versions_workspace_template_version_unique").on(
-      table.workspaceId,
-      table.templateId,
-      table.version,
+      "email_templates_remote_status_check",
+      sql`${table.remoteStatus} IN ('draft', 'published')`,
     ),
   ],
 );
@@ -253,9 +241,9 @@ export const broadcasts = sqliteTable(
     segmentId: text("segment_id")
       .notNull()
       .references(() => segments.id, { onDelete: "restrict" }),
-    templateVersionId: text("template_version_id")
+    templateId: text("template_id")
       .notNull()
-      .references(() => emailTemplateVersions.id, { onDelete: "restrict" }),
+      .references(() => emailTemplates.id, { onDelete: "restrict" }),
     topicId: text("topic_id").references(() => subscriptionTopics.id, { onDelete: "restrict" }),
     status: text().default("draft").notNull(),
     scheduledAt: text("scheduled_at"),
@@ -320,7 +308,7 @@ export const deliveries = sqliteTable(
     provider: text().notNull(),
     recipient: text().notNull(),
     topicId: text("topic_id").references(() => subscriptionTopics.id, { onDelete: "set null" }),
-    templateVersionId: text("template_version_id").references(() => emailTemplateVersions.id, {
+    templateId: text("template_id").references(() => emailTemplates.id, {
       onDelete: "set null",
     }),
     idempotencyKey: text("idempotency_key").notNull(),
@@ -350,10 +338,7 @@ export const deliveries = sqliteTable(
     ),
     check("deliveries_channel_check", sql`${table.channel} IN ('email', 'webhook')`),
     check("deliveries_purpose_check", sql`${table.purpose} IN ('transactional', 'marketing')`),
-    check(
-      "deliveries_provider_check",
-      sql`${table.provider} IN ('cloudflare', 'postmark', 'resend', 'webhook')`,
-    ),
+    check("deliveries_provider_check", sql`${table.provider} IN ('resend', 'webhook')`),
     check(
       "deliveries_status_check",
       sql`${table.status} IN ('queued', 'sending', 'accepted', 'delivered', 'failed', 'suppressed', 'cancelled')`,

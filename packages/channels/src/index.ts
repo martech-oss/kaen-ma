@@ -1,18 +1,32 @@
+import { Resend, type ErrorResponse } from "resend";
+
 import type { DeliveryEvent, MessagePurpose } from "@kaenma/shared";
 
-export interface ChannelMessage {
+export interface HostedEmailMessage {
+  kind: "email";
   idempotencyKey: string;
-  workspaceId: string;
-  deliveryId: string;
+  workspaceId?: string;
+  deliveryId?: string;
   purpose: MessagePurpose;
   to: string;
   from: { email: string; name?: string };
   replyTo?: string;
-  subject: string;
-  html: string;
-  text: string;
+  template: {
+    id: string;
+    variables?: Record<string, string | number>;
+  };
   metadata?: Record<string, string>;
 }
+
+export interface WebhookChannelMessage {
+  kind: "webhook";
+  idempotencyKey: string;
+  workspaceId: string;
+  deliveryId: string;
+  payload: Record<string, unknown>;
+}
+
+export type ChannelMessage = HostedEmailMessage | WebhookChannelMessage;
 
 export interface ChannelSendResult {
   providerMessageId: string;
@@ -30,100 +44,70 @@ export interface WebhookVerification {
 }
 
 export interface ChannelAdapter {
-  readonly provider: "cloudflare" | "resend" | "webhook";
+  readonly provider: "resend" | "webhook";
   send(message: ChannelMessage): Promise<ChannelSendResult>;
   verifyWebhook(request: Request, rawBody: string): Promise<WebhookVerification>;
-  normalizeEvents(payload: unknown, workspaceId: string, eventId?: string): DeliveryEvent[];
+  normalizeEvents(payload: unknown, eventId?: string): DeliveryEvent[];
   healthCheck(): Promise<ChannelHealth>;
-}
-
-interface CloudflareEmailBinding {
-  send(message: {
-    from: string | { email: string; name: string };
-    to: string;
-    subject: string;
-    replyTo?: string;
-    headers?: Record<string, string>;
-    text: string;
-    html: string;
-  }): Promise<{ messageId: string }>;
-}
-
-export class CloudflareEmailAdapter implements ChannelAdapter {
-  public readonly provider = "cloudflare" as const;
-
-  public constructor(private readonly binding: CloudflareEmailBinding) {}
-
-  public async send(message: ChannelMessage): Promise<ChannelSendResult> {
-    if (message.purpose !== "transactional") {
-      throw new PermanentChannelError(
-        "Cloudflare Email Service cannot be used for marketing messages",
-      );
-    }
-    const result = await this.binding.send({
-      from: message.from.name
-        ? { email: message.from.email, name: message.from.name }
-        : message.from.email,
-      to: message.to,
-      subject: message.subject,
-      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
-      headers: {
-        "X-Kaenma-Delivery-ID": message.deliveryId,
-        "X-Kaenma-Idempotency-Key": message.idempotencyKey,
-      },
-      text: message.text,
-      html: message.html,
-    });
-    return { providerMessageId: result.messageId, acceptedAt: new Date().toISOString() };
-  }
-
-  public async verifyWebhook(): Promise<WebhookVerification> {
-    return { valid: false };
-  }
-
-  public normalizeEvents(): DeliveryEvent[] {
-    return [];
-  }
-
-  public async healthCheck(): Promise<ChannelHealth> {
-    return { healthy: true, detail: "Cloudflare Email binding is configured" };
-  }
 }
 
 export interface ResendAdapterOptions {
   apiKey: string;
   webhookSecret?: string;
-  fetcher?: typeof fetch;
+  client?: Resend;
+}
+
+export interface ResendTemplateVariable {
+  key: string;
+  type: "string" | "number";
+  fallbackValue: string | number | null;
+}
+
+export interface ResendHostedTemplate {
+  id: string;
+  alias: string | null;
+  name: string;
+  subject: string | null;
+  status: "draft" | "published";
+  currentVersionId: string;
+  hasUnpublishedVersions: boolean;
+  publishedAt: string | null;
+  updatedAt: string;
+  variables: ResendTemplateVariable[];
+}
+
+export interface ResendTemplateAdapterOptions {
+  apiKey: string;
+  client?: Resend;
 }
 
 export class ResendEmailAdapter implements ChannelAdapter {
   public readonly provider = "resend" as const;
-  private readonly fetcher: typeof fetch;
+  private readonly client: Resend;
 
   public constructor(private readonly options: ResendAdapterOptions) {
-    this.fetcher = options.fetcher ?? fetch;
+    this.client = options.client ?? new Resend(options.apiKey, { userAgent: "kaenma/0.1.0" });
   }
 
   public async send(message: ChannelMessage): Promise<ChannelSendResult> {
-    if (message.purpose !== "marketing") {
-      throw new PermanentChannelError("Resend adapter only accepts marketing messages");
+    if (message.kind !== "email") {
+      throw new PermanentChannelError("Resend adapter only accepts email messages");
     }
     const unsubscribeUrl = message.metadata?.["unsubscribeUrl"];
-    const response = await this.fetcher("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${this.options.apiKey}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key": message.idempotencyKey.slice(0, 256),
-      },
-      body: JSON.stringify({
+    const tags =
+      message.deliveryId && message.workspaceId
+        ? [
+            { name: "kaenma_delivery_id", value: message.deliveryId },
+            { name: "kaenma_workspace_id", value: message.workspaceId },
+          ]
+        : undefined;
+    const result = await this.client.emails.send(
+      {
         from: formatAddress(message.from),
         to: [message.to],
-        subject: message.subject,
-        html: message.html,
-        text: message.text,
-        ...(message.replyTo ? { reply_to: message.replyTo } : {}),
-        ...(unsubscribeUrl
+        template: message.template,
+        ...(message.replyTo ? { replyTo: message.replyTo } : {}),
+        ...(unsubscribeUrl && message.purpose === "marketing"
           ? {
               headers: {
                 "List-Unsubscribe": `<${unsubscribeUrl}>`,
@@ -131,25 +115,16 @@ export class ResendEmailAdapter implements ChannelAdapter {
               },
             }
           : {}),
-        tags: [
-          { name: "kaenma_delivery_id", value: message.deliveryId },
-          { name: "kaenma_workspace_id", value: message.workspaceId },
-        ],
-      }),
-    });
-    if (!response.ok) {
-      const detail = await response.text();
-      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-        throw new PermanentChannelError(`Resend rejected the message: ${detail}`);
-      }
-      throw new TransientChannelError(`Resend is temporarily unavailable: ${detail}`);
-    }
-    const payload = (await response.json()) as { id?: string };
-    if (!payload.id) {
+        ...(tags ? { tags } : {}),
+      },
+      { idempotencyKey: message.idempotencyKey.slice(0, 256) },
+    );
+    if (result.error) throwResendError(result.error);
+    if (!result.data?.id) {
       throw new TransientChannelError("Resend accepted the request without a message ID");
     }
     return {
-      providerMessageId: payload.id,
+      providerMessageId: result.data.id,
       acceptedAt: new Date().toISOString(),
     };
   }
@@ -174,15 +149,17 @@ export class ResendEmailAdapter implements ChannelAdapter {
     };
   }
 
-  public normalizeEvents(payload: unknown, workspaceId: string, eventId?: string): DeliveryEvent[] {
+  public normalizeEvents(payload: unknown, eventId?: string): DeliveryEvent[] {
     if (!isRecord(payload) || !isRecord(payload["data"])) return [];
     const data = payload["data"];
     const tags = isRecord(data["tags"]) ? data["tags"] : {};
     const deliveryId = tags["kaenma_delivery_id"];
+    const workspaceId = tags["kaenma_workspace_id"];
     const messageId = data["email_id"];
     const eventType = payload["type"];
     if (
       typeof deliveryId !== "string" ||
+      typeof workspaceId !== "string" ||
       typeof messageId !== "string" ||
       typeof eventType !== "string"
     ) {
@@ -214,6 +191,36 @@ export class ResendEmailAdapter implements ChannelAdapter {
   }
 }
 
+export class ResendTemplateAdapter {
+  private readonly client: Resend;
+
+  public constructor(options: ResendTemplateAdapterOptions) {
+    this.client = options.client ?? new Resend(options.apiKey, { userAgent: "kaenma/0.1.0" });
+  }
+
+  public async get(identifier: string): Promise<ResendHostedTemplate> {
+    const result = await this.client.templates.get(identifier);
+    if (result.error) throwResendError(result.error);
+    if (!result.data) throw new TransientChannelError("Resend returned an empty template");
+    return {
+      id: result.data.id,
+      alias: result.data.alias,
+      name: result.data.name,
+      subject: result.data.subject,
+      status: result.data.status,
+      currentVersionId: result.data.current_version_id,
+      hasUnpublishedVersions: result.data.has_unpublished_versions,
+      publishedAt: result.data.published_at,
+      updatedAt: result.data.updated_at,
+      variables: (result.data.variables ?? []).map((variable) => ({
+        key: variable.key,
+        type: variable.type,
+        fallbackValue: variable.fallback_value,
+      })),
+    };
+  }
+}
+
 export interface WebhookAdapterOptions {
   url: string;
   secret: string;
@@ -230,13 +237,20 @@ export class OutboundWebhookAdapter implements ChannelAdapter {
   }
 
   public async send(message: ChannelMessage): Promise<ChannelSendResult> {
+    if (message.kind !== "webhook") {
+      throw new PermanentChannelError("Webhook adapter only accepts webhook messages");
+    }
     const eventId = crypto.randomUUID();
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const body = JSON.stringify({
       id: eventId,
       type: "message.requested",
       occurredAt: new Date().toISOString(),
-      data: message,
+      data: {
+        workspaceId: message.workspaceId,
+        deliveryId: message.deliveryId,
+        ...message.payload,
+      },
     });
     const signature = await hmacHex(this.options.secret, `${timestamp}.${body}`);
     const response = await this.fetcher(this.options.url, {
@@ -274,12 +288,13 @@ export class OutboundWebhookAdapter implements ChannelAdapter {
     return { valid: timingSafeEqual(signature, expected), eventId };
   }
 
-  public normalizeEvents(payload: unknown, workspaceId: string): DeliveryEvent[] {
+  public normalizeEvents(payload: unknown): DeliveryEvent[] {
     if (!isRecord(payload) || !isRecord(payload["data"])) return [];
     const data = payload["data"];
     if (
       typeof payload["id"] !== "string" ||
       typeof payload["type"] !== "string" ||
+      typeof data["workspaceId"] !== "string" ||
       typeof data["deliveryId"] !== "string"
     ) {
       return [];
@@ -289,7 +304,7 @@ export class OutboundWebhookAdapter implements ChannelAdapter {
     return [
       {
         id: payload["id"],
-        workspaceId,
+        workspaceId: data["workspaceId"],
         deliveryId: data["deliveryId"],
         provider: "webhook",
         type: normalized,
@@ -354,8 +369,22 @@ export function assertSafeWebhookUrl(value: string): void {
   }
 }
 
-function formatAddress(from: ChannelMessage["from"]): string {
+function formatAddress(from: HostedEmailMessage["from"]): string {
   return from.name ? `${from.name.replaceAll(/[<>"]/g, "")} <${from.email}>` : from.email;
+}
+
+function throwResendError(error: ErrorResponse): never {
+  const detail = `${error.name}: ${error.message}`;
+  if (
+    error.statusCode !== null &&
+    error.statusCode >= 400 &&
+    error.statusCode < 500 &&
+    error.statusCode !== 408 &&
+    error.statusCode !== 429
+  ) {
+    throw new PermanentChannelError(`Resend rejected the request: ${detail}`);
+  }
+  throw new TransientChannelError(`Resend is temporarily unavailable: ${detail}`);
 }
 
 function normalizeResendType(value: string): DeliveryEvent["type"] | null {

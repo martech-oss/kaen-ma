@@ -131,9 +131,6 @@ export const providerConfigs = sqliteTable(
       table.provider,
       table.name,
     ),
-    check(
-      "provider_configs_provider_check",
-      sql`${table.provider} IN ('cloudflare', 'postmark', 'resend', 'webhook')`,
-    ),
+    check("provider_configs_provider_check", sql`${table.provider} IN ('resend', 'webhook')`),
   ],
 );

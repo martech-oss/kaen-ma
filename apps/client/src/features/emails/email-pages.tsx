@@ -2,13 +2,15 @@ import {
   Archive,
   CalendarClock,
   Copy,
+  ExternalLink,
   FileText,
   Pencil,
   Plus,
+  RefreshCw,
   Send,
   UsersRound,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useCallback, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -55,7 +57,6 @@ import {
   type EmailArchiveData,
   type EmailCampaignRow,
   type EmailCampaignsData,
-  type EmailTemplateDetail,
   type EmailTemplateRow,
   type EmailTemplatesData,
   type EmailVariablesData,
@@ -65,7 +66,6 @@ import {
 } from "@/features/emails/email-api";
 import { getFormString } from "@/lib/utils";
 import { rpc } from "@/rpc";
-import type { ContentDocument, EmailBlock } from "@kaenma/shared";
 
 type EmailSection = "campaigns" | "templates" | "variables" | "archive";
 
@@ -127,7 +127,6 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [showVariableForm, setShowVariableForm] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<EmailCampaignRow | null>(null);
-  const [editingTemplate, setEditingTemplate] = useState<EmailTemplateDetail | null>(null);
   const [editingVariable, setEditingVariable] = useState<MessageVariableRow | null>(null);
 
   const load = useCallback(async () => {
@@ -159,16 +158,6 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
     }
   }, [view]);
 
-  async function editTemplate(template: EmailTemplateRow): Promise<void> {
-    try {
-      const response = await rpc<EmailTemplateDetail>(`/email-templates/${template.id}`);
-      setEditingTemplate(response.data);
-      setShowTemplateForm(true);
-    } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "テンプレートを読み込めませんでした");
-    }
-  }
-
   const pageTitle = {
     campaigns: "メールキャンペーン",
     templates: "メールテンプレート",
@@ -188,14 +177,9 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
         メールキャンペーン
       </Button>
     ) : view === "templates" ? (
-      <Button
-        onClick={() => {
-          setEditingTemplate(null);
-          setShowTemplateForm(true);
-        }}
-      >
+      <Button onClick={() => setShowTemplateForm(true)}>
         <Plus data-icon="inline-start" />
-        テンプレート
+        Resend Template
       </Button>
     ) : view === "variables" ? (
       <Button
@@ -230,18 +214,14 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
 
       {view === "templates" ? (
         <>
-          <TemplateTable
-            items={templates}
-            loading={loading}
-            onEdit={(template) => void editTemplate(template)}
-            onChanged={load}
-          />
+          <TemplateTable items={templates} loading={loading} onChanged={load} />
+          <VariableReference variables={variables} />
         </>
       ) : null}
 
       {view === "variables" ? (
         <>
-          <VariableReference />
+          <VariableReference variables={variables} />
           <VariableTable
             items={variables}
             loading={loading}
@@ -272,7 +252,9 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
         <CampaignForm
           campaign={editingCampaign}
           segments={segments}
-          templates={templates.filter((template) => template.purpose === "marketing")}
+          templates={templates.filter(
+            (template) => template.purpose === "marketing" && template.sendable,
+          )}
           topics={topics}
           onSaved={async () => {
             setShowCampaignForm(false);
@@ -285,16 +267,13 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
       <AppDialog
         open={showTemplateForm}
         onOpenChange={setShowTemplateForm}
-        title={editingTemplate ? "テンプレートを編集" : "テンプレートを作成"}
-        description="保存するたびに新しいバージョンが作成されます。"
-        className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
+        title="Resend Templateを登録"
+        description="Resendで作成・公開したテンプレートをKaenmaから利用できるようにします。"
+        className="sm:max-w-xl"
       >
         <TemplateForm
-          template={editingTemplate}
-          variables={variables}
           onSaved={async () => {
             setShowTemplateForm(false);
-            setEditingTemplate(null);
             await load();
           }}
         />
@@ -304,7 +283,7 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
         open={showVariableForm}
         onOpenChange={setShowVariableForm}
         title={editingVariable ? "メッセージ変数を編集" : "メッセージ変数を作成"}
-        description="テンプレート内では {{ message.key }} の形式で使用します。"
+        description="Resend Template内では MESSAGE_KEY の形式で登録します。"
       >
         <VariableForm
           variable={editingVariable}
@@ -522,14 +501,24 @@ function CampaignTable({
 function TemplateTable({
   items,
   loading,
-  onEdit,
   onChanged,
 }: {
   items: EmailTemplateRow[];
   loading: boolean;
-  onEdit: (template: EmailTemplateRow) => void;
   onChanged: () => Promise<void>;
 }): ReactNode {
+  async function sync(template: EmailTemplateRow) {
+    try {
+      await rpc(`/email-templates/${template.id}/sync`, {
+        method: "POST",
+      });
+      toast.success("Resend Templateを同期しました");
+      await onChanged();
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "テンプレートを同期できませんでした");
+    }
+  }
+
   async function archive(template: EmailTemplateRow) {
     try {
       await rpc(`/email-templates/${template.id}/archive`, {
@@ -546,7 +535,7 @@ function TemplateTable({
     return (
       <EmptyState
         title="テンプレートがありません"
-        description="メールキャンペーンで使用するテンプレートを作成してください。"
+        description="Resendで公開したテンプレートを登録してください。"
       />
     );
   }
@@ -558,8 +547,8 @@ function TemplateTable({
             <TableHead>テンプレート</TableHead>
             <TableHead>件名</TableHead>
             <TableHead>用途</TableHead>
-            <TableHead>バージョン</TableHead>
-            <TableHead>更新日</TableHead>
+            <TableHead>Resend</TableHead>
+            <TableHead>同期状態</TableHead>
             <TableHead className="text-right">操作</TableHead>
           </TableRow>
         </TableHeader>
@@ -576,20 +565,49 @@ function TemplateTable({
               ))
             : items.map((template) => (
                 <TableRow key={template.id}>
-                  <TableCell className="font-medium">{template.name}</TableCell>
-                  <TableCell className="max-w-80 truncate">{template.subject}</TableCell>
+                  <TableCell>
+                    <div className="flex min-w-48 flex-col gap-1">
+                      <span className="font-medium">{template.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {template.resend_alias ?? template.resend_template_id}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="max-w-80 truncate">
+                    {template.subject ?? "件名なし"}
+                  </TableCell>
                   <TableCell>
                     <Badge variant="outline">
-                      {template.purpose === "marketing" ? "Marketing · Resend" : "Transactional"}
+                      {template.purpose === "marketing" ? "Marketing" : "Transactional"}
                     </Badge>
                   </TableCell>
-                  <TableCell>v{template.version}</TableCell>
-                  <TableCell>{formatDate(template.updated_at)}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge
+                        variant={template.remote_status === "published" ? "secondary" : "outline"}
+                      >
+                        {template.remote_status === "published" ? "公開済み" : "下書き"}
+                      </Badge>
+                      {template.has_unpublished_versions ? (
+                        <Badge variant="outline">未公開の変更あり</Badge>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex min-w-44 flex-col gap-1">
+                      <span>{formatDate(template.last_synced_at)}</span>
+                      {template.sync_error ? (
+                        <span className="text-xs text-destructive">{template.sync_error}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">送信可能</span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => onEdit(template)}>
-                        <Pencil data-icon="inline-start" />
-                        編集
+                      <Button size="sm" variant="outline" onClick={() => void sync(template)}>
+                        <RefreshCw data-icon="inline-start" />
+                        同期
                       </Button>
                       <ArchiveConfirm
                         label={template.name}
@@ -605,21 +623,28 @@ function TemplateTable({
   );
 }
 
-function VariableReference(): ReactNode {
-  const variables = [
-    ["{{ contact.first_name }}", "連絡先の名"],
-    ["{{ contact.last_name }}", "連絡先の姓"],
-    ["{{ contact.email }}", "メールアドレス"],
-    ["{{ message.key }}", "共有メッセージ変数"],
+function VariableReference({ variables }: { variables: MessageVariableRow[] }): ReactNode {
+  const builtInVariables = [
+    ["{{{CONTACT_FIRST_NAME}}}", "連絡先の名"],
+    ["{{{CONTACT_LAST_NAME}}}", "連絡先の姓"],
+    ["{{{CONTACT_EMAIL}}}", "メールアドレス"],
+    ["{{{KAENMA_UNSUBSCRIBE_URL}}}", "配信停止URL（Marketing必須）"],
+    ["{{{CONTACT_CUSTOM_KEY}}}", "カスタム属性（KEYを置換）"],
+    ...variables.map(
+      (variable) =>
+        [messageVariableToken(variable.key), `メッセージ変数: ${variable.name}`] as const,
+    ),
   ];
   return (
     <Card>
       <CardHeader>
-        <CardTitle>利用できる変数</CardTitle>
-        <CardDescription>件名、本文、CTAラベル・URLに差し込めます。</CardDescription>
+        <CardTitle>Resend Template変数</CardTitle>
+        <CardDescription>
+          Resend側で同名の変数を登録し、テンプレート内で利用してください。
+        </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
-        {variables.map(([token, label]) => (
+        {builtInVariables.map(([token, label]) => (
           <div
             key={token}
             className="flex items-center justify-between gap-3 rounded-lg border p-3"
@@ -628,7 +653,7 @@ function VariableReference(): ReactNode {
               <code className="text-sm">{token}</code>
               <p className="text-xs text-muted-foreground">{label}</p>
             </div>
-            <CopyButton value={token!} />
+            <CopyButton value={token} />
           </div>
         ))}
       </CardContent>
@@ -690,7 +715,7 @@ function VariableTable({
                 </TableRow>
               ))
             : items.map((variable) => {
-                const token = `{{ message.${variable.key} }}`;
+                const token = messageVariableToken(variable.key);
                 return (
                   <TableRow key={variable.id}>
                     <TableCell>
@@ -796,9 +821,13 @@ function ArchivedResources({
             >
               <div className="min-w-0">
                 <p className="truncate font-medium">{template.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{template.subject}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {template.subject ?? "件名なし"}
+                </p>
               </div>
-              <Badge variant="secondary">v{template.version}</Badge>
+              <Badge variant="secondary">
+                {template.remote_status === "published" ? "公開済み" : "下書き"}
+              </Badge>
             </div>
           ))}
         </CardContent>
@@ -834,7 +863,7 @@ function CampaignForm({
         body: JSON.stringify({
           name: form.get("name"),
           segmentId: form.get("segmentId"),
-          templateVersionId: form.get("templateVersionId"),
+          templateId: form.get("templateId"),
           topicId: optionalFormValue(form.get("topicId")),
           scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
         }),
@@ -877,14 +906,14 @@ function CampaignForm({
         </FormNativeSelect>
         <FormNativeSelect
           label="メールテンプレート"
-          name="templateVersionId"
-          defaultValue={campaign?.template_version_id}
+          name="templateId"
+          defaultValue={campaign?.template_id}
           required
         >
           <FormSelectOption value="">選択してください</FormSelectOption>
           {templates.map((template) => (
-            <FormSelectOption key={template.current_version_id} value={template.current_version_id}>
-              {template.name} · v{template.version}
+            <FormSelectOption key={template.id} value={template.id}>
+              {template.name}
             </FormSelectOption>
           ))}
         </FormNativeSelect>
@@ -917,65 +946,26 @@ function CampaignForm({
   );
 }
 
-function TemplateForm({
-  template,
-  variables,
-  onSaved,
-}: {
-  template: EmailTemplateDetail | null;
-  variables: MessageVariableRow[];
-  onSaved: () => Promise<void>;
-}): ReactNode {
+function TemplateForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const initial = useMemo(() => extractTemplateFields(template), [template]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setError("");
     const form = new FormData(event.currentTarget);
-    const blocks: EmailBlock[] = [
-      {
-        id: crypto.randomUUID(),
-        type: "text",
-        html: getFormString(form, "body"),
-      },
-    ];
-    const ctaLabel = getFormString(form, "ctaLabel").trim();
-    const ctaUrl = getFormString(form, "ctaUrl").trim();
-    if (ctaLabel && ctaUrl) {
-      blocks.push({
-        id: crypto.randomUUID(),
-        type: "button",
-        label: ctaLabel,
-        href: ctaUrl,
-        color: "#171717",
-      });
-    }
-    const content: ContentDocument = {
-      schemaVersion: 1,
-      backgroundColor: "#f4f5f7",
-      contentColor: "#ffffff",
-      width: 600,
-      blocks,
-    };
     try {
-      await rpc(template ? `/email-templates/${template.id}` : "/email-templates", {
-        method: template ? "PUT" : "POST",
+      await rpc("/email-templates", {
+        method: "POST",
         body: JSON.stringify({
-          name: form.get("name"),
+          resendTemplateId: form.get("resendTemplateId"),
           purpose: form.get("purpose"),
-          subject: form.get("subject"),
-          previewText: form.get("previewText"),
-          content,
         }),
       });
-      toast.success(
-        template ? "テンプレートの新しいバージョンを保存しました" : "テンプレートを作成しました",
-      );
+      toast.success("Resend Templateを登録しました");
       await onSaved();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "テンプレートを保存できませんでした");
+      setError(caught instanceof Error ? caught.message : "Resend Templateを登録できませんでした");
     } finally {
       setBusy(false);
     }
@@ -984,77 +974,34 @@ function TemplateForm({
     <form onSubmit={(event) => void submit(event)}>
       <FieldGroup>
         {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <FormInput label="テンプレート名" name="name" defaultValue={template?.name} required />
-        <FormNativeSelect
-          label="用途"
-          name="purpose"
-          defaultValue={template?.purpose ?? "marketing"}
-        >
+        <FormInput
+          label="Resend Template IDまたはAlias"
+          name="resendTemplateId"
+          placeholder="welcome-email"
+          description="ResendのTemplates画面で公開済みのTemplate IDまたはAliasを入力します。"
+          required
+        />
+        <FormNativeSelect label="用途" name="purpose" defaultValue="marketing">
           <FormSelectOption value="marketing">Marketing（Resend）</FormSelectOption>
-          <FormSelectOption value="transactional">Transactional（Cloudflare）</FormSelectOption>
+          <FormSelectOption value="transactional">Transactional（Resend）</FormSelectOption>
         </FormNativeSelect>
-        <FormInput
-          label="件名"
-          name="subject"
-          defaultValue={template?.subject}
-          placeholder="{{ contact.first_name }}さんへのお知らせ"
-          required
-        />
-        <FormInput
-          label="プレビューテキスト"
-          name="previewText"
-          defaultValue={template?.preview_text}
-          maxLength={500}
-        />
-        <FormTextarea
-          label="本文"
-          name="body"
-          defaultValue={initial.body}
-          rows={10}
-          description="p、strong、em、ul、ol、li、h1〜h3、blockquote、brを使用できます。"
-          required
-        />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput
-            label="CTAラベル"
-            name="ctaLabel"
-            defaultValue={initial.ctaLabel}
-            placeholder="詳しく見る"
-          />
-          <FormInput
-            label="CTA URL"
-            name="ctaUrl"
-            defaultValue={initial.ctaUrl}
-            placeholder="https://example.com"
-          />
-        </div>
-        {variables.length > 0 ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>メッセージ変数</CardTitle>
-              <CardDescription>クリックしてクリップボードへコピーできます。</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              {variables.map((variable) => {
-                const token = `{{ message.${variable.key} }}`;
-                return (
-                  <Button
-                    key={variable.id}
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void copyValue(token)}
-                  >
-                    <Copy data-icon="inline-start" />
-                    {variable.name}
-                  </Button>
-                );
-              })}
-            </CardContent>
-          </Card>
-        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          render={
+            <a
+              href="https://resend.com/templates"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Resend Templatesを開く"
+            />
+          }
+        >
+          <ExternalLink data-icon="inline-start" />
+          Resend Templatesを開く
+        </Button>
         <LoadingButton busy={busy} type="submit" className="w-full">
-          {template ? `v${template.version + 1}として保存` : "テンプレートを作成"}
+          テンプレートを登録
         </LoadingButton>
       </FieldGroup>
     </form>
@@ -1195,25 +1142,9 @@ async function copyValue(value: string): Promise<void> {
   toast.success("クリップボードにコピーしました");
 }
 
-function extractTemplateFields(template: EmailTemplateDetail | null): {
-  body: string;
-  ctaLabel: string;
-  ctaUrl: string;
-} {
-  const blocks = template?.content_document.blocks ?? [];
-  const text = blocks.find(
-    (block): block is Extract<EmailBlock, { type: "text" }> => block.type === "text",
-  );
-  const button = blocks.find(
-    (block): block is Extract<EmailBlock, { type: "button" }> => block.type === "button",
-  );
-  return {
-    body:
-      text?.html ??
-      "<h1>こんにちは、{{ contact.first_name }}さん</h1><p>最新のお知らせをお届けします。</p>",
-    ctaLabel: button?.label ?? "",
-    ctaUrl: button?.href ?? "",
-  };
+function messageVariableToken(key: string): string {
+  const normalized = key.replaceAll(/[^A-Za-z0-9]+/g, "_").toUpperCase();
+  return `{{{MESSAGE_${normalized}}}}`;
 }
 
 function optionalFormValue(value: FormDataEntryValue | null): string | null {

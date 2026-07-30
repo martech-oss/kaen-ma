@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth/minimal";
 import { organization, twoFactor } from "better-auth/plugins";
 import { adminAc, memberAc, ownerAc } from "better-auth/plugins/organization/access";
 
+import { PermanentChannelError, ResendEmailAdapter } from "@kaenma/channels";
 import { authSchema, createDatabase } from "@kaenma/database";
 
 import type { RuntimeEnv } from "../env";
@@ -37,9 +38,8 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
       async sendResetPassword({ user, url }) {
         await sendAuthEmail(env, {
           to: user.email,
-          subject: `${env.APP_NAME} パスワード再設定`,
-          text: `次のURLからパスワードを再設定してください。\n\n${url}`,
-          html: `<p>次のリンクからパスワードを再設定してください。</p><p><a href="${escapeHtml(url)}">パスワードを再設定</a></p>`,
+          templateId: env.RESEND_TEMPLATE_PASSWORD_RESET,
+          variables: { APP_NAME: env.APP_NAME, ACTION_URL: url },
         });
       },
     },
@@ -49,9 +49,8 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
       async sendVerificationEmail({ user, url }) {
         await sendAuthEmail(env, {
           to: user.email,
-          subject: `${env.APP_NAME} メールアドレス確認`,
-          text: `次のURLからメールアドレスを確認してください。\n\n${url}`,
-          html: `<p>次のリンクからメールアドレスを確認してください。</p><p><a href="${escapeHtml(url)}">メールアドレスを確認</a></p>`,
+          templateId: env.RESEND_TEMPLATE_EMAIL_VERIFICATION,
+          variables: { APP_NAME: env.APP_NAME, ACTION_URL: url },
         });
       },
     },
@@ -75,9 +74,13 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
           const url = `${baseURL}/accept-invitation?id=${encodeURIComponent(data.id)}`;
           await sendAuthEmail(env, {
             to: data.email,
-            subject: `${data.organization.name} への招待`,
-            text: `${data.inviter.user.name}さんから招待されました。\n\n${url}`,
-            html: `<p>${escapeHtml(data.inviter.user.name)}さんから${escapeHtml(data.organization.name)}へ招待されました。</p><p><a href="${escapeHtml(url)}">招待を確認</a></p>`,
+            templateId: env.RESEND_TEMPLATE_ORGANIZATION_INVITATION,
+            variables: {
+              APP_NAME: env.APP_NAME,
+              ACTION_URL: url,
+              INVITER_NAME: data.inviter.user.name,
+              ORGANIZATION_NAME: data.organization.name,
+            },
           });
         },
       }),
@@ -121,22 +124,42 @@ export function resolveAuthBaseURL(
 
 async function sendAuthEmail(
   env: RuntimeEnv,
-  input: { to: string; subject: string; text: string; html: string },
+  input: {
+    to: string;
+    templateId: string;
+    variables: Record<string, string | number>;
+  },
 ): Promise<void> {
-  await env.EMAIL.send({
-    from: { email: env.TRANSACTIONAL_FROM_EMAIL, name: env.TRANSACTIONAL_FROM_NAME },
+  if (!env.RESEND_SEND_API_KEY) {
+    throw new PermanentChannelError("RESEND_SEND_API_KEY is not configured");
+  }
+  const adapter = new ResendEmailAdapter({ apiKey: env.RESEND_SEND_API_KEY });
+  await adapter.send({
+    kind: "email",
+    idempotencyKey: `auth:${input.templateId}:${await authEmailKey(input.to, input.variables)}`,
+    purpose: "transactional",
     to: input.to,
-    subject: input.subject,
-    text: input.text,
-    html: input.html,
+    from: {
+      email: env.TRANSACTIONAL_FROM_EMAIL,
+      name: env.TRANSACTIONAL_FROM_NAME,
+    },
+    template: {
+      id: input.templateId,
+      variables: input.variables,
+    },
   });
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+async function authEmailKey(
+  recipient: string,
+  variables: Record<string, string | number>,
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify([recipient, variables])),
+  );
+  return [...new Uint8Array(digest)]
+    .slice(0, 16)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }

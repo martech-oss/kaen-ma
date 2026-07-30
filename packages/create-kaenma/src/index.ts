@@ -132,12 +132,19 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
   if (!isCancel(turnstile) && turnstile) {
     await putSecret(projectDirectory, "TURNSTILE_SECRET", String(turnstile));
   }
-  const resendApiKey = await password({
-    message: "Resend API key (optional)",
+  const resendSendApiKey = await password({
+    message: "Resend send API key (optional)",
     mask: "•",
   });
-  if (!isCancel(resendApiKey) && resendApiKey) {
-    await putSecret(projectDirectory, "RESEND_API_KEY", String(resendApiKey));
+  if (!isCancel(resendSendApiKey) && resendSendApiKey) {
+    await putSecret(projectDirectory, "RESEND_SEND_API_KEY", String(resendSendApiKey));
+  }
+  const resendManagementApiKey = await password({
+    message: "Resend template management API key (optional)",
+    mask: "•",
+  });
+  if (!isCancel(resendManagementApiKey) && resendManagementApiKey) {
+    await putSecret(projectDirectory, "RESEND_MANAGEMENT_API_KEY", String(resendManagementApiKey));
   }
   const resendWebhookSecret = await password({
     message: "Resend webhook signing secret (optional)",
@@ -147,7 +154,13 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
     await putSecret(projectDirectory, "RESEND_WEBHOOK_SECRET", String(resendWebhookSecret));
   }
   const progress = spinner();
-  progress.start("Applying migrations and deploying");
+  progress.start("Syncing templates, applying migrations, and deploying");
+  if (!isCancel(resendManagementApiKey) && resendManagementApiKey) {
+    await execa("pnpm", ["--filter", "@kaenma/email-templates", "resend:sync"], {
+      cwd: projectDirectory,
+      env: { RESEND_MANAGEMENT_API_KEY: String(resendManagementApiKey) },
+    });
+  }
   await execa(
     "pnpm",
     [

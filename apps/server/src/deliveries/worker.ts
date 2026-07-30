@@ -1,5 +1,4 @@
 import {
-  CloudflareEmailAdapter,
   OutboundWebhookAdapter,
   PermanentChannelError,
   ResendEmailAdapter,
@@ -8,14 +7,14 @@ import {
 } from "@kaenma/channels";
 import { evaluateSendEligibility, retryDelaySeconds } from "@kaenma/core";
 import { createDatabase, uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import { renderContent, renderSubject } from "@kaenma/email-renderer";
-import { contentDocumentSchema, type CampaignNode } from "@kaenma/shared";
+import { type CampaignNode } from "@kaenma/shared";
 
 import { type CampaignJobRow } from "../campaigns/worker";
 import { createSignedToken, decryptCredentials } from "../crypto";
 import { buildReplyAddress } from "../email/address";
 import { type RuntimeEnv } from "../env";
 import { safeRecord } from "../runtime/helpers";
+import { parseTemplateVariables, resolveTemplateVariables } from "../templates/resend";
 
 export interface DeliveryRow {
   id: string;
@@ -23,7 +22,7 @@ export interface DeliveryRow {
   contact_id: string | null;
   channel: "email" | "webhook";
   purpose: "transactional" | "marketing";
-  provider: "cloudflare" | "postmark" | "resend" | "webhook";
+  provider: "resend" | "webhook";
   recipient: string;
   topic_id: string | null;
   idempotency_key: string;
@@ -42,14 +41,25 @@ export async function createEmailDelivery(
   if (!job.contact_email) throw new PermanentChannelError("Contact does not have an email");
   const template = await createDatabase(env.DB)
     .prepare(
-      `SELECT subject, content_document FROM email_template_versions
-     WHERE workspace_id = ? AND id = ?`,
+      `SELECT id, purpose, resend_template_id, remote_status, variables, sync_error
+       FROM email_templates
+       WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
     )
-    .bind(job.workspace_id, action.templateVersionId)
-    .first<{ subject: string; content_document: string }>();
-  if (!template) throw new PermanentChannelError("Email template version is missing");
-  const content = contentDocumentSchema.parse(JSON.parse(template.content_document));
+    .bind(job.workspace_id, action.templateId)
+    .first<{
+      id: string;
+      purpose: "marketing" | "transactional";
+      resend_template_id: string;
+      remote_status: "draft" | "published";
+      variables: string;
+      sync_error: string | null;
+    }>();
+  if (!template) throw new PermanentChannelError("Email template is missing");
+  if (template.remote_status !== "published" || template.sync_error) {
+    throw new PermanentChannelError(template.sync_error ?? "Email template is not published");
+  }
   const message = await readMessageVariables(createDatabase(env.DB), job.workspace_id);
+  const customFields = safeRecord(job.custom_fields);
   const contact = {
     email: job.contact_email,
     first_name: job.first_name,
@@ -57,75 +67,59 @@ export async function createEmailDelivery(
     phone: job.phone,
     stage: job.stage,
     score: job.score,
-    ...safeRecord(job.custom_fields),
   };
-  const unsubscribeToken = await createSignedToken(env.TRACKING_SIGNING_SECRET, {
-    workspaceId: job.workspace_id,
-    resourceId: action.topicId ?? "global",
-    contactId: job.recipient_id,
-    expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-    purpose: "unsubscribe",
-  });
+  const unsubscribeToken =
+    template.purpose === "marketing"
+      ? await createSignedToken(env.TRACKING_SIGNING_SECRET, {
+          workspaceId: job.workspace_id,
+          resourceId: action.topicId ?? "global",
+          contactId: job.recipient_id,
+          expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+          purpose: "unsubscribe",
+        })
+      : null;
   const deliveryId = uuidv7();
-  const trackingToken = await createSignedToken(env.TRACKING_SIGNING_SECRET, {
-    workspaceId: job.workspace_id,
-    resourceId: deliveryId,
-    contactId: job.recipient_id,
-    expiresAt: Date.now() + 90 * 24 * 60 * 60 * 1000,
-    purpose: "tracking",
-  });
-  const rendered = renderContent(content, {
+  const unsubscribeUrl = unsubscribeToken ? `${env.APP_URL}/u/${unsubscribeToken}` : undefined;
+  const preferenceUrl = unsubscribeToken
+    ? `${env.APP_URL}/preference/${unsubscribeToken}`
+    : undefined;
+  const variables = resolveTemplateVariables(parseTemplateVariables(template.variables), {
     contact,
-    workspace: {},
+    customFields,
     message,
-    unsubscribeUrl: `${env.APP_URL}/u/${unsubscribeToken}`,
-    preferenceUrl: `${env.APP_URL}/preference/${unsubscribeToken}`,
+    ...(unsubscribeUrl ? { unsubscribeUrl } : {}),
+    ...(preferenceUrl ? { preferenceUrl } : {}),
   });
-  const html = rendered.html.replace(
-    "</body>",
-    `<img src="${env.APP_URL}/t/${trackingToken}" width="1" height="1" alt="" style="display:none"></body>`,
-  );
   const replyTo = await buildReplyAddress(env, job.workspace_id, deliveryId, job.recipient_id);
   const payload: ChannelMessage = {
+    kind: "email",
     idempotencyKey: `${job.idempotency_key}:email`,
     workspaceId: job.workspace_id,
     deliveryId,
-    purpose: action.purpose,
+    purpose: template.purpose,
     to: job.contact_email,
-    from: {
-      email: env.TRANSACTIONAL_FROM_EMAIL,
-      name: env.TRANSACTIONAL_FROM_NAME,
-    },
+    from: senderForPurpose(env, template.purpose),
     replyTo,
-    subject: renderSubject(template.subject, {
-      contact,
-      workspace: {},
-      message,
-    }),
-    html,
-    text: rendered.text,
-    ...(action.purpose === "marketing"
-      ? { metadata: { unsubscribeUrl: `${env.APP_URL}/u/${unsubscribeToken}` } }
-      : {}),
+    template: { id: template.resend_template_id, variables },
+    ...(unsubscribeUrl ? { metadata: { unsubscribeUrl } } : {}),
   };
   const result = await createDatabase(env.DB)
     .prepare(
       `INSERT OR IGNORE INTO deliveries
      (id, workspace_id, contact_id, enrollment_id, channel, purpose, provider,
-      recipient, topic_id, template_version_id, idempotency_key, payload,
+      recipient, topic_id, template_id, idempotency_key, payload,
       status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 'email', ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
+     VALUES (?, ?, ?, ?, 'email', ?, 'resend', ?, ?, ?, ?, ?, 'queued', ?, ?)`,
     )
     .bind(
       deliveryId,
       job.workspace_id,
       job.recipient_id,
       job.enrollment_id,
-      action.purpose,
-      action.provider,
+      template.purpose,
       job.contact_email,
       action.topicId ?? null,
-      action.templateVersionId,
+      template.id,
       payload.idempotencyKey,
       JSON.stringify(payload),
       new Date().toISOString(),
@@ -152,16 +146,11 @@ export async function createWebhookDelivery(
   if (!endpoint) throw new PermanentChannelError("Webhook endpoint is missing");
   const deliveryId = uuidv7();
   const payload: ChannelMessage = {
+    kind: "webhook",
     idempotencyKey: `${job.idempotency_key}:webhook`,
     workspaceId: job.workspace_id,
     deliveryId,
-    purpose: "transactional",
-    to: endpoint.url,
-    from: { email: env.TRANSACTIONAL_FROM_EMAIL, name: env.TRANSACTIONAL_FROM_NAME },
-    subject: "Kaenma campaign event",
-    html: "",
-    text: "",
-    metadata: {
+    payload: {
       contactId: job.recipient_id,
       enrollmentId: job.enrollment_id,
     },
@@ -279,19 +268,13 @@ export async function deliveryAdapter(
   endpointId: string | undefined,
   env: RuntimeEnv,
 ) {
-  if (delivery.provider === "cloudflare") return new CloudflareEmailAdapter(env.EMAIL);
   if (delivery.provider === "resend") {
-    const apiKey = env.RESEND_API_KEY;
+    const apiKey = env.RESEND_SEND_API_KEY;
     if (!apiKey) throw new PermanentChannelError("Resend is not configured");
     return new ResendEmailAdapter({
       apiKey,
       ...(env.RESEND_WEBHOOK_SECRET ? { webhookSecret: env.RESEND_WEBHOOK_SECRET } : {}),
     });
-  }
-  if (delivery.provider === "postmark") {
-    throw new PermanentChannelError(
-      "Legacy Postmark delivery cannot be sent; recreate it with the Resend provider",
-    );
   }
   if (!endpointId) throw new PermanentChannelError("Webhook endpoint is missing");
   const endpoint = await createDatabase(env.DB)
@@ -307,6 +290,15 @@ export async function deliveryAdapter(
     endpoint.encrypted_secret,
   );
   return new OutboundWebhookAdapter({ url: endpoint.url, secret: secret.secret });
+}
+
+export function senderForPurpose(
+  env: RuntimeEnv,
+  purpose: "marketing" | "transactional",
+): { email: string; name?: string } {
+  return purpose === "marketing"
+    ? { email: env.MARKETING_FROM_EMAIL, name: env.MARKETING_FROM_NAME }
+    : { email: env.TRANSACTIONAL_FROM_EMAIL, name: env.TRANSACTIONAL_FROM_NAME };
 }
 
 export async function readConsentGate(delivery: DeliveryRow, env: RuntimeEnv) {

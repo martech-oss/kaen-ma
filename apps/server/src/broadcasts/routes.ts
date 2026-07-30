@@ -10,7 +10,7 @@ import { apiError, requireRole } from "../middleware";
 const broadcastInputSchema = z.object({
   name: z.string().trim().min(1).max(191),
   segmentId: z.string().min(1),
-  templateVersionId: z.string().min(1),
+  templateId: z.string().min(1),
   topicId: z.string().min(1).nullable().optional(),
   scheduledAt: z.iso.datetime().nullable().optional(),
 });
@@ -21,11 +21,11 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
     const result = await context
       .get("database")
       .prepare(
-        `SELECT b.id, b.name, b.segment_id, b.template_version_id, b.topic_id,
+        `SELECT b.id, b.name, b.segment_id, b.template_id, b.topic_id,
               b.status, b.scheduled_at, b.started_at, b.completed_at,
               b.archived_at, b.created_at, b.updated_at,
               s.name AS segment_name, s.member_count,
-              et.name AS template_name, ev.subject,
+              et.name AS template_name, et.subject,
               (SELECT COUNT(*) FROM broadcast_recipients br
                WHERE br.workspace_id = b.workspace_id AND br.broadcast_id = b.id)
                 AS recipient_count,
@@ -37,10 +37,8 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
                  AND d.status = 'delivered') AS delivered_count
        FROM broadcasts b
        JOIN segments s ON s.workspace_id = b.workspace_id AND s.id = b.segment_id
-       JOIN email_template_versions ev
-         ON ev.workspace_id = b.workspace_id AND ev.id = b.template_version_id
        JOIN email_templates et
-         ON et.workspace_id = ev.workspace_id AND et.id = ev.template_id
+         ON et.workspace_id = b.workspace_id AND et.id = b.template_id
        WHERE b.workspace_id = ?
          AND ${archived ? "b.archived_at IS NOT NULL" : "b.archived_at IS NULL"}
        ORDER BY b.updated_at DESC LIMIT 200`,
@@ -54,10 +52,10 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
     const row = await context
       .get("database")
       .prepare(
-        `SELECT b.id, b.name, b.segment_id, b.template_version_id, b.topic_id,
+        `SELECT b.id, b.name, b.segment_id, b.template_id, b.topic_id,
               b.status, b.scheduled_at, b.started_at, b.completed_at,
               b.archived_at, b.created_at, b.updated_at,
-              s.name AS segment_name, et.name AS template_name, ev.subject,
+              s.name AS segment_name, et.name AS template_name, et.subject,
               (SELECT COUNT(*) FROM broadcast_recipients br
                WHERE br.workspace_id = b.workspace_id AND br.broadcast_id = b.id)
                 AS recipient_count,
@@ -69,10 +67,8 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
                  AND d.status = 'delivered') AS delivered_count
        FROM broadcasts b
        JOIN segments s ON s.workspace_id = b.workspace_id AND s.id = b.segment_id
-       JOIN email_template_versions ev
-         ON ev.workspace_id = b.workspace_id AND ev.id = b.template_version_id
        JOIN email_templates et
-         ON et.workspace_id = ev.workspace_id AND et.id = ev.template_id
+         ON et.workspace_id = b.workspace_id AND et.id = b.template_id
        WHERE b.workspace_id = ? AND b.id = ?`,
       )
       .bind(context.get("workspace").workspaceId, context.req.param("id"))
@@ -91,7 +87,7 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
         context.get("database"),
         workspace.workspaceId,
         parsed.data.segmentId,
-        parsed.data.templateVersionId,
+        parsed.data.templateId,
       ))
     ) {
       return apiError(
@@ -107,7 +103,7 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
       .get("database")
       .prepare(
         `INSERT INTO broadcasts
-       (id, workspace_id, name, segment_id, template_version_id, topic_id,
+       (id, workspace_id, name, segment_id, template_id, topic_id,
         status, scheduled_at, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
@@ -116,7 +112,7 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
         workspace.workspaceId,
         parsed.data.name,
         parsed.data.segmentId,
-        parsed.data.templateVersionId,
+        parsed.data.templateId,
         parsed.data.topicId ?? null,
         parsed.data.scheduledAt ? "scheduled" : "draft",
         parsed.data.scheduledAt ?? null,
@@ -136,7 +132,7 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
         context.get("database"),
         workspaceId,
         parsed.data.segmentId,
-        parsed.data.templateVersionId,
+        parsed.data.templateId,
       ))
     ) {
       return apiError(
@@ -151,7 +147,7 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
       .get("database")
       .prepare(
         `UPDATE broadcasts
-       SET name = ?, segment_id = ?, template_version_id = ?, topic_id = ?,
+       SET name = ?, segment_id = ?, template_id = ?, topic_id = ?,
            status = ?, scheduled_at = ?, updated_at = ?
        WHERE workspace_id = ? AND id = ? AND archived_at IS NULL
          AND status IN ('draft', 'scheduled')`,
@@ -159,7 +155,7 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
       .bind(
         parsed.data.name,
         parsed.data.segmentId,
-        parsed.data.templateVersionId,
+        parsed.data.templateId,
         parsed.data.topicId ?? null,
         parsed.data.scheduledAt ? "scheduled" : "draft",
         parsed.data.scheduledAt ?? null,
@@ -180,12 +176,12 @@ export function registerBroadcastRoutes(api: Hono<AppEnvironment>): void {
 
   api.post("/broadcasts/:id/start", requireRole("marketer"), async (context) => {
     const workspace = context.get("workspace");
-    if (!context.env.RESEND_API_KEY) {
+    if (!context.env.RESEND_SEND_API_KEY) {
       return apiError(
         context,
         422,
         "resend_not_configured",
-        "RESEND_API_KEY環境変数が設定されていません",
+        "RESEND_SEND_API_KEY環境変数が設定されていません",
       );
     }
     const now = new Date().toISOString();
@@ -241,19 +237,18 @@ export async function hasValidBroadcastResources(
   database: KaenmaDatabase,
   workspaceId: string,
   segmentId: string,
-  templateVersionId: string,
+  templateId: string,
 ): Promise<boolean> {
   const valid = await database
     .prepare(
       `SELECT s.id
-       FROM segments s JOIN email_template_versions ev
-         ON ev.id = ? AND ev.workspace_id = s.workspace_id
-       JOIN email_templates et
-         ON et.id = ev.template_id AND et.workspace_id = ev.workspace_id
+       FROM segments s JOIN email_templates et
+         ON et.id = ? AND et.workspace_id = s.workspace_id
        WHERE s.workspace_id = ? AND s.id = ? AND et.purpose = 'marketing'
-         AND et.status <> 'archived'`,
+         AND et.archived_at IS NULL AND et.remote_status = 'published'
+         AND et.sync_error IS NULL`,
     )
-    .bind(templateVersionId, workspaceId, segmentId)
+    .bind(templateId, workspaceId, segmentId)
     .first();
   return Boolean(valid);
 }

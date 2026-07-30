@@ -46,11 +46,6 @@
       },
     ],
   },
-  "send_email": [
-    {
-      "name": "EMAIL",
-    },
-  ],
   "triggers": {
     "crons": ["* * * * *", "17 3 * * *"],
   },
@@ -60,6 +55,11 @@
     "ENVIRONMENT": "development",
     "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com",
     "TRANSACTIONAL_FROM_NAME": "Kaenma",
+    "MARKETING_FROM_EMAIL": "news@example.com",
+    "MARKETING_FROM_NAME": "Kaenma",
+    "RESEND_TEMPLATE_PASSWORD_RESET": "kaenma-password-reset",
+    "RESEND_TEMPLATE_EMAIL_VERIFICATION": "kaenma-email-verification",
+    "RESEND_TEMPLATE_ORGANIZATION_INVITATION": "kaenma-organization-invitation",
     "REPLY_DOMAIN": "reply.example.com",
     "RAW_EVENT_RETENTION_DAYS": "90",
   },

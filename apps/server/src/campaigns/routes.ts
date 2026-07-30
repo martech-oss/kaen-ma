@@ -155,6 +155,38 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
     if (validation.length > 0) {
       return apiError(context, 422, "invalid_campaign_graph", "公開できないグラフです", validation);
     }
+    const templateIds = [
+      ...new Set(
+        parsed.data.nodes.flatMap((node) =>
+          node.type === "action" && node.config.action === "send_email"
+            ? [node.config.templateId]
+            : [],
+        ),
+      ),
+    ];
+    if (templateIds.length > 0) {
+      const available = await context
+        .get("database")
+        .prepare(
+          `SELECT id FROM email_templates
+           WHERE workspace_id = ? AND archived_at IS NULL
+             AND remote_status = 'published' AND sync_error IS NULL
+             AND id IN (${templateIds.map(() => "?").join(", ")})`,
+        )
+        .bind(workspace.workspaceId, ...templateIds)
+        .all<{ id: string }>();
+      const availableIds = new Set(available.results.map((template) => template.id));
+      const unavailableIds = templateIds.filter((id) => !availableIds.has(id));
+      if (unavailableIds.length > 0) {
+        return apiError(
+          context,
+          422,
+          "campaign_email_template_unavailable",
+          "公開済みのResend Templateへ同期されていないメールノードがあります",
+          { templateIds: unavailableIds },
+        );
+      }
+    }
     const nextDraftId = uuidv7();
     const now = new Date().toISOString();
     const source = parsed.data.nodes.find((node) => node.type === "source");

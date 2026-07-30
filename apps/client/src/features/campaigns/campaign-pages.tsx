@@ -83,8 +83,8 @@ export interface EmailTemplateOption {
   id: string;
   name: string;
   purpose: "transactional" | "marketing";
-  current_version_id: string;
-  subject: string;
+  subject: string | null;
+  sendable: boolean;
 }
 
 export interface CampaignDraft {
@@ -138,9 +138,7 @@ export function CampaignsPage({
   const [createOpen, setCreateOpen] = useState(false);
   const [preset, setPreset] = useState<PresetId>("welcome");
   const [name, setName] = useState("ウェルカムシリーズ");
-  const [templateVersionId, setTemplateVersionId] = useState(
-    options.templates[0]?.current_version_id ?? "",
-  );
+  const [templateId, setTemplateId] = useState(options.templates[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
 
   function selectPreset(value: PresetId): void {
@@ -149,9 +147,7 @@ export function CampaignsPage({
   }
 
   async function createCampaign(): Promise<void> {
-    const template = options.templates.find(
-      (item) => item.current_version_id === templateVersionId,
-    );
+    const template = options.templates.find((item) => item.id === templateId);
     if (!template) {
       toast.error("使用するメールテンプレートを選択してください");
       return;
@@ -283,18 +279,16 @@ export function CampaignsPage({
             onChange={(event) => setName(event.target.value)}
           />
           <FormNativeSelect
-            name="templateVersionId"
+            name="templateId"
             label="送信するメール"
-            value={templateVersionId}
-            onChange={(event) => setTemplateVersionId(event.target.value)}
+            value={templateId}
+            onChange={(event) => setTemplateId(event.target.value)}
           >
             <FormSelectOption value="">選択してください</FormSelectOption>
             {options.templates.map((template) => (
-              <FormSelectOption
-                key={template.current_version_id}
-                value={template.current_version_id}
-              >
-                {template.name} · {template.subject}
+              <FormSelectOption key={template.id} value={template.id}>
+                {template.name}
+                {template.subject ? ` · ${template.subject}` : ""}
               </FormSelectOption>
             ))}
           </FormNativeSelect>
@@ -309,7 +303,7 @@ export function CampaignsPage({
             キャンセル
           </Button>
           <Button
-            disabled={creating || !name.trim() || !templateVersionId}
+            disabled={creating || !name.trim() || !templateId}
             onClick={() => void createCampaign()}
           >
             {creating ? "作成中..." : "このテンプレートで作成"}
@@ -872,9 +866,9 @@ function ActionSettings({
     return (
       <SettingSelect
         label="メールテンプレート"
-        value={node.config.templateVersionId}
+        value={node.config.templateId}
         onChange={(value) => {
-          const template = options.templates.find((item) => item.current_version_id === value);
+          const template = options.templates.find((item) => item.id === value);
           if (!template) return;
           onUpdate((current) =>
             current.type === "action" && current.config.action === "send_email"
@@ -882,15 +876,13 @@ function ActionSettings({
                   ...current,
                   config: {
                     ...current.config,
-                    templateVersionId: value,
-                    purpose: template.purpose,
-                    provider: template.purpose === "marketing" ? "resend" : "cloudflare",
+                    templateId: value,
                   },
                 }
               : current,
           );
         }}
-        options={options.templates.map((template) => [template.current_version_id, template.name])}
+        options={options.templates.map((template) => [template.id, template.name])}
       />
     );
   }
@@ -1388,9 +1380,7 @@ function emailNode(
     position,
     config: {
       action: "send_email",
-      templateVersionId: template.current_version_id,
-      purpose: template.purpose,
-      provider: template.purpose === "marketing" ? "resend" : "cloudflare",
+      templateId: template.id,
     },
   };
 }

@@ -9,8 +9,7 @@ export interface CampaignValidationIssue {
     | "missing_endpoint"
     | "cycle"
     | "unreachable"
-    | "invalid_branch"
-    | "marketing_provider_mismatch";
+    | "invalid_branch";
   message: string;
   nodeId?: string;
   edgeId?: string;
@@ -38,18 +37,6 @@ export function validateCampaign(definition: CampaignDefinition): CampaignValida
       });
     }
     nodes.set(node.id, node);
-    if (
-      node.type === "action" &&
-      node.config.action === "send_email" &&
-      node.config.purpose === "marketing" &&
-      node.config.provider !== "resend"
-    ) {
-      issues.push({
-        code: "marketing_provider_mismatch",
-        message: "Marketing email must use the Resend adapter",
-        nodeId: node.id,
-      });
-    }
   }
 
   const sources = definition.nodes.filter((node) => node.type === "source");

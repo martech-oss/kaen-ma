@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_app/campaigns/$id")({
     return {
       draft: draft.data,
       options: {
-        templates: templates.data.filter((template) => template.current_version_id),
+        templates: templates.data.filter((template) => template.sendable),
         forms: forms.data,
         segments: segments.data,
       },

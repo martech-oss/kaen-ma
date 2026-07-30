@@ -1,33 +1,14 @@
+import type { Resend } from "resend";
 import { describe, expect, it } from "vitest";
 
 import {
-  CloudflareEmailAdapter,
   OutboundWebhookAdapter,
-  PermanentChannelError,
   ResendEmailAdapter,
+  ResendTemplateAdapter,
   assertSafeWebhookUrl,
 } from "./index";
 
 describe("channel policy", () => {
-  it("prevents marketing messages from using Cloudflare Email Service", async () => {
-    const adapter = new CloudflareEmailAdapter({
-      send: async () => ({ messageId: "unused" }),
-    });
-    await expect(
-      adapter.send({
-        idempotencyKey: "key",
-        workspaceId: "workspace",
-        deliveryId: "delivery",
-        purpose: "marketing",
-        to: "person@example.com",
-        from: { email: "sender@example.com" },
-        subject: "Subject",
-        html: "<p>Hello</p>",
-        text: "Hello",
-      }),
-    ).rejects.toBeInstanceOf(PermanentChannelError);
-  });
-
   it("blocks private webhook targets", () => {
     expect(() => assertSafeWebhookUrl("http://example.com/hook")).toThrow();
     expect(() => assertSafeWebhookUrl("https://127.0.0.1/hook")).toThrow();
@@ -37,25 +18,23 @@ describe("channel policy", () => {
     ).not.toThrow();
   });
 
-  it("sends marketing email through Resend with idempotency and unsubscribe headers", async () => {
-    let request: { input: string; headers: Headers; body: string } | undefined;
+  it("sends a hosted marketing template with idempotency and unsubscribe headers", async () => {
+    const calls: unknown[][] = [];
+    const client = {
+      emails: {
+        send: async (...args: unknown[]) => {
+          calls.push(args);
+          return { data: { id: "resend-message-id" }, error: null };
+        },
+      },
+    } as unknown as Resend;
     const adapter = new ResendEmailAdapter({
       apiKey: "re_test_key",
-      fetcher: (async (input, init) => {
-        request = {
-          input:
-            typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url,
-          headers: new Headers(init?.headers),
-          body: typeof init?.body === "string" ? init.body : "",
-        };
-        return new Response(JSON.stringify({ id: "resend-message-id" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }) as typeof fetch,
+      client,
     });
 
     const result = await adapter.send({
+      kind: "email",
       idempotencyKey: "delivery-key",
       workspaceId: "workspace-id",
       deliveryId: "delivery-id",
@@ -63,21 +42,23 @@ describe("channel policy", () => {
       to: "person@example.com",
       from: { email: "sender@example.com", name: "Kaenma" },
       replyTo: "reply@example.com",
-      subject: "Subject",
-      html: "<p>Hello</p>",
-      text: "Hello",
+      template: {
+        id: "welcome-email",
+        variables: { CONTACT_FIRST_NAME: "Yosa" },
+      },
       metadata: { unsubscribeUrl: "https://example.com/u/signed-token" },
     });
 
     expect(result.providerMessageId).toBe("resend-message-id");
-    expect(request!.input).toBe("https://api.resend.com/emails");
-    expect(request!.headers.get("Authorization")).toBe("Bearer re_test_key");
-    expect(request!.headers.get("Idempotency-Key")).toBe("delivery-key");
-    const body = JSON.parse(request!.body) as Record<string, unknown>;
-    expect(body).toMatchObject({
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.[0]).toMatchObject({
       from: "Kaenma <sender@example.com>",
       to: ["person@example.com"],
-      reply_to: "reply@example.com",
+      replyTo: "reply@example.com",
+      template: {
+        id: "welcome-email",
+        variables: { CONTACT_FIRST_NAME: "Yosa" },
+      },
       headers: {
         "List-Unsubscribe": "<https://example.com/u/signed-token>",
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
@@ -87,23 +68,84 @@ describe("channel policy", () => {
         { name: "kaenma_workspace_id", value: "workspace-id" },
       ],
     });
+    expect(calls[0]?.[1]).toEqual({ idempotencyKey: "delivery-key" });
   });
 
-  it("rejects transactional messages in the Resend marketing adapter", async () => {
-    const adapter = new ResendEmailAdapter({ apiKey: "re_test_key" });
+  it("sends transactional hosted templates without marketing headers", async () => {
+    const calls: unknown[][] = [];
+    const client = {
+      emails: {
+        send: async (...args: unknown[]) => {
+          calls.push(args);
+          return { data: { id: "transactional-id" }, error: null };
+        },
+      },
+    } as unknown as Resend;
+    const adapter = new ResendEmailAdapter({ apiKey: "re_test_key", client });
+
     await expect(
       adapter.send({
-        idempotencyKey: "key",
-        workspaceId: "workspace",
-        deliveryId: "delivery",
+        kind: "email",
+        idempotencyKey: "transactional-key",
         purpose: "transactional",
         to: "person@example.com",
-        from: { email: "sender@example.com" },
-        subject: "Subject",
-        html: "<p>Hello</p>",
-        text: "Hello",
+        from: { email: "system@example.com" },
+        template: {
+          id: "password-reset",
+          variables: { ACTION_URL: "https://example.com/reset" },
+        },
       }),
-    ).rejects.toBeInstanceOf(PermanentChannelError);
+    ).resolves.toMatchObject({ providerMessageId: "transactional-id" });
+    expect(calls[0]?.[0]).not.toHaveProperty("headers");
+    expect(calls[0]?.[0]).not.toHaveProperty("tags");
+  });
+
+  it("normalizes hosted template metadata from Resend", async () => {
+    const client = {
+      templates: {
+        get: async () => ({
+          data: {
+            id: "template-id",
+            alias: "welcome-email",
+            name: "Welcome",
+            subject: "Hello {{{CONTACT_FIRST_NAME}}}",
+            status: "published",
+            current_version_id: "version-id",
+            has_unpublished_versions: false,
+            published_at: "2026-07-30T00:00:00.000Z",
+            updated_at: "2026-07-30T01:00:00.000Z",
+            variables: [
+              {
+                key: "CONTACT_FIRST_NAME",
+                type: "string",
+                fallback_value: "there",
+              },
+            ],
+          },
+          error: null,
+        }),
+      },
+    } as unknown as Resend;
+    const adapter = new ResendTemplateAdapter({ apiKey: "re_test_key", client });
+
+    await expect(adapter.get("welcome-email")).resolves.toEqual({
+      id: "template-id",
+      alias: "welcome-email",
+      name: "Welcome",
+      subject: "Hello {{{CONTACT_FIRST_NAME}}}",
+      status: "published",
+      currentVersionId: "version-id",
+      hasUnpublishedVersions: false,
+      publishedAt: "2026-07-30T00:00:00.000Z",
+      updatedAt: "2026-07-30T01:00:00.000Z",
+      variables: [
+        {
+          key: "CONTACT_FIRST_NAME",
+          type: "string",
+          fallbackValue: "there",
+        },
+      ],
+    });
   });
 
   it("verifies and normalizes Resend Svix webhooks", async () => {
@@ -129,7 +171,7 @@ describe("channel policy", () => {
       apiKey: "re_test_key",
       webhookSecret: secret,
     });
-    const request = new Request("https://example.com/api/webhooks/resend/workspace-id", {
+    const request = new Request("https://example.com/api/webhooks/resend", {
       method: "POST",
       headers: {
         "svix-id": eventId,
@@ -143,7 +185,7 @@ describe("channel policy", () => {
       valid: true,
       eventId,
     });
-    expect(adapter.normalizeEvents(JSON.parse(rawBody), "workspace-id", eventId)).toEqual([
+    expect(adapter.normalizeEvents(JSON.parse(rawBody), eventId)).toEqual([
       expect.objectContaining({
         id: eventId,
         workspaceId: "workspace-id",

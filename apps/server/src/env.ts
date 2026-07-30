@@ -6,7 +6,8 @@ export interface RuntimeSecrets {
   CREDENTIAL_ENCRYPTION_KEY: string;
   TRACKING_SIGNING_SECRET: string;
   TURNSTILE_SECRET?: string;
-  RESEND_API_KEY?: string;
+  RESEND_SEND_API_KEY?: string;
+  RESEND_MANAGEMENT_API_KEY?: string;
   RESEND_WEBHOOK_SECRET?: string;
 }
 

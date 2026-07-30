@@ -1,11 +1,10 @@
 import { rpc } from "@/rpc";
-import type { ContentDocument } from "@kaenma/shared";
 
 export interface EmailCampaignRow {
   id: string;
   name: string;
   segment_id: string;
-  template_version_id: string;
+  template_id: string;
   topic_id: string | null;
   status: "draft" | "scheduled" | "sending" | "completed" | "cancelled";
   scheduled_at: string | null;
@@ -17,27 +16,36 @@ export interface EmailCampaignRow {
   segment_name: string;
   member_count: number;
   template_name: string;
-  subject: string;
+  subject: string | null;
   recipient_count: number;
   sent_count: number;
   delivered_count: number;
+}
+
+export interface ResendTemplateVariable {
+  key: string;
+  type: "string" | "number";
+  fallbackValue: string | number | null;
 }
 
 export interface EmailTemplateRow {
   id: string;
   name: string;
   purpose: "marketing" | "transactional";
-  status: "draft" | "published" | "archived";
-  current_version_id: string;
-  version: number;
-  subject: string;
-  preview_text: string;
+  resend_template_id: string;
+  resend_alias: string | null;
+  subject: string | null;
+  remote_status: "draft" | "published";
+  remote_current_version_id: string;
+  has_unpublished_versions: boolean;
+  variables: ResendTemplateVariable[];
+  published_at: string | null;
+  last_synced_at: string;
+  sync_error: string | null;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface EmailTemplateDetail extends EmailTemplateRow {
-  content_document: ContentDocument;
+  sendable: boolean;
 }
 
 export interface MessageVariableRow {
