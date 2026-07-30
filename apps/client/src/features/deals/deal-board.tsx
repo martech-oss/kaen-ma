@@ -1,0 +1,163 @@
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft, ArrowRight, Clock3, Plus, UserRound, UsersRound } from "lucide-react";
+import { type ReactNode, useState } from "react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { type DealPipeline, type DealSummary } from "@/features/deals/deal-api";
+import { formatMoney, formatMonthDayTime } from "@/lib/format";
+
+import { DealStatusBadge } from "./deal-widgets";
+
+export function DealBoard({
+  pipeline,
+  deals,
+  movingId,
+  onMove,
+  onCreate,
+}: {
+  pipeline: DealPipeline;
+  deals: DealSummary[];
+  movingId: string | null;
+  onMove: (dealId: string, stageId: string) => Promise<void>;
+  onCreate: () => void;
+}): ReactNode {
+  const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
+  return (
+    <div className="overflow-x-auto pb-3">
+      <div className="grid min-w-max auto-cols-[minmax(280px,1fr)] grid-flow-col gap-4">
+        {pipeline.stages.map((stage, index) => {
+          const stageDeals = deals.filter((deal) => deal.stageId === stage.id);
+          const total = stageDeals.reduce((sum, deal) => sum + deal.value, 0);
+          return (
+            <section
+              key={stage.id}
+              className="w-[300px] rounded-xl bg-muted/50 p-3"
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (!draggedDealId) return;
+                const deal = deals.find((item) => item.id === draggedDealId);
+                if (deal && deal.stageId !== stage.id) void onMove(deal.id, stage.id);
+                setDraggedDealId(null);
+              }}
+            >
+              <header className="mb-3 flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="size-2.5 rounded-full"
+                      style={{ backgroundColor: stage.color }}
+                      aria-hidden
+                    />
+                    <h2 className="font-heading font-medium">{stage.name}</h2>
+                    <Badge variant="secondary">{stageDeals.length}</Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatMoney(total, stageDeals[0]?.currency ?? "JPY")} · 成約確度
+                    {stage.probability}%
+                  </p>
+                </div>
+              </header>
+              <div className="flex flex-col gap-3">
+                {stageDeals.map((deal) => (
+                  <Card
+                    key={deal.id}
+                    size="sm"
+                    className={`bg-card ${draggedDealId === deal.id ? "opacity-50" : ""}`}
+                    draggable={movingId !== deal.id}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", deal.id);
+                      setDraggedDealId(deal.id);
+                    }}
+                    onDragEnd={() => setDraggedDealId(null)}
+                  >
+                    <CardHeader>
+                      <CardTitle>
+                        <Link to="/deals/$id" params={{ id: deal.id }} className="hover:underline">
+                          {deal.name}
+                        </Link>
+                      </CardTitle>
+                      <CardDescription>{formatMoney(deal.value, deal.currency)}</CardDescription>
+                      <CardAction>
+                        <DealStatusBadge status={deal.status} />
+                      </CardAction>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-2 text-xs text-muted-foreground">
+                      {deal.accountName ? (
+                        <span className="flex items-center gap-1.5">
+                          <UsersRound className="size-3.5" />
+                          {deal.accountName}
+                        </span>
+                      ) : null}
+                      {deal.ownerName ? (
+                        <span className="flex items-center gap-1.5">
+                          <UserRound className="size-3.5" />
+                          {deal.ownerName}
+                        </span>
+                      ) : null}
+                      {deal.nextTaskAt ? (
+                        <span className="flex items-center gap-1.5">
+                          <Clock3 className="size-3.5" />
+                          次のタスク {formatMonthDayTime(deal.nextTaskAt)}
+                        </span>
+                      ) : deal.openTaskCount > 0 ? (
+                        <span>{deal.openTaskCount}件の未完了タスク</span>
+                      ) : null}
+                    </CardContent>
+                    <div className="flex justify-between border-t px-3 pt-3">
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="前のステージへ移動"
+                        disabled={index === 0 || movingId === deal.id}
+                        onClick={() => {
+                          const previous = pipeline.stages[index - 1];
+                          if (previous) void onMove(deal.id, previous.id);
+                        }}
+                      >
+                        <ArrowLeft />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="次のステージへ移動"
+                        disabled={index === pipeline.stages.length - 1 || movingId === deal.id}
+                        onClick={() => {
+                          const next = pipeline.stages[index + 1];
+                          if (next) void onMove(deal.id, next.id);
+                        }}
+                      >
+                        <ArrowRight />
+                      </Button>
+                    </div>
+                  </Card>
+                ))}
+                {stageDeals.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-5 text-center text-xs text-muted-foreground">
+                    このステージに商談はありません
+                  </div>
+                ) : null}
+                {index === 0 ? (
+                  <Button variant="ghost" size="sm" className="w-full" onClick={onCreate}>
+                    <Plus data-icon="inline-start" />
+                    商談を追加
+                  </Button>
+                ) : null}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
