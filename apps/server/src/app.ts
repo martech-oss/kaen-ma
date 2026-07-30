@@ -13,6 +13,7 @@ import { registerCampaignRoutes } from "./campaigns/routes";
 import { registerConsentRoutes } from "./consent/routes";
 import { registerContactManagementRoutes } from "./contacts/management-routes";
 import { registerContactRoutes } from "./contacts/routes";
+import { registerDealRoutes } from "./deals/routes";
 import { registerEmailWebhookRoutes } from "./email/webhook-routes";
 import { type AppEnvironment } from "./env";
 import { registerFormRoutes } from "./forms/routes";
@@ -24,6 +25,7 @@ import { createOrpcRequestHandler } from "./orpc/handler";
 import { registerPageRoutes } from "./pages/routes";
 import { registerProjectRoutes } from "./projects/routes";
 import { registerPublicRoutes } from "./public/routes";
+import { registerReportRoutes } from "./reports/routes";
 import { registerSegmentRoutes } from "./segments/routes";
 import { registerTemplateRoutes } from "./templates/routes";
 import { registerWebsiteRoutes } from "./website/routes";
@@ -100,6 +102,7 @@ function createApi(): Hono<AppEnvironment> {
   registerContactRoutes(api);
 
   registerAccountRoutes(api);
+  registerDealRoutes(api);
   registerContactManagementRoutes(api);
   registerSegmentRoutes(api);
   registerTemplateRoutes(api);
@@ -114,6 +117,7 @@ function createApi(): Hono<AppEnvironment> {
   registerConsentRoutes(api);
   registerIntegrationRoutes(api);
   registerAnalyticsRoutes(api);
+  registerReportRoutes(api);
   registerOperationsRoutes(api);
   return api;
 }

@@ -16,6 +16,8 @@ Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」と
 - Resend Hosted TemplatesによるTransactional・Marketingメール
 - React Emailで管理する認証メールテンプレート
 - React Flowを使ったビジュアルキャンペーンビルダー
+- ステージ型パイプライン、商談、営業タスクを管理するDeals CRM
+- Contact・Automation・Email・Deals・Siteを横断するReporting
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
 - Workspace限定APIキー、TypeScript SDK、MCPサーバー
 - 対話式セットアップ、`doctor`、`backup`、`update` CLI
@@ -265,6 +267,27 @@ BroadcastはMarketingメール専用です。
 
 CampaignメールとBroadcastは同じDeliveryテーブル、同意判定、イベント正規化を使用します。
 
+## Deals CRM
+
+Dealsはワークスペースごとのパイプラインで商談を管理します。初回利用時に標準ステージを作成し、カンバン上で商談を移動できます。
+
+- 商談金額、完了予定日、担当者、連絡先、アカウントの関連付け
+- 進行中・獲得・失注のライフサイクル
+- タスク、電話、メール、ミーティングの期限・担当者・完了管理
+- 商談とタスクの変更はWorkspaceとRBACで制限
+
+## Reporting
+
+Reportingは最大366日の期間を指定し、D1に保存された実データをリアルタイムに集計します。
+
+- 連絡先: 総数、アクティブ数、追加・アーカイブ推移、上位リスト・タグ
+- オートメーション: 参加・完了、進行中、メール開封・クリック
+- メール: 送信・到達・開封・クリック・バウンス・配信停止
+- 商談: 作成・獲得・失注、担当者別成績、通貨別フォーキャスト、タスク
+- サイト: PV、ユニーク訪問者、特定済み率、フォーム、サイトメッセージ
+
+各詳細レポートはCSVでエクスポートできます。集計APIは`Analyst`以上の権限を必要とし、常にWorkspaceでスコープされます。
+
 ## CSV Import / Export
 
 CSV ImportはWorkerで検証後、R2へNDJSONパートとして保存し、Queueで分割処理します。
@@ -318,6 +341,15 @@ POST   /api/v1/campaigns
 PUT    /api/v1/campaigns/:id/draft
 POST   /api/v1/campaigns/:id/publish
 POST   /api/v1/campaigns/:id/enroll
+
+GET    /api/v1/deals
+POST   /api/v1/deals
+PATCH  /api/v1/deals/:id
+POST   /api/v1/deals/:id/move
+POST   /api/v1/deals/:id/tasks
+PATCH  /api/v1/deals/:dealId/tasks/:taskId
+
+GET    /api/v1/reports/:category
 
 GET    /api/v1/broadcasts
 POST   /api/v1/broadcasts
@@ -489,6 +521,7 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 - Email rendererのescape
 - Webhook URLのSSRF対策
 - WorkspaceをまたぐContact直接参照の拒否
+- Dealのステージ移動、獲得・失注、タスク状態遷移
 - Idempotency Keyの重複予約
 - Worker healthとD1 migration
 

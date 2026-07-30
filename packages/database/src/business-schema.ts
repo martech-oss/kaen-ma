@@ -1,4 +1,5 @@
 export * from "./contacts/schema";
+export * from "./deals/schema";
 export * from "./consent/schema";
 export * from "./content/schema";
 export * from "./campaigns/schema";

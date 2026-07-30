@@ -5,6 +5,7 @@ import {
   Blocks,
   Braces,
   Building2,
+  BriefcaseBusiness,
   ChevronsUpDown,
   ContactRound,
   ChartNoAxesCombined,
@@ -59,6 +60,7 @@ import {
 
 const dashboardNavigation = linkOptions([
   { to: "/dashboard", label: "ダッシュボード", icon: Gauge },
+  { to: "/reports", label: "Reporting", icon: ChartNoAxesCombined },
 ]);
 
 const contactNavigation = linkOptions([
@@ -72,6 +74,8 @@ const contactNavigation = linkOptions([
 const automationNavigation = linkOptions([
   { to: "/campaigns", label: "オートメーション", icon: GitBranch },
 ]);
+
+const dealNavigation = linkOptions([{ to: "/deals", label: "Deals", icon: BriefcaseBusiness }]);
 
 const emailNavigation = linkOptions([
   { to: "/emails", label: "キャンペーン", icon: Send },
@@ -153,6 +157,7 @@ export function AppShell({ user }: { user: { name: string; email: string } }): R
               <SidebarMenu>
                 <PrimaryNavigation items={dashboardNavigation} />
                 <ContactNavigation />
+                <PrimaryNavigation items={dealNavigation} />
                 <PrimaryNavigation items={automationNavigation} />
                 <NestedNavigation to="/emails" label="メール" icon={Mail} items={emailNavigation} />
                 <NestedNavigation

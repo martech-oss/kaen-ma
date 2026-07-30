@@ -16,8 +16,10 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as AppContactsRouteImport } from './routes/_app.contacts'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppDealsRouteImport } from './routes/_app.deals'
 import { Route as AppEmailsRouteImport } from './routes/_app.emails'
 import { Route as AppFormsRouteImport } from './routes/_app.forms'
+import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppSegmentsRouteImport } from './routes/_app.segments'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppWebsiteRouteImport } from './routes/_app.website'
@@ -28,6 +30,8 @@ import { Route as AppContactsAccountsRouteImport } from './routes/_app.contacts.
 import { Route as AppContactsListsRouteImport } from './routes/_app.contacts.lists'
 import { Route as AppContactsSegmentsRouteImport } from './routes/_app.contacts.segments'
 import { Route as AppContactsTagsRouteImport } from './routes/_app.contacts.tags'
+import { Route as AppDealsIndexRouteImport } from './routes/_app.deals.index'
+import { Route as AppDealsIdRouteImport } from './routes/_app.deals.$id'
 import { Route as AppEmailsIndexRouteImport } from './routes/_app.emails.index'
 import { Route as AppEmailsArchiveRouteImport } from './routes/_app.emails.archive'
 import { Route as AppEmailsTemplatesRouteImport } from './routes/_app.emails.templates'
@@ -74,6 +78,11 @@ const AppDashboardRoute = AppDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDealsRoute = AppDealsRouteImport.update({
+  id: '/deals',
+  path: '/deals',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppEmailsRoute = AppEmailsRouteImport.update({
   id: '/emails',
   path: '/emails',
@@ -82,6 +91,11 @@ const AppEmailsRoute = AppEmailsRouteImport.update({
 const AppFormsRoute = AppFormsRouteImport.update({
   id: '/forms',
   path: '/forms',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppReportsRoute = AppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSegmentsRoute = AppSegmentsRouteImport.update({
@@ -133,6 +147,16 @@ const AppContactsTagsRoute = AppContactsTagsRouteImport.update({
   id: '/tags',
   path: '/tags',
   getParentRoute: () => AppContactsRoute,
+} as any)
+const AppDealsIndexRoute = AppDealsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppDealsRoute,
+} as any)
+const AppDealsIdRoute = AppDealsIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AppDealsRoute,
 } as any)
 const AppEmailsIndexRoute = AppEmailsIndexRouteImport.update({
   id: '/',
@@ -198,8 +222,10 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/contacts': typeof AppContactsRouteWithChildren
   '/dashboard': typeof AppDashboardRoute
+  '/deals': typeof AppDealsRouteWithChildren
   '/emails': typeof AppEmailsRouteWithChildren
   '/forms': typeof AppFormsRoute
+  '/reports': typeof AppReportsRoute
   '/segments': typeof AppSegmentsRoute
   '/settings': typeof AppSettingsRoute
   '/website': typeof AppWebsiteRouteWithChildren
@@ -208,6 +234,7 @@ export interface FileRoutesByFullPath {
   '/contacts/lists': typeof AppContactsListsRoute
   '/contacts/segments': typeof AppContactsSegmentsRoute
   '/contacts/tags': typeof AppContactsTagsRoute
+  '/deals/$id': typeof AppDealsIdRoute
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
@@ -217,6 +244,7 @@ export interface FileRoutesByFullPath {
   '/website/tracking': typeof AppWebsiteTrackingRoute
   '/campaigns/': typeof AppCampaignsIndexRoute
   '/contacts/': typeof AppContactsIndexRoute
+  '/deals/': typeof AppDealsIndexRoute
   '/emails/': typeof AppEmailsIndexRoute
   '/website/': typeof AppWebsiteIndexRoute
   '/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
@@ -229,12 +257,14 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/dashboard': typeof AppDashboardRoute
   '/forms': typeof AppFormsRoute
+  '/reports': typeof AppReportsRoute
   '/segments': typeof AppSegmentsRoute
   '/settings': typeof AppSettingsRoute
   '/campaigns/$id': typeof AppCampaignsIdRoute
   '/contacts/lists': typeof AppContactsListsRoute
   '/contacts/segments': typeof AppContactsSegmentsRoute
   '/contacts/tags': typeof AppContactsTagsRoute
+  '/deals/$id': typeof AppDealsIdRoute
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
@@ -244,6 +274,7 @@ export interface FileRoutesByTo {
   '/website/tracking': typeof AppWebsiteTrackingRoute
   '/campaigns': typeof AppCampaignsIndexRoute
   '/contacts': typeof AppContactsIndexRoute
+  '/deals': typeof AppDealsIndexRoute
   '/emails': typeof AppEmailsIndexRoute
   '/website': typeof AppWebsiteIndexRoute
   '/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
@@ -258,8 +289,10 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/_app/contacts': typeof AppContactsRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/deals': typeof AppDealsRouteWithChildren
   '/_app/emails': typeof AppEmailsRouteWithChildren
   '/_app/forms': typeof AppFormsRoute
+  '/_app/reports': typeof AppReportsRoute
   '/_app/segments': typeof AppSegmentsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/website': typeof AppWebsiteRouteWithChildren
@@ -268,6 +301,7 @@ export interface FileRoutesById {
   '/_app/contacts/lists': typeof AppContactsListsRoute
   '/_app/contacts/segments': typeof AppContactsSegmentsRoute
   '/_app/contacts/tags': typeof AppContactsTagsRoute
+  '/_app/deals/$id': typeof AppDealsIdRoute
   '/_app/emails/archive': typeof AppEmailsArchiveRoute
   '/_app/emails/templates': typeof AppEmailsTemplatesRoute
   '/_app/emails/variables': typeof AppEmailsVariablesRoute
@@ -277,6 +311,7 @@ export interface FileRoutesById {
   '/_app/website/tracking': typeof AppWebsiteTrackingRoute
   '/_app/campaigns/': typeof AppCampaignsIndexRoute
   '/_app/contacts/': typeof AppContactsIndexRoute
+  '/_app/deals/': typeof AppDealsIndexRoute
   '/_app/emails/': typeof AppEmailsIndexRoute
   '/_app/website/': typeof AppWebsiteIndexRoute
   '/_app/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
@@ -291,8 +326,10 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/contacts'
     | '/dashboard'
+    | '/deals'
     | '/emails'
     | '/forms'
+    | '/reports'
     | '/segments'
     | '/settings'
     | '/website'
@@ -301,6 +338,7 @@ export interface FileRouteTypes {
     | '/contacts/lists'
     | '/contacts/segments'
     | '/contacts/tags'
+    | '/deals/$id'
     | '/emails/archive'
     | '/emails/templates'
     | '/emails/variables'
@@ -310,6 +348,7 @@ export interface FileRouteTypes {
     | '/website/tracking'
     | '/campaigns/'
     | '/contacts/'
+    | '/deals/'
     | '/emails/'
     | '/website/'
     | '/contacts/accounts/$id'
@@ -322,12 +361,14 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/dashboard'
     | '/forms'
+    | '/reports'
     | '/segments'
     | '/settings'
     | '/campaigns/$id'
     | '/contacts/lists'
     | '/contacts/segments'
     | '/contacts/tags'
+    | '/deals/$id'
     | '/emails/archive'
     | '/emails/templates'
     | '/emails/variables'
@@ -337,6 +378,7 @@ export interface FileRouteTypes {
     | '/website/tracking'
     | '/campaigns'
     | '/contacts'
+    | '/deals'
     | '/emails'
     | '/website'
     | '/contacts/accounts/$id'
@@ -350,8 +392,10 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/_app/contacts'
     | '/_app/dashboard'
+    | '/_app/deals'
     | '/_app/emails'
     | '/_app/forms'
+    | '/_app/reports'
     | '/_app/segments'
     | '/_app/settings'
     | '/_app/website'
@@ -360,6 +404,7 @@ export interface FileRouteTypes {
     | '/_app/contacts/lists'
     | '/_app/contacts/segments'
     | '/_app/contacts/tags'
+    | '/_app/deals/$id'
     | '/_app/emails/archive'
     | '/_app/emails/templates'
     | '/_app/emails/variables'
@@ -369,6 +414,7 @@ export interface FileRouteTypes {
     | '/_app/website/tracking'
     | '/_app/campaigns/'
     | '/_app/contacts/'
+    | '/_app/deals/'
     | '/_app/emails/'
     | '/_app/website/'
     | '/_app/contacts/accounts/$id'
@@ -434,6 +480,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/deals': {
+      id: '/_app/deals'
+      path: '/deals'
+      fullPath: '/deals'
+      preLoaderRoute: typeof AppDealsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/emails': {
       id: '/_app/emails'
       path: '/emails'
@@ -446,6 +499,13 @@ declare module '@tanstack/react-router' {
       path: '/forms'
       fullPath: '/forms'
       preLoaderRoute: typeof AppFormsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/reports': {
+      id: '/_app/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/segments': {
@@ -517,6 +577,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/contacts/tags'
       preLoaderRoute: typeof AppContactsTagsRouteImport
       parentRoute: typeof AppContactsRoute
+    }
+    '/_app/deals/': {
+      id: '/_app/deals/'
+      path: '/'
+      fullPath: '/deals/'
+      preLoaderRoute: typeof AppDealsIndexRouteImport
+      parentRoute: typeof AppDealsRoute
+    }
+    '/_app/deals/$id': {
+      id: '/_app/deals/$id'
+      path: '/$id'
+      fullPath: '/deals/$id'
+      preLoaderRoute: typeof AppDealsIdRouteImport
+      parentRoute: typeof AppDealsRoute
     }
     '/_app/emails/': {
       id: '/_app/emails/'
@@ -631,6 +705,20 @@ const AppContactsRouteWithChildren = AppContactsRoute._addFileChildren(
   AppContactsRouteChildren,
 )
 
+interface AppDealsRouteChildren {
+  AppDealsIdRoute: typeof AppDealsIdRoute
+  AppDealsIndexRoute: typeof AppDealsIndexRoute
+}
+
+const AppDealsRouteChildren: AppDealsRouteChildren = {
+  AppDealsIdRoute: AppDealsIdRoute,
+  AppDealsIndexRoute: AppDealsIndexRoute,
+}
+
+const AppDealsRouteWithChildren = AppDealsRoute._addFileChildren(
+  AppDealsRouteChildren,
+)
+
 interface AppEmailsRouteChildren {
   AppEmailsArchiveRoute: typeof AppEmailsArchiveRoute
   AppEmailsTemplatesRoute: typeof AppEmailsTemplatesRoute
@@ -672,8 +760,10 @@ const AppWebsiteRouteWithChildren = AppWebsiteRoute._addFileChildren(
 interface AppRouteChildren {
   AppContactsRoute: typeof AppContactsRouteWithChildren
   AppDashboardRoute: typeof AppDashboardRoute
+  AppDealsRoute: typeof AppDealsRouteWithChildren
   AppEmailsRoute: typeof AppEmailsRouteWithChildren
   AppFormsRoute: typeof AppFormsRoute
+  AppReportsRoute: typeof AppReportsRoute
   AppSegmentsRoute: typeof AppSegmentsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppWebsiteRoute: typeof AppWebsiteRouteWithChildren
@@ -684,8 +774,10 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppContactsRoute: AppContactsRouteWithChildren,
   AppDashboardRoute: AppDashboardRoute,
+  AppDealsRoute: AppDealsRouteWithChildren,
   AppEmailsRoute: AppEmailsRouteWithChildren,
   AppFormsRoute: AppFormsRoute,
+  AppReportsRoute: AppReportsRoute,
   AppSegmentsRoute: AppSegmentsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppWebsiteRoute: AppWebsiteRouteWithChildren,

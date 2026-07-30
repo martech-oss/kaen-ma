@@ -122,6 +122,7 @@ export const formSubmissions = sqliteTable(
       table.formId,
       table.createdAt,
     ),
+    index("form_submissions_workspace_created_idx").on(table.workspaceId, table.createdAt),
     uniqueIndex("form_submissions_workspace_idempotency_unique").on(
       table.workspaceId,
       table.formId,

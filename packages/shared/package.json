@@ -6,7 +6,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./contacts": "./src/contacts/index.ts",
+    "./deals": "./src/deals/index.ts",
     "./openapi": "./src/openapi.ts",
+    "./reports": "./src/reports/index.ts",
     "./segments": "./src/segments/index.ts",
     "./segments/fields": "./src/segments/fields.ts"
   },

@@ -173,6 +173,12 @@ export const campaignEnrollments = sqliteTable(
       table.status,
       table.updatedAt,
     ),
+    index("campaign_enrollments_workspace_campaign_entered_idx").on(
+      table.workspaceId,
+      table.campaignId,
+      table.enteredAt,
+    ),
+    index("campaign_enrollments_workspace_completed_idx").on(table.workspaceId, table.completedAt),
     uniqueIndex("campaign_enrollment_source_unique").on(
       table.workspaceId,
       table.campaignId,
@@ -331,6 +337,11 @@ export const deliveries = sqliteTable(
       table.workspaceId,
       table.status,
       table.nextAttemptAt,
+    ),
+    index("deliveries_workspace_channel_created_idx").on(
+      table.workspaceId,
+      table.channel,
+      table.createdAt,
     ),
     uniqueIndex("deliveries_workspace_idempotency_unique").on(
       table.workspaceId,
