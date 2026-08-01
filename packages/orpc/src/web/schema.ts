@@ -1,6 +1,6 @@
 import * as z from "zod";
 
-import { contentDocumentSchema } from "../index";
+import { contentDocumentSchema } from "./content";
 
 export const publishStatusSchema = z.enum(["draft", "published"]);
 export type PublishStatus = z.infer<typeof publishStatusSchema>;

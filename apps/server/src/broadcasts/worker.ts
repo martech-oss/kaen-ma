@@ -1,7 +1,6 @@
 import { PermanentChannelError, type ChannelMessage } from "@kaenma/channels";
 import { compileSegmentFilter } from "@kaenma/core";
 import { createDatabase, uuidv7, type DrizzleRawStatement } from "@kaenma/database";
-import { type QueueMessage as KaenmaQueueMessage } from "../runtime/queues";
 
 import { type RuntimeEnv } from "../env";
 import { readMessageVariables, senderForPurpose } from "../messaging/delivery-worker";
@@ -9,6 +8,7 @@ import { buildReplyAddress } from "../messaging/reply-address";
 import { parseTemplateVariables, resolveTemplateVariables } from "../messaging/resend";
 import { createSignedToken } from "../platform/crypto";
 import { parseJsonRecord } from "../platform/values";
+import { type QueueMessage as KaenmaQueueMessage } from "../runtime/queues";
 
 export interface BroadcastRow {
   id: string;

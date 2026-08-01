@@ -1,13 +1,9 @@
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { uuidv7 } from "@kaenma/database";
-import { contract } from "@kaenma/orpc";
 
-import { sha256Hex } from "../src/platform/crypto";
+import { seedMember, seedWorkspaceClient } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -17,40 +13,10 @@ declare module "cloudflare:workers" {
 
 describe("Deals CRM", () => {
   it("manages a deal through its pipeline and task lifecycle", async () => {
-    const workspaceId = uuidv7();
-    const userId = uuidv7();
-    const apiKeyId = uuidv7();
-    const prefix = "dealskey0001";
-    const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-    const now = new Date().toISOString();
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO user
-         (id, name, email, email_verified, created_at, updated_at)
-         VALUES (?, 'Deal Owner', ?, 1, ?, ?)`,
-      ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-      env.DB.prepare(
-        `INSERT INTO organization (id, name, slug, created_at, timezone)
-         VALUES (?, 'Deal Workspace', ?, ?, 'Asia/Tokyo')`,
-      ).bind(workspaceId, `deals-${workspaceId}`, Date.now()),
-      env.DB.prepare(
-        `INSERT INTO member
-         (id, organization_id, user_id, role, created_at)
-         VALUES (?, ?, ?, 'owner', ?)`,
-      ).bind(uuidv7(), workspaceId, userId, Date.now()),
-      env.DB.prepare(
-        `INSERT INTO api_keys
-         (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-         VALUES (?, ?, ?, 'Deals test', ?, ?, 'owner', ?)`,
-      ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
-    ]);
-
-    const link = new RPCLink({
-      url: "http://localhost:8787/api/rpc",
-      headers: { authorization: `Bearer ${token}` },
-      fetch: (request) => exports.default.fetch(request),
+    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB, {
+      timezone: "Asia/Tokyo",
     });
-    const client: ContractRouterClient<typeof contract> = createORPCClient(link);
+    await seedMember(env.DB, { workspaceId, userId });
 
     const options = await client.deals.options();
     expect(options.pipelines).toHaveLength(1);

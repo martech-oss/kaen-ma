@@ -1,14 +1,13 @@
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { createDatabase, uuidv7 } from "@kaenma/database";
+import { contactEvents, contacts, createDatabase } from "@kaenma/database";
 import { contract } from "@kaenma/orpc";
 
 import { enrollInactiveContacts } from "../src/automations/enrollment";
-import { sha256Hex } from "../src/platform/crypto";
+import { seedWorkspaceClient } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -105,15 +104,16 @@ describe("Automation flows", () => {
       name: "Re-engagement flow",
       source: { source: "contact_inactive", days: 30, reentry: "once" },
     });
-    await env.DB.prepare(
-      `UPDATE contacts SET created_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ?`,
-    )
-      .bind("2025-01-01T00:00:00.000Z", "2025-01-01T00:00:00.000Z", workspaceId, contact.id)
-      .run();
-    await env.DB.prepare("DELETE FROM contact_events WHERE workspace_id = ? AND contact_id = ?")
-      .bind(workspaceId, contact.id)
-      .run();
+    const orm = createDatabase(env.DB).orm;
+    await orm
+      .update(contacts)
+      .set({ createdAt: "2025-01-01T00:00:00.000Z", updatedAt: "2025-01-01T00:00:00.000Z" })
+      .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contact.id)));
+    await orm
+      .delete(contactEvents)
+      .where(
+        and(eq(contactEvents.workspaceId, workspaceId), eq(contactEvents.contactId, contact.id)),
+      );
 
     expect(
       await enrollInactiveContacts(createDatabase(env.DB), new Date("2026-07-30T00:00:00.000Z")),
@@ -167,29 +167,6 @@ async function createAndPublishSingleActionFlow(
 }
 
 async function createWorkspaceClient(): Promise<{ client: Client; workspaceId: string }> {
-  const workspaceId = uuidv7();
-  const userId = uuidv7();
-  const prefix = uuidv7().replaceAll("-", "").slice(0, 12);
-  const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
-       VALUES (?, 'Automation Owner', ?, 1, ?, ?)`,
-    ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-    env.DB.prepare(
-      `INSERT INTO organization (id, name, slug, created_at, timezone)
-       VALUES (?, 'Automation Workspace', ?, ?, 'UTC')`,
-    ).bind(workspaceId, `automation-${workspaceId}`, Date.now()),
-    env.DB.prepare(
-      `INSERT INTO api_keys
-       (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-       VALUES (?, ?, ?, 'Automation test', ?, ?, 'owner', ?)`,
-    ).bind(uuidv7(), workspaceId, userId, prefix, await sha256Hex(token), new Date().toISOString()),
-  ]);
-  const link = new RPCLink({
-    url: "http://localhost:8787/api/rpc",
-    headers: { authorization: `Bearer ${token}` },
-    fetch: (request) => exports.default.fetch(request),
-  });
-  return { client: createORPCClient(link), workspaceId };
+  const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+  return { client, workspaceId };
 }

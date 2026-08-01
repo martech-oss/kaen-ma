@@ -1,4 +1,4 @@
-import { and, desc, eq, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, like, ne, or, sql } from "drizzle-orm";
 
 import type { Account, AccountCreate, AccountUpdate, WorkspaceContext } from "@kaenma/orpc";
 
@@ -108,6 +108,118 @@ export class AccountRepository {
       })
       .where(and(eq(companies.workspaceId, this.context.workspaceId), eq(companies.id, id)));
     return this.getAccount(id);
+  }
+
+  /** Lists the contacts on an account, primary first, then by display name. */
+  public listAccountContacts(accountId: string) {
+    return this.database.orm
+      .select({
+        id: contacts.id,
+        email: contacts.email,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        stage: contacts.stage,
+        score: contacts.score,
+        status: contacts.status,
+        title: companyContacts.title,
+        isPrimary: companyContacts.isPrimary,
+      })
+      .from(companyContacts)
+      .innerJoin(
+        contacts,
+        and(
+          eq(contacts.workspaceId, companyContacts.workspaceId),
+          eq(contacts.id, companyContacts.contactId),
+        ),
+      )
+      .where(
+        and(
+          eq(companyContacts.workspaceId, this.context.workspaceId),
+          eq(companyContacts.companyId, accountId),
+        ),
+      )
+      .orderBy(
+        desc(companyContacts.isPrimary),
+        asc(
+          sql`coalesce(${contacts.lastName}, ${contacts.firstName}, ${contacts.email}, ${contacts.id})`,
+        ),
+      );
+  }
+
+  /** True when both the account and a non-archived contact exist. */
+  public async hasAssignableContact(accountId: string, contactId: string): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: companies.id })
+      .from(companies)
+      .innerJoin(contacts, eq(contacts.workspaceId, companies.workspaceId))
+      .where(
+        and(
+          eq(companies.workspaceId, this.context.workspaceId),
+          eq(companies.id, accountId),
+          eq(contacts.id, contactId),
+          ne(contacts.status, "archived"),
+        ),
+      )
+      .get();
+    return row !== undefined;
+  }
+
+  /**
+   * Upserts the account–contact link. Promoting a contact to primary demotes
+   * it on every other account in the same atomic batch, so a contact is never
+   * primary in two places.
+   */
+  public async assignContact(input: {
+    accountId: string;
+    contactId: string;
+    title: string | null;
+    isPrimary: boolean;
+  }): Promise<void> {
+    const workspaceId = this.context.workspaceId;
+    const isPrimary = input.isPrimary ? 1 : 0;
+    const assign = this.database.orm
+      .insert(companyContacts)
+      .values({
+        workspaceId,
+        companyId: input.accountId,
+        contactId: input.contactId,
+        title: input.title,
+        isPrimary,
+        createdAt: new Date().toISOString(),
+      })
+      .onConflictDoUpdate({
+        target: [companyContacts.workspaceId, companyContacts.companyId, companyContacts.contactId],
+        set: { title: input.title, isPrimary },
+      });
+    if (input.isPrimary) {
+      await this.database.orm.batch([
+        this.database.orm
+          .update(companyContacts)
+          .set({ isPrimary: 0 })
+          .where(
+            and(
+              eq(companyContacts.workspaceId, workspaceId),
+              eq(companyContacts.contactId, input.contactId),
+            ),
+          ),
+        assign,
+      ]);
+    } else {
+      await assign;
+    }
+  }
+
+  public async removeContact(accountId: string, contactId: string): Promise<boolean> {
+    const result = await this.database.orm
+      .delete(companyContacts)
+      .where(
+        and(
+          eq(companyContacts.workspaceId, this.context.workspaceId),
+          eq(companyContacts.companyId, accountId),
+          eq(companyContacts.contactId, contactId),
+        ),
+      );
+    return result.meta.changes > 0;
   }
 }
 

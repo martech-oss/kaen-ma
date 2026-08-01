@@ -21,18 +21,6 @@ export class AccountConflictError extends Error {
   }
 }
 
-interface AccountContactRow {
-  id: string;
-  email: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  stage: string;
-  score: number;
-  status: AccountContact["status"];
-  title: string | null;
-  is_primary: number;
-}
-
 export function listAccounts(
   database: KaenmaDatabase,
   workspace: WorkspaceContext,
@@ -46,33 +34,22 @@ export async function getAccountDetail(
   workspace: WorkspaceContext,
   id: string,
 ): Promise<AccountDetail | null> {
-  const account = await new AccountRepository(database, workspace).getAccount(id);
+  const repository = new AccountRepository(database, workspace);
+  const account = await repository.getAccount(id);
   if (!account) return null;
-  const contacts = await database
-    .prepare(
-      `SELECT c.id, c.email, c.first_name, c.last_name, c.stage, c.score,
-              c.status, cc.title, cc.is_primary
-       FROM company_contacts cc
-       JOIN contacts c
-         ON c.workspace_id = cc.workspace_id AND c.id = cc.contact_id
-       WHERE cc.workspace_id = ? AND cc.company_id = ?
-       ORDER BY cc.is_primary DESC,
-                COALESCE(c.last_name, c.first_name, c.email, c.id) ASC`,
-    )
-    .bind(workspace.workspaceId, account.id)
-    .all<AccountContactRow>();
+  const contacts = await repository.listAccountContacts(account.id);
   return {
     ...account,
-    contacts: contacts.results.map((row) => ({
+    contacts: contacts.map((row) => ({
       id: row.id,
       email: row.email,
-      firstName: row.first_name,
-      lastName: row.last_name,
+      firstName: row.firstName,
+      lastName: row.lastName,
       stage: row.stage,
       score: row.score,
-      status: row.status,
+      status: row.status as AccountContact["status"],
       title: row.title,
-      isPrimary: Boolean(row.is_primary),
+      isPrimary: Boolean(row.isPrimary),
     })),
   };
 }
@@ -122,62 +99,21 @@ export async function assignAccountContact(
   workspace: WorkspaceContext,
   input: { id: string; contactId: string; title?: string | undefined; isPrimary: boolean },
 ): Promise<boolean> {
-  const workspaceId = workspace.workspaceId;
-  const relationExists = await database
-    .prepare(
-      `SELECT co.id
-         FROM companies co
-         JOIN contacts c ON c.workspace_id = co.workspace_id
-         WHERE co.workspace_id = ? AND co.id = ? AND c.id = ?
-           AND c.status != 'archived'`,
-    )
-    .bind(workspaceId, input.id, input.contactId)
-    .first();
-  if (!relationExists) return false;
-  const now = new Date().toISOString();
-  const assign = database
-    .prepare(
-      `INSERT INTO company_contacts
-         (workspace_id, company_id, contact_id, title, is_primary, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(workspace_id, company_id, contact_id)
-         DO UPDATE SET title = excluded.title, is_primary = excluded.is_primary`,
-    )
-    .bind(
-      workspaceId,
-      input.id,
-      input.contactId,
-      input.title ?? null,
-      input.isPrimary ? 1 : 0,
-      now,
-    );
-  if (input.isPrimary) {
-    await database.batch([
-      database
-        .prepare(
-          `UPDATE company_contacts SET is_primary = 0
-             WHERE workspace_id = ? AND contact_id = ?`,
-        )
-        .bind(workspaceId, input.contactId),
-      assign,
-    ]);
-  } else {
-    await assign.run();
-  }
+  const repository = new AccountRepository(database, workspace);
+  if (!(await repository.hasAssignableContact(input.id, input.contactId))) return false;
+  await repository.assignContact({
+    accountId: input.id,
+    contactId: input.contactId,
+    title: input.title ?? null,
+    isPrimary: input.isPrimary,
+  });
   return true;
 }
 
-export async function removeAccountContact(
+export function removeAccountContact(
   database: KaenmaDatabase,
   workspace: WorkspaceContext,
   input: { id: string; contactId: string },
 ): Promise<boolean> {
-  const result = await database
-    .prepare(
-      `DELETE FROM company_contacts
-         WHERE workspace_id = ? AND company_id = ? AND contact_id = ?`,
-    )
-    .bind(workspace.workspaceId, input.id, input.contactId)
-    .run();
-  return result.meta.changes > 0;
+  return new AccountRepository(database, workspace).removeContact(input.id, input.contactId);
 }

@@ -1,13 +1,10 @@
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { uuidv7 } from "@kaenma/database";
-import { contract } from "@kaenma/orpc";
+import type { WorkspaceRole } from "@kaenma/orpc";
 
-import { sha256Hex } from "../src/platform/crypto";
+import { seedWorkspaceClient } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -15,44 +12,14 @@ declare module "cloudflare:workers" {
   }
 }
 
-type Client = ContractRouterClient<typeof contract>;
-
-function createClient(token: string): Client {
-  const link = new RPCLink({
-    url: "http://localhost:8787/api/rpc",
-    headers: { authorization: `Bearer ${token}` },
-    fetch: (request) => exports.default.fetch(request),
-  });
-  return createORPCClient(link);
-}
-
 /** Seeds a workspace with an API key at the given role and returns a client for it. */
-async function seedWorkspace(prefix: string, role = "owner") {
-  const workspaceId = uuidv7();
-  const userId = uuidv7();
-  const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-  const now = new Date().toISOString();
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
-       VALUES (?, 'Accounts Owner', ?, 1, ?, ?)`,
-    ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-    env.DB.prepare(
-      `INSERT INTO organization (id, name, slug, created_at, timezone)
-       VALUES (?, 'Accounts Workspace', ?, ?, 'Asia/Tokyo')`,
-    ).bind(workspaceId, `accounts-${workspaceId}`, Date.now()),
-    env.DB.prepare(
-      `INSERT INTO api_keys
-       (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-       VALUES (?, ?, ?, 'accounts test', ?, ?, ?, ?)`,
-    ).bind(uuidv7(), workspaceId, userId, prefix, await sha256Hex(token), role, now),
-  ]);
-  return { workspaceId, token, client: createClient(token) };
+function seedWorkspace(role: WorkspaceRole = "owner") {
+  return seedWorkspaceClient(env.DB, { role, timezone: "Asia/Tokyo" });
 }
 
 describe("accounts over oRPC", () => {
   it("creates, reads, updates and lists an account", async () => {
-    const { workspaceId, client } = await seedWorkspace("acctkeyaaaa1");
+    const { workspaceId, client } = await seedWorkspace();
 
     const created = await client.accounts.create({ name: "Acme Inc", domain: "acme.example" });
     expect(created).toMatchObject({
@@ -74,8 +41,8 @@ describe("accounts over oRPC", () => {
   });
 
   it("reports a typed error for an account in another workspace", async () => {
-    const { client } = await seedWorkspace("acctkeybbbb2");
-    const other = await seedWorkspace("acctkeycccc3");
+    const { client } = await seedWorkspace();
+    const other = await seedWorkspace();
     const hidden = await other.client.accounts.create({ name: "Hidden Co" });
 
     await expect(client.accounts.get({ id: hidden.id })).rejects.toMatchObject({
@@ -86,7 +53,7 @@ describe("accounts over oRPC", () => {
   });
 
   it("attaches a contact, exposes it in camelCase, and counts it", async () => {
-    const { client } = await seedWorkspace("acctkeydddd4");
+    const { client } = await seedWorkspace();
     const account = await client.accounts.create({ name: "Contoso" });
     const contact = await client.contacts.create({
       email: "person@contoso.example",
@@ -126,7 +93,7 @@ describe("accounts over oRPC", () => {
   });
 
   it("rejects attaching a contact that does not exist", async () => {
-    const { client } = await seedWorkspace("acctkeyeeee5");
+    const { client } = await seedWorkspace();
     const account = await client.accounts.create({ name: "Initech" });
 
     await expect(
@@ -139,7 +106,7 @@ describe("accounts over oRPC", () => {
   });
 
   it("rejects a write from a role below marketer", async () => {
-    const { client } = await seedWorkspace("acctkeyffff6", "viewer");
+    const { client } = await seedWorkspace("viewer");
 
     await expect(client.accounts.create({ name: "Readonly Co" })).rejects.toMatchObject({
       code: "FORBIDDEN",
@@ -152,7 +119,7 @@ describe("accounts over oRPC", () => {
   // envelope), typed error codes as the error body. Driving one operation over
   // both surfaces catches them drifting apart.
   it("serves the same data over the REST routes", async () => {
-    const { token, client } = await seedWorkspace("acctkeygggg7");
+    const { token, client } = await seedWorkspace();
     const created = await client.accounts.create({ name: "Umbrella", domain: "umbrella.example" });
 
     const rest = (path: string, init?: RequestInit) =>

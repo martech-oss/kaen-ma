@@ -4,10 +4,9 @@ import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { uuidv7 } from "@kaenma/database";
 import { contract } from "@kaenma/orpc";
 
-import { sha256Hex } from "../src/platform/crypto";
+import { seedWorkspace } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -34,29 +33,10 @@ describe("oRPC API", () => {
   });
 
   it("gets a workspace and creates and lists contacts", async () => {
-    const workspaceId = uuidv7();
-    const userId = uuidv7();
-    const apiKeyId = uuidv7();
-    const prefix = "orpctestkey1";
-    const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-    const now = new Date().toISOString();
-
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO user
-         (id, name, email, email_verified, created_at, updated_at)
-         VALUES (?, 'oRPC Owner', ?, 1, ?, ?)`,
-      ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-      env.DB.prepare(
-        `INSERT INTO organization (id, name, slug, created_at, timezone)
-         VALUES (?, 'oRPC Workspace', ?, ?, 'Asia/Tokyo')`,
-      ).bind(workspaceId, `orpc-${workspaceId}`, Date.now()),
-      env.DB.prepare(
-        `INSERT INTO api_keys
-         (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-         VALUES (?, ?, ?, 'oRPC test', ?, ?, 'owner', ?)`,
-      ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
-    ]);
+    const { workspaceId, token } = await seedWorkspace(env.DB, {
+      name: "oRPC Workspace",
+      timezone: "Asia/Tokyo",
+    });
 
     const client = createClient(token);
     await expect(client.workspace.get()).resolves.toMatchObject({

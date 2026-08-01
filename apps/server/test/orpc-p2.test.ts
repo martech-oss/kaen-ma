@@ -1,13 +1,11 @@
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { uuidv7 } from "@kaenma/database";
 import { contract } from "@kaenma/orpc";
 
-import { sha256Hex } from "../src/platform/crypto";
+import { createFixtureClient, seedWorkspaceClient } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -18,31 +16,8 @@ declare module "cloudflare:workers" {
 type Client = ContractRouterClient<typeof contract>;
 
 async function createWorkspaceClient(): Promise<{ client: Client; workspaceId: string }> {
-  const workspaceId = uuidv7();
-  const userId = uuidv7();
-  const prefix = uuidv7().replaceAll("-", "").slice(0, 12);
-  const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
-       VALUES (?, 'P2 Owner', ?, 1, ?, ?)`,
-    ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-    env.DB.prepare(
-      `INSERT INTO organization (id, name, slug, created_at, timezone)
-       VALUES (?, 'P2 Workspace', ?, ?, 'UTC')`,
-    ).bind(workspaceId, `p2-${workspaceId}`, Date.now()),
-    env.DB.prepare(
-      `INSERT INTO api_keys
-       (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-       VALUES (?, ?, ?, 'P2 test', ?, ?, 'owner', ?)`,
-    ).bind(uuidv7(), workspaceId, userId, prefix, await sha256Hex(token), new Date().toISOString()),
-  ]);
-  const link = new RPCLink({
-    url: "http://localhost:8787/api/rpc",
-    headers: { authorization: `Bearer ${token}` },
-    fetch: (request) => exports.default.fetch(request),
-  });
-  return { client: createORPCClient(link), workspaceId };
+  const { client, workspaceId } = await seedWorkspaceClient(env.DB);
+  return { client, workspaceId };
 }
 
 describe("oRPC contract completion (P2)", () => {
@@ -161,12 +136,7 @@ describe("oRPC contract completion (P2)", () => {
     const { client } = await createWorkspaceClient();
     const created = await client.operations.createApiKey({ name: "CI key", role: "analyst" });
     expect(created.token.startsWith(`kaenma_${created.prefix}_`)).toBe(true);
-    const link = new RPCLink({
-      url: "http://localhost:8787/api/rpc",
-      headers: { authorization: `Bearer ${created.token}` },
-      fetch: (request) => exports.default.fetch(request),
-    });
-    const analystClient: Client = createORPCClient(link);
+    const analystClient: Client = createFixtureClient({ token: created.token });
     await expect(analystClient.workspace.get()).resolves.toMatchObject({ role: "analyst" });
   });
 

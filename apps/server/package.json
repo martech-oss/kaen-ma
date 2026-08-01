@@ -16,9 +16,9 @@
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.25",
     "@kaenma/channels": "workspace:*",
+    "@kaenma/content-renderer": "workspace:*",
     "@kaenma/core": "workspace:*",
     "@kaenma/database": "workspace:*",
-    "@kaenma/content-renderer": "workspace:*",
     "@kaenma/orpc": "workspace:*",
     "@orpc/openapi": "1.14.13",
     "@orpc/server": "^1.14.13",

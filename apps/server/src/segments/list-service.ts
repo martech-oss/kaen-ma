@@ -1,10 +1,7 @@
-import { desc, eq } from "drizzle-orm";
-
 import { compileSegmentFilter } from "@kaenma/core";
-import { segments, type KaenmaDatabase } from "@kaenma/database";
-import type { SegmentRow } from "@kaenma/orpc";
-import type { Contact } from "@kaenma/orpc";
-import { segmentFilterSchema, type SegmentFilter } from "@kaenma/orpc";
+import { SegmentRepository, type KaenmaDatabase } from "@kaenma/database";
+import type { Contact, SegmentFilter, SegmentRow, WorkspaceContext } from "@kaenma/orpc";
+import { segmentFilterSchema } from "@kaenma/orpc";
 
 import {
   nullablePrimitiveString,
@@ -16,14 +13,9 @@ import {
 
 export async function listSegments(
   database: KaenmaDatabase,
-  workspaceId: string,
+  workspace: WorkspaceContext,
 ): Promise<SegmentRow[]> {
-  const rows = await database.orm
-    .select()
-    .from(segments)
-    .where(eq(segments.workspaceId, workspaceId))
-    .orderBy(desc(segments.updatedAt))
-    .limit(200);
+  const rows = await new SegmentRepository(database, workspace).listSegments();
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -47,17 +39,17 @@ const PREVIEW_LIMIT = 100;
 
 export async function previewSegment(
   database: KaenmaDatabase,
-  workspaceId: string,
+  workspace: WorkspaceContext,
   filter: SegmentFilter,
 ): Promise<{ contacts: Contact[]; capped: boolean }> {
-  const compiled = compileSegmentFilter(workspaceId, filter);
-  const result = await database
-    .prepare(`${compiled.sql} ORDER BY c.id DESC LIMIT ?`)
-    .bind(...compiled.params, PREVIEW_LIMIT)
-    .all<Record<string, unknown>>();
+  const compiled = compileSegmentFilter(workspace.workspaceId, filter);
+  const rows = await new SegmentRepository(database, workspace).previewContacts(
+    compiled,
+    PREVIEW_LIMIT,
+  );
   return {
-    contacts: result.results.map(toPreviewContact),
-    capped: result.results.length === PREVIEW_LIMIT,
+    contacts: rows.map(toPreviewContact),
+    capped: rows.length === PREVIEW_LIMIT,
   };
 }
 

@@ -1,13 +1,7 @@
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { uuidv7 } from "@kaenma/database";
-import { contract } from "@kaenma/orpc";
-
-import { sha256Hex } from "../src/platform/crypto";
+import { seedWorkspaceClient } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -17,35 +11,7 @@ declare module "cloudflare:workers" {
 
 describe("Website center", () => {
   it("manages and publishes forms, pages, site messages, and site tracking", async () => {
-    const workspaceId = uuidv7();
-    const userId = uuidv7();
-    const apiKeyId = uuidv7();
-    const prefix = "websitekeys1";
-    const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-    const workspaceSlug = `website-${workspaceId}`;
-    const now = new Date().toISOString();
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO user
-         (id, name, email, email_verified, created_at, updated_at)
-         VALUES (?, 'Website Owner', ?, 1, ?, ?)`,
-      ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-      env.DB.prepare(
-        `INSERT INTO organization (id, name, slug, created_at, timezone)
-         VALUES (?, 'Website Workspace', ?, ?, 'UTC')`,
-      ).bind(workspaceId, workspaceSlug, Date.now()),
-      env.DB.prepare(
-        `INSERT INTO api_keys
-         (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-         VALUES (?, ?, ?, 'Website test', ?, ?, 'owner', ?)`,
-      ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
-    ]);
-    const link = new RPCLink({
-      url: "http://localhost:8787/api/rpc",
-      headers: { authorization: `Bearer ${token}` },
-      fetch: (request) => exports.default.fetch(request),
-    });
-    const client: ContractRouterClient<typeof contract> = createORPCClient(link);
+    const { client, slug: workspaceSlug } = await seedWorkspaceClient(env.DB);
     // The hosted-form, embed, track and script endpoints are public and are not
     // part of the oRPC contract; they stay plain fetches against the worker.
     const publicCall = (path: string, init?: RequestInit) => {

@@ -1,13 +1,9 @@
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { uuidv7 } from "@kaenma/database";
-import { contract } from "@kaenma/orpc";
+import type { WorkspaceRole } from "@kaenma/orpc";
 
-import { sha256Hex } from "../src/platform/crypto";
+import { seedWorkspaceClient } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -15,39 +11,9 @@ declare module "cloudflare:workers" {
   }
 }
 
-async function seedWorkspace(prefix: string, role = "owner") {
-  const workspaceId = uuidv7();
-  const userId = uuidv7();
-  const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
-       VALUES (?, 'Res Owner', ?, 1, ?, ?)`,
-    ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-    env.DB.prepare(
-      `INSERT INTO organization (id, name, slug, created_at, timezone)
-       VALUES (?, 'Res Workspace', ?, ?, 'Asia/Tokyo')`,
-    ).bind(workspaceId, `res-${workspaceId}`, Date.now()),
-    env.DB.prepare(
-      `INSERT INTO api_keys
-       (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-       VALUES (?, ?, ?, 'res test', ?, ?, ?, ?)`,
-    ).bind(
-      uuidv7(),
-      workspaceId,
-      userId,
-      prefix,
-      await sha256Hex(token),
-      role,
-      new Date().toISOString(),
-    ),
-  ]);
-  const link = new RPCLink({
-    url: "http://localhost:8787/api/rpc",
-    headers: { authorization: `Bearer ${token}` },
-    fetch: (request) => exports.default.fetch(request),
-  });
-  return createORPCClient(link) as ContractRouterClient<typeof contract>;
+async function seedWorkspace(role: WorkspaceRole = "owner") {
+  const { client } = await seedWorkspaceClient(env.DB, { role, timezone: "Asia/Tokyo" });
+  return client;
 }
 
 /**
@@ -57,7 +23,7 @@ async function seedWorkspace(prefix: string, role = "owner") {
  */
 describe("contact resources over oRPC", () => {
   it("maps option rows to camelCase with counts", async () => {
-    const client = await seedWorkspace("reskeyaaaaa1");
+    const client = await seedWorkspace();
     const tag = await client.contactResources.createTag({ name: "VIP", color: "#0f766e" });
     const list = await client.contactResources.createList({
       name: "Customers",
@@ -90,7 +56,7 @@ describe("contact resources over oRPC", () => {
   });
 
   it("maps the profile to camelCase, including the account relation", async () => {
-    const client = await seedWorkspace("reskeybbbbb2");
+    const client = await seedWorkspace();
     const account = await client.accounts.create({ name: "Globex" });
     const contact = await client.contacts.create({ email: "p@example.com", customFields: {} });
     await client.accounts.assignContact({
@@ -117,7 +83,7 @@ describe("contact resources over oRPC", () => {
   });
 
   it("requires admin for a bulk archive but allows marketer to tag", async () => {
-    const client = await seedWorkspace("reskeyccccc3", "marketer");
+    const client = await seedWorkspace("marketer");
     const tag = await client.contactResources.createTag({ name: "Bulk", color: "#64748b" });
     const contact = await client.contacts.create({ email: "b@example.com", customFields: {} });
 
@@ -139,7 +105,7 @@ describe("contact resources over oRPC", () => {
   });
 
   it("rejects a duplicate tag name", async () => {
-    const client = await seedWorkspace("reskeyddddd4");
+    const client = await seedWorkspace();
     await client.contactResources.createTag({ name: "Dup", color: "#64748b" });
     await expect(
       client.contactResources.createTag({ name: "Dup", color: "#64748b" }),

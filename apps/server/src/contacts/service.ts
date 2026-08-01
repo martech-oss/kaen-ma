@@ -1,10 +1,13 @@
-import { ContactRepository, type KaenmaDatabase } from "@kaenma/database";
+import {
+  ContactRepository,
+  ContactResourceRepository,
+  type KaenmaDatabase,
+} from "@kaenma/database";
 import type { ContactListInput, ContactListResult, ContactSummary } from "@kaenma/orpc";
 import type { WorkspaceContext } from "@kaenma/orpc";
 import type { Contact, ContactCreate } from "@kaenma/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
-import { nullablePrimitiveString, parseJsonRecord, primitiveString } from "../platform/values";
 
 export async function listContacts(
   database: KaenmaDatabase,
@@ -53,27 +56,9 @@ export async function getContactTimeline(
   workspaceId: string,
   contactId: string,
 ): Promise<ContactTimelineEvent[] | null> {
-  const exists = await database
-    .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND id = ?")
-    .bind(workspaceId, contactId)
-    .first();
-  if (!exists) return null;
-  const result = await database
-    .prepare(
-      `SELECT id, type, resource_type, resource_id, properties, occurred_at
-       FROM contact_events WHERE workspace_id = ? AND contact_id = ?
-       ORDER BY occurred_at DESC, id DESC LIMIT 200`,
-    )
-    .bind(workspaceId, contactId)
-    .all<Record<string, unknown>>();
-  return result.results.map((row) => ({
-    id: primitiveString(row["id"]),
-    type: primitiveString(row["type"]),
-    resourceType: nullablePrimitiveString(row["resource_type"]),
-    resourceId: nullablePrimitiveString(row["resource_id"]),
-    properties: parseJsonRecord(row["properties"]),
-    occurredAt: primitiveString(row["occurred_at"]),
-  }));
+  const repository = new ContactResourceRepository(database, { workspaceId });
+  if (!(await repository.contactExists(contactId))) return null;
+  return repository.listContactEvents(contactId, 200);
 }
 
 export type ContactEventOutcome =
@@ -91,14 +76,13 @@ export async function recordContactApiEvent(
     occurredAt?: string;
   },
 ): Promise<ContactEventOutcome> {
-  const contact = await database
-    .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND id = ? AND status != 'archived'")
-    .bind(workspaceId, input.contactId)
-    .first<{ id: string }>();
-  if (!contact) return { kind: "contact_not_found" };
+  const contactId = await new ContactResourceRepository(database, {
+    workspaceId,
+  }).findActiveContactId(input.contactId);
+  if (!contactId) return { kind: "contact_not_found" };
   const result = await recordContactEvent(database, {
     workspaceId,
-    contactId: contact.id,
+    contactId,
     type: input.source === "webhook" ? "webhook_event" : "custom_event",
     resourceType: input.source,
     resourceId: input.eventName,
@@ -115,85 +99,35 @@ async function attachContactRelations(
 ): Promise<ContactSummary[]> {
   if (contacts.length === 0) return [];
   const ids = contacts.map((contact) => contact.id);
-  const placeholders = ids.map(() => "?").join(", ");
-  const relationResults = await database.batch([
-    database
-      .prepare(
-        `SELECT ct.contact_id, t.id, t.name, t.slug, t.color
-         FROM contact_tags ct JOIN tags t
-           ON t.workspace_id = ct.workspace_id AND t.id = ct.tag_id
-         WHERE ct.workspace_id = ? AND ct.contact_id IN (${placeholders})
-         ORDER BY t.name`,
-      )
-      .bind(workspaceId, ...ids),
-    database
-      .prepare(
-        `SELECT clm.contact_id, cl.id, cl.name, cl.slug, cl.color
-         FROM contact_list_memberships clm JOIN contact_lists cl
-           ON cl.workspace_id = clm.workspace_id AND cl.id = clm.list_id
-         WHERE clm.workspace_id = ? AND clm.status = 'active'
-           AND clm.contact_id IN (${placeholders})
-         ORDER BY cl.name`,
-      )
-      .bind(workspaceId, ...ids),
-    database
-      .prepare(
-        `SELECT cc.contact_id, co.id, co.name, co.domain, cc.title, cc.is_primary
-         FROM company_contacts cc JOIN companies co
-           ON co.workspace_id = cc.workspace_id AND co.id = cc.company_id
-         WHERE cc.workspace_id = ? AND cc.contact_id IN (${placeholders})
-         ORDER BY cc.is_primary DESC, co.name`,
-      )
-      .bind(workspaceId, ...ids),
-  ]);
-  const tagRows = relationResults[0]!;
-  const listRows = relationResults[1]!;
-  const accountRows = relationResults[2]!;
+  const relations = await new ContactResourceRepository(database, {
+    workspaceId,
+  }).listContactRelations(ids);
   const tagsByContact = new Map<string, ContactSummary["tags"]>();
   const listsByContact = new Map<string, ContactSummary["lists"]>();
   const accountsByContact = new Map<string, ContactSummary["accounts"]>();
 
-  for (const row of tagRows.results as Array<{
-    contact_id: string;
-    id: string;
-    name: string;
-    slug: string;
-    color: string;
-  }>) {
-    const items = tagsByContact.get(row.contact_id) ?? [];
+  for (const row of relations.tags) {
+    const items = tagsByContact.get(row.contactId) ?? [];
     items.push({ id: row.id, name: row.name, slug: row.slug, color: row.color });
-    tagsByContact.set(row.contact_id, items);
+    tagsByContact.set(row.contactId, items);
   }
 
-  for (const row of listRows.results as Array<{
-    contact_id: string;
-    id: string;
-    name: string;
-    slug: string;
-    color: string;
-  }>) {
-    const items = listsByContact.get(row.contact_id) ?? [];
+  for (const row of relations.lists) {
+    const items = listsByContact.get(row.contactId) ?? [];
     items.push({ id: row.id, name: row.name, slug: row.slug, color: row.color });
-    listsByContact.set(row.contact_id, items);
+    listsByContact.set(row.contactId, items);
   }
 
-  for (const row of accountRows.results as Array<{
-    contact_id: string;
-    id: string;
-    name: string;
-    domain: string | null;
-    title: string | null;
-    is_primary: number;
-  }>) {
-    const items = accountsByContact.get(row.contact_id) ?? [];
+  for (const row of relations.accounts) {
+    const items = accountsByContact.get(row.contactId) ?? [];
     items.push({
       id: row.id,
       name: row.name,
       domain: row.domain,
       title: row.title,
-      is_primary: Boolean(row.is_primary),
+      is_primary: Boolean(row.isPrimary),
     });
-    accountsByContact.set(row.contact_id, items);
+    accountsByContact.set(row.contactId, items);
   }
 
   return contacts.map((contact) => ({

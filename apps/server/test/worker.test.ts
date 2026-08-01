@@ -1,14 +1,23 @@
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { ContactRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/database";
-import { contract } from "@kaenma/orpc";
+import {
+  companies,
+  companyContacts,
+  ContactRepository,
+  contactListMemberships,
+  contactLists,
+  contacts,
+  contactTags,
+  createDatabase,
+  reserveIdempotencyKey,
+  tags,
+  uuidv7,
+} from "@kaenma/database";
 
 import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
-import { sha256Hex } from "../src/platform/crypto";
+import { seedWorkspace, seedWorkspaceClient } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -47,19 +56,8 @@ describe("Kaenma Worker", () => {
   });
 
   it("never returns a contact from another workspace by direct ID", async () => {
-    const firstWorkspace = uuidv7();
-    const secondWorkspace = uuidv7();
-    const now = Date.now();
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO organization (id, name, slug, created_at, timezone)
-         VALUES (?, 'First', 'first', ?, 'UTC')`,
-      ).bind(firstWorkspace, now),
-      env.DB.prepare(
-        `INSERT INTO organization (id, name, slug, created_at, timezone)
-         VALUES (?, 'Second', 'second', ?, 'UTC')`,
-      ).bind(secondWorkspace, now),
-    ]);
+    const { workspaceId: firstWorkspace } = await seedWorkspace(env.DB);
+    const { workspaceId: secondWorkspace } = await seedWorkspace(env.DB);
     const first = new ContactRepository(env.DB, {
       workspaceId: firstWorkspace,
       userId: "user-one",
@@ -79,17 +77,11 @@ describe("Kaenma Worker", () => {
   });
 
   it("filters, paginates, archives, and restores contacts within a workspace", async () => {
-    const workspaceId = uuidv7();
+    const { workspaceId } = await seedWorkspace(env.DB);
     const tagId = uuidv7();
     const listId = uuidv7();
     const accountId = uuidv7();
     const now = new Date().toISOString();
-    await env.DB.prepare(
-      `INSERT INTO organization (id, name, slug, created_at, timezone)
-       VALUES (?, 'Contacts Workspace', ?, ?, 'UTC')`,
-    )
-      .bind(workspaceId, `contacts-${workspaceId}`, Date.now())
-      .run();
     const repository = new ContactRepository(env.DB, {
       workspaceId,
       userId: "contacts-owner",
@@ -107,45 +99,68 @@ describe("Kaenma Worker", () => {
       stage: "lead",
       customFields: {},
     });
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO tags (id, workspace_id, name, slug, color, created_at)
-         VALUES (?, ?, 'VIP', ?, '#6366f1', ?)`,
-      ).bind(tagId, workspaceId, `vip-${tagId}`, now),
-      env.DB.prepare(
-        `INSERT INTO contact_lists
-         (id, workspace_id, name, slug, description, color, created_at, updated_at)
-         VALUES (?, ?, 'Customers', ?, '', '#6366f1', ?, ?)`,
-      ).bind(listId, workspaceId, `customers-${listId}`, now, now),
-      env.DB.prepare(
-        `INSERT INTO companies
-         (id, workspace_id, name, domain, custom_fields, created_at, updated_at)
-         VALUES (?, ?, 'Acme', 'acme.example', '{}', ?, ?)`,
-      ).bind(accountId, workspaceId, now, now),
-      env.DB.prepare("UPDATE contacts SET score = 80 WHERE workspace_id = ? AND id = ?").bind(
+    const orm = createDatabase(env.DB).orm;
+    await orm.batch([
+      orm.insert(tags).values({
+        id: tagId,
         workspaceId,
-        highScore.id,
-      ),
-      env.DB.prepare("UPDATE contacts SET score = 10 WHERE workspace_id = ? AND id = ?").bind(
+        name: "VIP",
+        slug: `vip-${tagId}`,
+        color: "#6366f1",
+        createdAt: now,
+      }),
+      orm.insert(contactLists).values({
+        id: listId,
         workspaceId,
-        lowScore.id,
-      ),
+        name: "Customers",
+        slug: `customers-${listId}`,
+        description: "",
+        color: "#6366f1",
+        createdAt: now,
+        updatedAt: now,
+      }),
+      orm.insert(companies).values({
+        id: accountId,
+        workspaceId,
+        name: "Acme",
+        domain: "acme.example",
+        customFields: "{}",
+        createdAt: now,
+        updatedAt: now,
+      }),
+      orm
+        .update(contacts)
+        .set({ score: 80 })
+        .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, highScore.id))),
+      orm
+        .update(contacts)
+        .set({ score: 10 })
+        .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, lowScore.id))),
     ]);
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO contact_tags (workspace_id, contact_id, tag_id, created_at)
-         VALUES (?, ?, ?, ?)`,
-      ).bind(workspaceId, highScore.id, tagId, now),
-      env.DB.prepare(
-        `INSERT INTO contact_list_memberships
-         (workspace_id, list_id, contact_id, status, source, created_at, updated_at)
-         VALUES (?, ?, ?, 'active', 'manual', ?, ?)`,
-      ).bind(workspaceId, listId, highScore.id, now, now),
-      env.DB.prepare(
-        `INSERT INTO company_contacts
-         (workspace_id, company_id, contact_id, title, is_primary, created_at)
-         VALUES (?, ?, ?, 'Owner', 1, ?)`,
-      ).bind(workspaceId, accountId, highScore.id, now),
+    await orm.batch([
+      orm.insert(contactTags).values({
+        workspaceId,
+        contactId: highScore.id,
+        tagId,
+        createdAt: now,
+      }),
+      orm.insert(contactListMemberships).values({
+        workspaceId,
+        listId,
+        contactId: highScore.id,
+        status: "active",
+        source: "manual",
+        createdAt: now,
+        updatedAt: now,
+      }),
+      orm.insert(companyContacts).values({
+        workspaceId,
+        companyId: accountId,
+        contactId: highScore.id,
+        title: "Owner",
+        isPrimary: 1,
+        createdAt: now,
+      }),
     ]);
 
     const filtered = await repository.listContacts({
@@ -186,34 +201,8 @@ describe("Kaenma Worker", () => {
   });
 
   it("manages the full contact profile through authenticated API routes", async () => {
-    const workspaceId = uuidv7();
-    const userId = uuidv7();
-    const apiKeyId = uuidv7();
-    const prefix = "contactstest";
-    const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
+    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
     const now = new Date().toISOString();
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO user
-         (id, name, email, email_verified, created_at, updated_at)
-         VALUES (?, 'Contacts Owner', ?, 1, ?, ?)`,
-      ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-      env.DB.prepare(
-        `INSERT INTO organization (id, name, slug, created_at, timezone)
-         VALUES (?, 'API Contacts Workspace', ?, ?, 'UTC')`,
-      ).bind(workspaceId, `api-contacts-${workspaceId}`, Date.now()),
-      env.DB.prepare(
-        `INSERT INTO api_keys
-         (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-         VALUES (?, ?, ?, 'Contacts test', ?, ?, 'owner', ?)`,
-      ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
-    ]);
-    const link = new RPCLink({
-      url: "http://localhost:8787/api/rpc",
-      headers: { authorization: `Bearer ${token}` },
-      fetch: (request) => exports.default.fetch(request),
-    });
-    const client: ContractRouterClient<typeof contract> = createORPCClient(link);
 
     const tag = await client.contactResources.createTag({ name: "VIP", color: "#6366f1" });
     expect(tag.id).toBeTruthy();
@@ -286,6 +275,7 @@ describe("Kaenma Worker", () => {
     ).resolves.toEqual({ updated: true });
 
     const templateId = uuidv7();
+    // raw seed: migrate in P6/P7 (email template row belongs to the messaging domain)
     await env.DB.prepare(
       `INSERT INTO email_templates
        (id, workspace_id, name, purpose, resend_template_id, resend_alias, subject,
@@ -403,13 +393,7 @@ describe("Kaenma Worker", () => {
   });
 
   it("reserves a delivery idempotency key only once", async () => {
-    const workspaceId = uuidv7();
-    await env.DB.prepare(
-      `INSERT INTO organization (id, name, slug, created_at, timezone)
-       VALUES (?, 'Workspace', 'workspace', ?, 'UTC')`,
-    )
-      .bind(workspaceId, Date.now())
-      .run();
+    const { workspaceId } = await seedWorkspace(env.DB);
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
     expect(
       await reserveIdempotencyKey(env.DB, workspaceId, "delivery", "same-key", expiresAt),

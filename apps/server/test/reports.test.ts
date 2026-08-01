@@ -1,13 +1,9 @@
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { uuidv7 } from "@kaenma/database";
-import { contract } from "@kaenma/orpc";
+import { contactEvents, contacts as contactsTable, createDatabase, uuidv7 } from "@kaenma/database";
 
-import { sha256Hex } from "../src/platform/crypto";
+import { seedMember, seedWorkspaceClient } from "./factory";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -17,9 +13,6 @@ declare module "cloudflare:workers" {
 
 describe("Reporting", () => {
   it("aggregates contacts, automations, emails, deals, and site activity", async () => {
-    const workspaceId = uuidv7();
-    const userId = uuidv7();
-    const apiKeyId = uuidv7();
     const contactId = uuidv7();
     const archivedContactId = uuidv7();
     const campaignId = uuidv7();
@@ -31,41 +24,67 @@ describe("Reporting", () => {
     const wonDealId = uuidv7();
     const openDealId = uuidv7();
     const formId = uuidv7();
-    const prefix = "reportskey01";
-    const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
     const at = "2026-07-15T03:00:00.000Z";
     const completedAt = "2026-07-20T03:00:00.000Z";
+    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB, {
+      role: "analyst",
+      timezone: "Asia/Tokyo",
+    });
+    await seedMember(env.DB, { workspaceId, userId, role: "analyst" });
+    const orm = createDatabase(env.DB).orm;
+    await orm.insert(contactsTable).values([
+      {
+        id: contactId,
+        workspaceId,
+        email: "active@example.com",
+        stage: "lead",
+        score: 10,
+        status: "active",
+        customFields: "{}",
+        createdAt: at,
+        updatedAt: at,
+      },
+      {
+        id: archivedContactId,
+        workspaceId,
+        email: "archived@example.com",
+        stage: "lead",
+        score: 0,
+        status: "archived",
+        customFields: "{}",
+        createdAt: at,
+        updatedAt: completedAt,
+        archivedAt: completedAt,
+      },
+    ]);
+    await orm.insert(contactEvents).values([
+      {
+        id: uuidv7(),
+        workspaceId,
+        contactId,
+        visitorId: "visitor-1",
+        type: "page_viewed",
+        resourceType: "page",
+        resourceId: "https://example.com/pricing",
+        properties: "{}",
+        occurredAt: at,
+        createdAt: at,
+      },
+      {
+        id: uuidv7(),
+        workspaceId,
+        contactId,
+        visitorId: "visitor-1",
+        type: "page_viewed",
+        resourceType: "page",
+        resourceId: "https://example.com/pricing",
+        properties: "{}",
+        occurredAt: completedAt,
+        createdAt: completedAt,
+      },
+    ]);
+    // raw seed: migrate in P6/P7 (campaigns, deliveries, deals, webforms, site messages)
     await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO user
-         (id, name, email, email_verified, created_at, updated_at)
-         VALUES (?, 'Report Analyst', ?, 1, ?, ?)`,
-      ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-      env.DB.prepare(
-        `INSERT INTO organization (id, name, slug, created_at, timezone)
-         VALUES (?, 'Report Workspace', ?, ?, 'Asia/Tokyo')`,
-      ).bind(workspaceId, `reports-${workspaceId}`, Date.now()),
-      env.DB.prepare(
-        `INSERT INTO member
-         (id, organization_id, user_id, role, created_at)
-         VALUES (?, ?, ?, 'analyst', ?)`,
-      ).bind(uuidv7(), workspaceId, userId, Date.now()),
-      env.DB.prepare(
-        `INSERT INTO api_keys
-         (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-         VALUES (?, ?, ?, 'Reports test', ?, ?, 'analyst', ?)`,
-      ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), at),
-      env.DB.prepare(
-        `INSERT INTO contacts
-         (id, workspace_id, email, stage, score, status, custom_fields, created_at, updated_at)
-         VALUES (?, ?, 'active@example.com', 'lead', 10, 'active', '{}', ?, ?)`,
-      ).bind(contactId, workspaceId, at, at),
-      env.DB.prepare(
-        `INSERT INTO contacts
-         (id, workspace_id, email, stage, score, status, custom_fields,
-          created_at, updated_at, archived_at)
-         VALUES (?, ?, 'archived@example.com', 'lead', 0, 'archived', '{}', ?, ?, ?)`,
-      ).bind(archivedContactId, workspaceId, at, completedAt, completedAt),
       env.DB.prepare(
         `INSERT INTO campaigns
          (id, workspace_id, name, description, status, created_at, updated_at)
@@ -168,20 +187,6 @@ describe("Reporting", () => {
          VALUES (?, ?, ?, ?, ?, '{}', ?)`,
       ).bind(uuidv7(), workspaceId, formId, contactId, `form-${uuidv7()}`, at),
       env.DB.prepare(
-        `INSERT INTO contact_events
-         (id, workspace_id, contact_id, visitor_id, type, resource_type,
-          resource_id, properties, occurred_at, created_at)
-         VALUES (?, ?, ?, 'visitor-1', 'page_viewed', 'page',
-                 'https://example.com/pricing', '{}', ?, ?)`,
-      ).bind(uuidv7(), workspaceId, contactId, at, at),
-      env.DB.prepare(
-        `INSERT INTO contact_events
-         (id, workspace_id, contact_id, visitor_id, type, resource_type,
-          resource_id, properties, occurred_at, created_at)
-         VALUES (?, ?, ?, 'visitor-1', 'page_viewed', 'page',
-                 'https://example.com/pricing', '{}', ?, ?)`,
-      ).bind(uuidv7(), workspaceId, contactId, completedAt, completedAt),
-      env.DB.prepare(
         `INSERT INTO site_messages
          (id, workspace_id, name, status, headline, body, cta_label,
           page_pattern, impression_count, click_count, created_at, updated_at)
@@ -190,12 +195,6 @@ describe("Reporting", () => {
       ).bind(uuidv7(), workspaceId, at, at),
     ]);
 
-    const link = new RPCLink({
-      url: "http://localhost:8787/api/rpc",
-      headers: { authorization: `Bearer ${token}` },
-      fetch: (request) => exports.default.fetch(request),
-    });
-    const client: ContractRouterClient<typeof contract> = createORPCClient(link);
     const range = { from: "2026-07-01", to: "2026-07-31" };
 
     const contacts = await client.reports.contacts(range);

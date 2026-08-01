@@ -1,9 +1,7 @@
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-import { uuidv7 } from "@kaenma/database";
-
-import { sha256Hex } from "../src/platform/crypto";
+import { seedWorkspace } from "./factory";
 
 /**
  * Executable specification of the public /api/v1 REST surface.
@@ -226,25 +224,7 @@ describe("workspace API journey", () => {
 async function seedApiWorkspace(): Promise<
   (path: string, init?: RequestInit) => Promise<Response>
 > {
-  const workspaceId = uuidv7();
-  const userId = uuidv7();
-  const prefix = uuidv7().replaceAll("-", "").slice(0, 12);
-  const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-  await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
-       VALUES (?, 'Journey Owner', ?, 1, ?, ?)`,
-    ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
-    env.DB.prepare(
-      `INSERT INTO organization (id, name, slug, created_at, timezone)
-       VALUES (?, 'Journey Workspace', ?, ?, 'UTC')`,
-    ).bind(workspaceId, `journey-${workspaceId}`, Date.now()),
-    env.DB.prepare(
-      `INSERT INTO api_keys
-       (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
-       VALUES (?, ?, ?, 'journey test', ?, ?, 'owner', ?)`,
-    ).bind(uuidv7(), workspaceId, userId, prefix, await sha256Hex(token), new Date().toISOString()),
-  ]);
+  const { token } = await seedWorkspace(env.DB);
 
   return (path, init) =>
     exports.default.fetch(

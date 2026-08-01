@@ -1,8 +1,7 @@
-import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
+import { DataJobRepository, uuidv7, type KaenmaDatabase } from "@kaenma/database";
 import type { DataJob } from "@kaenma/orpc";
 import type { WorkspaceContext } from "@kaenma/orpc";
 
-import { nullablePrimitiveString, numericValue, primitiveString } from "../platform/values";
 import { parseCsv } from "./csv";
 
 interface ImportDeps {
@@ -54,22 +53,13 @@ export async function startContactImport(
     JSON.stringify({ header, parts: parts.length, rows: rows.length }),
     { httpMetadata: { contentType: "application/json" } },
   );
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `INSERT INTO import_jobs
-       (id, workspace_id, kind, r2_key, status, cursor, created_at, updated_at)
-       VALUES (?, ?, 'contact_import', ?, 'pending', ?, ?, ?)`,
-    )
-    .bind(
-      jobId,
-      workspace.workspaceId,
-      baseKey,
-      JSON.stringify({ totalParts: parts.length }),
-      now,
-      now,
-    )
-    .run();
+  const repository = new DataJobRepository(database, workspace);
+  await repository.createJob({
+    id: jobId,
+    kind: "contact_import",
+    r2Key: baseKey,
+    cursor: { totalParts: parts.length },
+  });
   if (parts.length > 0) {
     await deps.queue.send({
       kind: "contact_import",
@@ -78,10 +68,7 @@ export async function startContactImport(
       totalParts: parts.length,
     });
   } else {
-    await database
-      .prepare("UPDATE import_jobs SET status = 'completed', updated_at = ? WHERE id = ?")
-      .bind(now, jobId)
-      .run();
+    await repository.markCompleted(jobId);
   }
   return { kind: "started", jobId, rows: rows.length, parts: parts.length };
 }
@@ -93,22 +80,12 @@ export async function startContactExport(
 ): Promise<{ jobId: string }> {
   const jobId = uuidv7();
   const key = `${workspace.workspaceId}/exports/contacts-${jobId}.csv`;
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `INSERT INTO import_jobs
-       (id, workspace_id, kind, r2_key, status, cursor, created_at, updated_at)
-       VALUES (?, ?, 'contact_export', ?, 'pending', ?, ?, ?)`,
-    )
-    .bind(
-      jobId,
-      workspace.workspaceId,
-      key,
-      JSON.stringify({ partNumber: 0, lastId: "" }),
-      now,
-      now,
-    )
-    .run();
+  await new DataJobRepository(database, workspace).createJob({
+    id: jobId,
+    kind: "contact_export",
+    r2Key: key,
+    cursor: { partNumber: 0, lastId: "" },
+  });
   await queue.send({ kind: "contact_export", exportJobId: jobId });
   return { jobId };
 }
@@ -118,26 +95,9 @@ export async function getDataJob(
   workspaceId: string,
   jobId: string,
 ): Promise<DataJob | null> {
-  const row = await database
-    .prepare(
-      `SELECT id, kind, status, processed, succeeded, failed,
-              error_manifest_key, created_at, updated_at
-       FROM import_jobs WHERE workspace_id = ? AND id = ?`,
-    )
-    .bind(workspaceId, jobId)
-    .first<Record<string, unknown>>();
+  const row = await new DataJobRepository(database, { workspaceId }).getDataJob(jobId);
   if (!row) return null;
-  return {
-    id: primitiveString(row["id"]),
-    kind: primitiveString(row["kind"]) as DataJob["kind"],
-    status: primitiveString(row["status"]),
-    processed: numericValue(row["processed"]),
-    succeeded: numericValue(row["succeeded"]),
-    failed: numericValue(row["failed"]),
-    errorManifestKey: nullablePrimitiveString(row["error_manifest_key"]),
-    createdAt: primitiveString(row["created_at"]),
-    updatedAt: primitiveString(row["updated_at"]),
-  };
+  return { ...row, kind: row.kind as DataJob["kind"] };
 }
 
 export type ExportDownloadOutcome =
@@ -151,15 +111,9 @@ export async function getContactExportFile(
   workspaceId: string,
   jobId: string,
 ): Promise<ExportDownloadOutcome> {
-  const row = await database
-    .prepare(
-      `SELECT r2_key, status FROM import_jobs
-       WHERE workspace_id = ? AND id = ? AND kind = 'contact_export'`,
-    )
-    .bind(workspaceId, jobId)
-    .first<{ r2_key: string; status: string }>();
-  if (!row || row.status !== "completed") return { kind: "not_ready" };
-  const object = await bucket.get(row.r2_key);
+  const job = await new DataJobRepository(database, { workspaceId }).getExportJob(jobId);
+  if (!job || job.status !== "completed") return { kind: "not_ready" };
+  const object = await bucket.get(job.r2Key);
   if (!object) return { kind: "missing" };
   const bytes = await object.arrayBuffer();
   return {

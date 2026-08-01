@@ -1,23 +1,22 @@
 import { compileSegmentFilter } from "@kaenma/core";
-import type { KaenmaDatabase } from "@kaenma/database";
+import { SegmentRepository, type KaenmaDatabase } from "@kaenma/database";
 import { segmentFilterSchema } from "@kaenma/orpc";
+
+/**
+ * These helpers are called from flows that only carry a workspace id (bulk
+ * contact actions, membership refreshes), so a minimal repository context is
+ * synthesized here; the repository only reads `workspaceId` from it.
+ */
+function segmentRepository(database: KaenmaDatabase, workspaceId: string): SegmentRepository {
+  return new SegmentRepository(database, { workspaceId, userId: "system", role: "owner" });
+}
 
 export async function updateSegmentMemberCount(
   database: KaenmaDatabase,
   workspaceId: string,
   segmentId: string,
 ): Promise<void> {
-  await database
-    .prepare(
-      `UPDATE segments
-     SET member_count = (
-       SELECT COUNT(*) FROM segment_memberships sm
-       WHERE sm.workspace_id = segments.workspace_id AND sm.segment_id = segments.id
-     ), updated_at = ?
-     WHERE workspace_id = ? AND id = ?`,
-    )
-    .bind(new Date().toISOString(), workspaceId, segmentId)
-    .run();
+  await segmentRepository(database, workspaceId).updateMemberCount(segmentId);
 }
 
 export async function refreshSegmentMemberships(
@@ -25,51 +24,22 @@ export async function refreshSegmentMemberships(
   workspaceId: string,
   segmentId: string,
 ): Promise<boolean> {
-  const segment = await database
-    .prepare(`SELECT kind, filter_ast FROM segments WHERE workspace_id = ? AND id = ?`)
-    .bind(workspaceId, segmentId)
-    .first<{ kind: "static" | "dynamic"; filter_ast: string | null }>();
+  const repository = segmentRepository(database, workspaceId);
+  const segment = await repository.findSegmentDefinition(segmentId);
   if (!segment) return false;
   if (segment.kind === "static") {
-    await updateSegmentMemberCount(database, workspaceId, segmentId);
+    await repository.updateMemberCount(segmentId);
     return true;
   }
   let rawFilter: unknown;
   try {
-    rawFilter = segment.filter_ast ? JSON.parse(segment.filter_ast) : null;
+    rawFilter = segment.filterAst ? JSON.parse(segment.filterAst) : null;
   } catch {
     return false;
   }
   const parsed = segmentFilterSchema.safeParse(rawFilter);
   if (!parsed.success) return false;
   const compiled = compileSegmentFilter(workspaceId, parsed.data);
-  const now = new Date().toISOString();
-  await database.batch([
-    database
-      .prepare(
-        `DELETE FROM segment_memberships
-       WHERE workspace_id = ? AND segment_id = ? AND source = 'dynamic'`,
-      )
-      .bind(workspaceId, segmentId),
-    database
-      .prepare(
-        `INSERT OR IGNORE INTO segment_memberships
-       (workspace_id, segment_id, contact_id, source, joined_at)
-       SELECT ?, ?, matched.id, 'dynamic', ?
-       FROM (${compiled.sql}) matched
-       WHERE matched.status != 'archived'`,
-      )
-      .bind(workspaceId, segmentId, now, ...compiled.params),
-    database
-      .prepare(
-        `UPDATE segments
-       SET member_count = (
-         SELECT COUNT(*) FROM segment_memberships sm
-         WHERE sm.workspace_id = segments.workspace_id AND sm.segment_id = segments.id
-       ), evaluated_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ?`,
-      )
-      .bind(now, now, workspaceId, segmentId),
-  ]);
+  await repository.replaceDynamicMemberships(segmentId, compiled);
   return true;
 }
