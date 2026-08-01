@@ -127,16 +127,24 @@ pnpm db:migrate:local
 ```
 
 アプリケーションからのDBアクセスは`@kaenma/database`のDrizzle clientへ統一しています。
-テーブル定義は`packages/database/src/auth-schema.ts`と
-`packages/database/src/business-schema.ts`が正本です。スキーマ変更時は次のコマンドで
-Drizzle Kitの差分SQLを生成してレビューできます。
+テーブル定義は`packages/database/src/<domain>/schema.ts`(ドメイン別)が正本です。
+スキーマ変更時は次のコマンドでDrizzle Kitがmigration SQLを生成します。
 
 ```bash
 pnpm db:generate
 ```
 
-既存環境とのmigration履歴互換性を維持するため、Wranglerが実際に適用する連番SQLは
-引き続き`packages/database/migrations`へ配置します。
+Wranglerが適用するSQLは`packages/database/migrations`にDrizzle Kitが直接生成します。
+手書きmigrationは廃止しました。`v0.1`開発中はmigration履歴を保証せず、スキーマ変更時に
+初期migrationを作り直すことがあります。その場合はローカルDBをリセットしてください。
+
+```bash
+rm -rf apps/client/.wrangler/state apps/server/.wrangler/state
+pnpm db:migrate:local
+```
+
+リモートD1を使っている場合は`wrangler d1 delete` / `wrangler d1 create`で作り直し、
+`apps/server/wrangler.jsonc`の`database_id`を更新してから`pnpm db:migrate:remote`を実行します。
 
 ### 4. 起動
 

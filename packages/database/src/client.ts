@@ -18,7 +18,7 @@ export class KaenmaDatabase {
   public readonly orm: Database;
 
   public constructor(private readonly binding: D1Database) {
-    this.orm = drizzle(binding, { schema });
+    this.orm = drizzle(binding, { schema, casing: "snake_case" });
   }
 
   public prepare(query: string): DrizzleRawStatement {

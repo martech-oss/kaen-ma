@@ -4,7 +4,6 @@
   "private": true,
   "files": [
     "src",
-    "drizzle",
     "migrations"
   ],
   "type": "module",

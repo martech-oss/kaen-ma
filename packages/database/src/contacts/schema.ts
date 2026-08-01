@@ -26,7 +26,9 @@ export const companies = sqliteTable(
   },
   (table) => [
     index("companies_workspace_name_idx").on(table.workspaceId, table.name),
-    uniqueIndex("companies_workspace_domain_unique").on(table.workspaceId, table.domain),
+    uniqueIndex("companies_workspace_domain_unique")
+      .on(table.workspaceId, table.domain)
+      .where(sql`${table.domain} IS NOT NULL`),
   ],
 );
 
@@ -60,9 +62,15 @@ export const contacts = sqliteTable(
     index("contacts_workspace_stage_idx").on(table.workspaceId, table.stage),
     index("contacts_workspace_score_idx").on(table.workspaceId, table.score),
     index("contacts_workspace_created_idx").on(table.workspaceId, table.createdAt, table.id),
-    uniqueIndex("contacts_workspace_visitor_unique").on(table.workspaceId, table.visitorId),
-    uniqueIndex("contacts_workspace_external_unique").on(table.workspaceId, table.externalId),
-    uniqueIndex("contacts_workspace_email_unique").on(table.workspaceId, table.email),
+    uniqueIndex("contacts_workspace_visitor_unique")
+      .on(table.workspaceId, table.visitorId)
+      .where(sql`${table.visitorId} IS NOT NULL`),
+    uniqueIndex("contacts_workspace_external_unique")
+      .on(table.workspaceId, table.externalId)
+      .where(sql`${table.externalId} IS NOT NULL`),
+    uniqueIndex("contacts_workspace_email_unique")
+      .on(table.workspaceId, table.email)
+      .where(sql`${table.email} IS NOT NULL`),
     check("contacts_status_check", sql`${table.status} IN ('active', 'archived', 'anonymous')`),
   ],
 );

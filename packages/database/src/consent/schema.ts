@@ -108,7 +108,9 @@ export const suppressions = sqliteTable(
   },
   (table) => [
     index("suppressions_workspace_contact_idx").on(table.workspaceId, table.contactId),
-    uniqueIndex("suppressions_workspace_email_unique").on(table.workspaceId, table.email),
+    uniqueIndex("suppressions_workspace_email_unique")
+      .on(table.workspaceId, table.email)
+      .where(sql`${table.email} IS NOT NULL`),
     check(
       "suppressions_reason_check",
       sql`${table.reason} IN ('global_unsubscribe', 'bounce', 'complaint', 'manual')`,
