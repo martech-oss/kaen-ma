@@ -1,6 +1,12 @@
 import { PermanentChannelError } from "@kaenma/channels";
 import { retryDelaySeconds } from "@kaenma/core";
-import { claimDueJobs, createDatabase } from "@kaenma/database";
+import {
+  BroadcastWorkerRepository,
+  CampaignEngineRepository,
+  claimDueJobs,
+  createDatabase,
+  MessagingWorkerRepository,
+} from "@kaenma/database";
 
 import { enrollInactiveContacts } from "../automations/enrollment";
 import { processCampaignJob } from "../automations/worker";
@@ -25,27 +31,15 @@ export async function scheduled(
     context.waitUntil(runDailyMaintenance(env));
     return;
   }
-  await enrollInactiveContacts(createDatabase(env.DB));
+  const database = createDatabase(env.DB);
+  await enrollInactiveContacts(database);
   const now = new Date().toISOString();
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();
-  const workspaces = await createDatabase(env.DB)
-    .prepare(
-      `SELECT workspace_id, MIN(due_at) AS oldest
-     FROM campaign_jobs
-     WHERE status = 'pending' AND due_at <= ?
-     GROUP BY workspace_id ORDER BY oldest ASC LIMIT 50`,
-    )
-    .bind(now)
-    .all<{ workspace_id: string }>();
+  const engine = new CampaignEngineRepository(database);
+  const workspaces = await engine.workspacesWithDueJobs(now, 50);
   const messages: Array<{ body: KaenmaQueueMessage }> = [];
-  for (const workspace of workspaces.results) {
-    const jobs = await claimDueJobs(
-      createDatabase(env.DB),
-      now,
-      leaseUntil,
-      20,
-      workspace.workspace_id,
-    );
+  for (const workspace of workspaces) {
+    const jobs = await claimDueJobs(database, now, leaseUntil, 20, workspace.workspaceId);
     for (const job of jobs) {
       messages.push({
         body: { kind: "campaign_job", jobId: job.id, leaseId: job.leaseId },
@@ -54,23 +48,9 @@ export async function scheduled(
   }
   if (messages.length > 0) await env.CAMPAIGN_QUEUE.sendBatch(messages);
 
-  const scheduledBroadcasts = await createDatabase(env.DB)
-    .prepare(
-      `SELECT id FROM broadcasts
-     WHERE status = 'scheduled' AND scheduled_at <= ?
-     ORDER BY scheduled_at ASC LIMIT 20`,
-    )
-    .bind(now)
-    .all<{ id: string }>();
-  for (const broadcast of scheduledBroadcasts.results) {
-    const result = await createDatabase(env.DB)
-      .prepare(
-        `UPDATE broadcasts SET status = 'sending', started_at = COALESCE(started_at, ?),
-       updated_at = ? WHERE id = ? AND status = 'scheduled'`,
-      )
-      .bind(now, now, broadcast.id)
-      .run();
-    if (result.meta.changes === 1) {
+  const broadcastWorker = new BroadcastWorkerRepository(database);
+  for (const broadcast of await broadcastWorker.listDueScheduledBroadcasts(now)) {
+    if (await broadcastWorker.promoteScheduledBroadcast(broadcast.id, now)) {
       await env.CAMPAIGN_QUEUE.send({
         kind: "broadcast_batch",
         broadcastId: broadcast.id,
@@ -79,17 +59,10 @@ export async function scheduled(
     }
   }
 
-  const dueDeliveries = await createDatabase(env.DB)
-    .prepare(
-      `SELECT id FROM deliveries
-     WHERE status = 'queued' AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-     ORDER BY created_at ASC LIMIT 100`,
-    )
-    .bind(now)
-    .all<{ id: string }>();
-  if (dueDeliveries.results.length > 0) {
+  const dueDeliveries = await new MessagingWorkerRepository(database).scanDueDeliveries(now);
+  if (dueDeliveries.length > 0) {
     await env.DELIVERY_QUEUE.sendBatch(
-      dueDeliveries.results.map((delivery) => ({
+      dueDeliveries.map((delivery) => ({
         body: { kind: "delivery", deliveryId: delivery.id },
       })),
     );

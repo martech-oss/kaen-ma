@@ -1,4 +1,8 @@
-import { type KaenmaDatabase, uuidv7 } from "@kaenma/database";
+import {
+  CampaignEngineRepository,
+  CampaignRepository,
+  type KaenmaDatabase,
+} from "@kaenma/database";
 import type { CampaignDefinition } from "@kaenma/orpc";
 
 export interface ContactEvent {
@@ -9,11 +13,11 @@ export interface ContactEvent {
   resourceId?: string | null;
 }
 
-interface CampaignTriggerRow {
-  campaign_version_id: string;
-  campaign_id: string;
-  source_node_id: string;
-  reentry: "once" | "every_time";
+interface CampaignTriggerRef {
+  campaignVersionId: string;
+  campaignId: string;
+  sourceNodeId: string;
+  reentry: string;
 }
 
 export interface EnrollmentResult {
@@ -25,25 +29,15 @@ export async function enrollAutomationsForEvent(
   database: KaenmaDatabase,
   event: ContactEvent,
 ): Promise<EnrollmentResult[]> {
-  const triggers = await database
-    .prepare(
-      `SELECT ct.campaign_version_id, ct.campaign_id, ct.source_node_id, ct.reentry
-       FROM campaign_triggers ct
-       JOIN campaigns c
-         ON c.workspace_id = ct.workspace_id AND c.id = ct.campaign_id
-       WHERE ct.workspace_id = ?
-         AND c.status = 'active'
-         AND c.published_version_id = ct.campaign_version_id
-         AND ct.event_type = ?
-         AND (ct.resource_id IS NULL OR ct.resource_id = ?)`,
-    )
-    .bind(event.workspaceId, event.type, event.resourceId ?? null)
-    .all<CampaignTriggerRow>();
+  const repository = new CampaignRepository(database, { workspaceId: event.workspaceId });
+  const triggers = await repository.listActiveTriggersForEvent(
+    event.type,
+    event.resourceId ?? null,
+  );
 
   const enrollments: EnrollmentResult[] = [];
-  for (const trigger of triggers.results) {
-    const result = await enrollFromTrigger(database, trigger, {
-      workspaceId: event.workspaceId,
+  for (const trigger of triggers) {
+    const result = await enrollFromTrigger(repository, trigger, {
       contactId: event.contactId,
       sourceEventId: event.id,
     });
@@ -57,42 +51,15 @@ export async function enrollInactiveContacts(
   now = new Date(),
   limit = 200,
 ): Promise<number> {
-  const candidates = await database
-    .prepare(
-      `SELECT ct.campaign_version_id, ct.campaign_id, ct.source_node_id, ct.reentry,
-              c.workspace_id, c.id AS contact_id
-       FROM campaign_triggers ct
-       JOIN campaigns campaign
-         ON campaign.workspace_id = ct.workspace_id AND campaign.id = ct.campaign_id
-       JOIN contacts c ON c.workspace_id = ct.workspace_id
-       WHERE ct.source = 'contact_inactive'
-         AND campaign.status = 'active'
-         AND campaign.published_version_id = ct.campaign_version_id
-         AND c.status = 'active'
-         AND julianday(COALESCE((
-           SELECT MAX(ce.occurred_at)
-           FROM contact_events ce
-           WHERE ce.workspace_id = c.workspace_id AND ce.contact_id = c.id
-         ), c.created_at)) <= julianday(?) - ct.inactivity_days
-         AND NOT EXISTS (
-           SELECT 1 FROM campaign_enrollments enrollment
-           WHERE enrollment.workspace_id = ct.workspace_id
-             AND enrollment.campaign_id = ct.campaign_id
-             AND enrollment.contact_id = c.id
-             AND enrollment.source_event_id = 'once'
-         )
-       ORDER BY c.updated_at ASC
-       LIMIT ?`,
-    )
-    .bind(now.toISOString(), limit)
-    .all<CampaignTriggerRow & { workspace_id: string; contact_id: string }>();
+  const engine = new CampaignEngineRepository(database);
+  const candidates = await engine.listInactiveEnrollmentCandidates(now.toISOString(), limit);
 
   let enrolled = 0;
-  for (const candidate of candidates.results) {
-    const result = await enrollFromTrigger(database, candidate, {
-      workspaceId: candidate.workspace_id,
-      contactId: candidate.contact_id,
-      sourceEventId: `inactive:${candidate.campaign_version_id}:${candidate.contact_id}`,
+  for (const candidate of candidates) {
+    const repository = new CampaignRepository(database, { workspaceId: candidate.workspaceId });
+    const result = await enrollFromTrigger(repository, candidate, {
+      contactId: candidate.contactId,
+      sourceEventId: `inactive:${candidate.campaignVersionId}:${candidate.contactId}`,
     });
     if (result) enrolled += 1;
   }
@@ -115,15 +82,8 @@ export async function enrollContactManually(
     sourceEventId: string;
   },
 ): Promise<ManualEnrollOutcome> {
-  const campaign = await database
-    .prepare(
-      `SELECT c.published_version_id, cv.graph
-       FROM campaigns c JOIN campaign_versions cv
-         ON cv.id = c.published_version_id AND cv.workspace_id = c.workspace_id
-       WHERE c.workspace_id = ? AND c.id = ? AND c.status = 'active'`,
-    )
-    .bind(input.workspaceId, input.campaignId)
-    .first<{ published_version_id: string; graph: string }>();
+  const repository = new CampaignRepository(database, { workspaceId: input.workspaceId });
+  const campaign = await repository.findActivePublishedCampaign(input.campaignId);
   if (!campaign) return { kind: "not_active" };
   const graph = JSON.parse(campaign.graph) as CampaignDefinition;
   const source = graph.nodes.find((node) => node.type === "source");
@@ -131,7 +91,7 @@ export async function enrollContactManually(
   const result = await enrollPublishedCampaign(database, {
     workspaceId: input.workspaceId,
     campaignId: input.campaignId,
-    campaignVersionId: campaign.published_version_id,
+    campaignVersionId: campaign.publishedVersionId,
     contactId: input.contactId,
     sourceNodeId: source.id,
     sourceEventId: input.sourceEventId,
@@ -153,15 +113,14 @@ export async function enrollPublishedCampaign(
   },
 ): Promise<EnrollmentResult | null> {
   return enrollFromTrigger(
-    database,
+    new CampaignRepository(database, { workspaceId: input.workspaceId }),
     {
-      campaign_id: input.campaignId,
-      campaign_version_id: input.campaignVersionId,
-      source_node_id: input.sourceNodeId,
+      campaignId: input.campaignId,
+      campaignVersionId: input.campaignVersionId,
+      sourceNodeId: input.sourceNodeId,
       reentry: input.reentry ?? "every_time",
     },
     {
-      workspaceId: input.workspaceId,
       contactId: input.contactId,
       sourceEventId: input.sourceEventId,
     },
@@ -169,69 +128,21 @@ export async function enrollPublishedCampaign(
 }
 
 async function enrollFromTrigger(
-  database: KaenmaDatabase,
-  trigger: CampaignTriggerRow,
+  repository: CampaignRepository,
+  trigger: CampaignTriggerRef,
   input: {
-    workspaceId: string;
     contactId: string;
     sourceEventId: string;
   },
 ): Promise<EnrollmentResult | null> {
-  const enrollmentId = uuidv7();
-  const jobId = uuidv7();
-  const now = new Date().toISOString();
+  // "once" re-entry is enforced by storing the sentinel string "once" as the
+  // source event id, which trips the enrollment unique index on any repeat.
   const sourceEventId = trigger.reentry === "once" ? "once" : input.sourceEventId;
-  try {
-    await database.batch([
-      database
-        .prepare(
-          `INSERT INTO campaign_enrollments
-           (id, workspace_id, campaign_id, campaign_version_id, contact_id,
-            source_event_id, status, current_node_id, entered_at, updated_at)
-           SELECT ?, ?, ?, ?, c.id, ?, 'active', ?, ?, ?
-           FROM contacts c
-           WHERE c.workspace_id = ? AND c.id = ? AND c.status != 'archived'`,
-        )
-        .bind(
-          enrollmentId,
-          input.workspaceId,
-          trigger.campaign_id,
-          trigger.campaign_version_id,
-          sourceEventId,
-          trigger.source_node_id,
-          now,
-          now,
-          input.workspaceId,
-          input.contactId,
-        ),
-      database
-        .prepare(
-          `INSERT INTO campaign_jobs
-           (id, workspace_id, enrollment_id, campaign_version_id, node_id,
-            recipient_id, idempotency_key, status, due_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
-        )
-        .bind(
-          jobId,
-          input.workspaceId,
-          enrollmentId,
-          trigger.campaign_version_id,
-          trigger.source_node_id,
-          input.contactId,
-          `${enrollmentId}:${trigger.source_node_id}:${input.contactId}`,
-          now,
-          now,
-          now,
-        ),
-    ]);
-    return { enrollmentId, jobId };
-  } catch (error) {
-    if (isConstraintError(error)) return null;
-    throw error;
-  }
-}
-
-function isConstraintError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /constraint|unique|foreign key/i.test(message);
+  return repository.enrollContact({
+    campaignId: trigger.campaignId,
+    campaignVersionId: trigger.campaignVersionId,
+    sourceNodeId: trigger.sourceNodeId,
+    contactId: input.contactId,
+    sourceEventId,
+  });
 }

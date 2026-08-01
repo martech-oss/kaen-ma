@@ -16,6 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@kaenma/core": "workspace:*",
     "@kaenma/orpc": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },

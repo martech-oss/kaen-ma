@@ -1,6 +1,6 @@
 import PostalMime from "postal-mime";
 
-import { createDatabase, uuidv7 } from "@kaenma/database";
+import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@kaenma/database";
 
 import { enrollAutomationsForEvent } from "../automations/enrollment";
 import type { RuntimeEnv } from "../env";
@@ -23,13 +23,13 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
     message.setReject("Reply address is invalid or expired");
     return;
   }
-  const delivery = await createDatabase(env.DB)
-    .prepare(
-      `SELECT id FROM deliveries
-     WHERE workspace_id = ? AND id = ? AND contact_id = ?`,
-    )
-    .bind(payload.workspaceId, payload.resourceId, payload.contactId)
-    .first<{ id: string }>();
+  const database = createDatabase(env.DB);
+  const repository = new MessagingWorkerRepository(database);
+  const delivery = await repository.findReplyDelivery(
+    payload.workspaceId,
+    payload.resourceId,
+    payload.contactId,
+  );
   if (!delivery) {
     message.setReject("Reply destination no longer exists");
     return;
@@ -66,62 +66,28 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
   }
   const eventId = uuidv7();
   const contactEventId = uuidv7();
-  await createDatabase(env.DB).batch([
-    createDatabase(env.DB)
-      .prepare(
-        `INSERT INTO inbound_emails
-       (id, workspace_id, contact_id, delivery_id, message_id, sender, recipient,
-        subject, text_body, html_body, attachment_manifest, received_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        inboundId,
-        payload.workspaceId,
-        payload.contactId,
-        delivery.id,
-        parsed.messageId ?? null,
-        message.from,
-        message.to,
-        parsed.subject?.slice(0, 998) ?? null,
-        parsed.text?.slice(0, 1_000_000) ?? null,
-        parsed.html?.slice(0, 1_000_000) ?? null,
-        JSON.stringify(attachments),
-        receivedAt,
-      ),
-    createDatabase(env.DB)
-      .prepare(
-        `INSERT OR IGNORE INTO delivery_events
-       (id, workspace_id, delivery_id, provider, provider_event_id,
-        type, occurred_at, metadata, created_at)
-       VALUES (?, ?, ?, 'cloudflare', ?, 'replied', ?, ?, ?)`,
-      )
-      .bind(
-        eventId,
-        payload.workspaceId,
-        delivery.id,
-        parsed.messageId ?? `reply:${inboundId}`,
-        receivedAt,
-        JSON.stringify({ inboundId, subject: parsed.subject ?? "" }),
-        receivedAt,
-      ),
-    createDatabase(env.DB)
-      .prepare(
-        `INSERT INTO contact_events
-       (id, workspace_id, contact_id, type, resource_type, resource_id,
-        properties, occurred_at, created_at)
-       VALUES (?, ?, ?, 'email_replied', 'delivery', ?, ?, ?, ?)`,
-      )
-      .bind(
-        contactEventId,
-        payload.workspaceId,
-        payload.contactId,
-        delivery.id,
-        JSON.stringify({ inboundId }),
-        receivedAt,
-        receivedAt,
-      ),
-  ]);
-  await enrollAutomationsForEvent(createDatabase(env.DB), {
+  await repository.recordInboundReply({
+    workspaceId: payload.workspaceId,
+    contactId: payload.contactId,
+    deliveryId: delivery.id,
+    inbound: {
+      id: inboundId,
+      messageId: parsed.messageId ?? null,
+      sender: message.from,
+      recipient: message.to,
+      subject: parsed.subject?.slice(0, 998) ?? null,
+      textBody: parsed.text?.slice(0, 1_000_000) ?? null,
+      htmlBody: parsed.html?.slice(0, 1_000_000) ?? null,
+      attachmentManifest: JSON.stringify(attachments),
+    },
+    deliveryEventId: eventId,
+    providerEventId: parsed.messageId ?? `reply:${inboundId}`,
+    deliveryEventMetadata: JSON.stringify({ inboundId, subject: parsed.subject ?? "" }),
+    contactEventId,
+    contactEventProperties: JSON.stringify({ inboundId }),
+    receivedAt,
+  });
+  await enrollAutomationsForEvent(database, {
     id: contactEventId,
     workspaceId: payload.workspaceId,
     contactId: payload.contactId,

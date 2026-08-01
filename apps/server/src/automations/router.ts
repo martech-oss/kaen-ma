@@ -1,5 +1,5 @@
 import { validateCampaign } from "@kaenma/core";
-import { uuidv7 } from "@kaenma/database";
+import { CampaignRepository, uuidv7 } from "@kaenma/database";
 import { campaignDefinitionSchema, type CampaignDefinition } from "@kaenma/orpc";
 
 import { authed, requireRole } from "../orpc/base";
@@ -16,56 +16,21 @@ export const listCampaignsProcedure = authed.campaigns.list.handler(async ({ con
 export const createCampaignProcedure = authed.campaigns.create.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const id = uuidv7();
-    const versionId = uuidv7();
-    const now = new Date().toISOString();
-    await context.database.batch([
-      context.database
-        .prepare(
-          `INSERT INTO campaigns
-           (id, workspace_id, name, description, status, draft_version_id, created_at, updated_at)
-           VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
-        )
-        .bind(
-          id,
-          context.workspace.workspaceId,
-          input.name,
-          input.description,
-          versionId,
-          now,
-          now,
-        ),
-      context.database
-        .prepare(
-          `INSERT INTO campaign_versions
-           (id, workspace_id, campaign_id, version, status, timezone, graph, created_at)
-           VALUES (?, ?, ?, 1, 'draft', ?, ?, ?)`,
-        )
-        .bind(
-          versionId,
-          context.workspace.workspaceId,
-          id,
-          input.timezone,
-          JSON.stringify(input),
-          now,
-        ),
-    ]);
-    return { id, draftVersionId: versionId };
+    const repository = new CampaignRepository(context.database, context.workspace);
+    const created = await repository.createCampaign({
+      name: input.name,
+      description: input.description,
+      timezone: input.timezone,
+      graph: JSON.stringify(input),
+    });
+    return { id: created.id, draftVersionId: created.draftVersionId };
   },
 );
 
 export const getCampaignDraftProcedure = authed.campaigns.getDraft.handler(
   async ({ context, input, errors }) => {
-    const row = await context.database
-      .prepare(
-        `SELECT cv.graph, c.status
-         FROM campaigns c
-         JOIN campaign_versions cv ON cv.id = c.draft_version_id
-          AND cv.workspace_id = c.workspace_id
-         WHERE c.workspace_id = ? AND c.id = ?`,
-      )
-      .bind(context.workspace.workspaceId, input.id)
-      .first<{ graph: string; status: string }>();
+    const repository = new CampaignRepository(context.database, context.workspace);
+    const row = await repository.getDraft(input.id);
     if (!row) throw errors.CAMPAIGN_NOT_FOUND();
     const graph = campaignDefinitionSchema.safeParse(JSON.parse(row.graph));
     if (!graph.success) throw errors.CAMPAIGN_NOT_FOUND();
@@ -77,24 +42,14 @@ export const saveCampaignDraftProcedure = authed.campaigns.saveDraft.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...definition } = input;
-    const workspaceId = context.workspace.workspaceId;
-    const result = await context.database
-      .prepare(
-        `UPDATE campaign_versions SET timezone = ?, graph = ?
-         WHERE workspace_id = ? AND id = (
-           SELECT draft_version_id FROM campaigns WHERE workspace_id = ? AND id = ?
-         ) AND status = 'draft'`,
-      )
-      .bind(definition.timezone, JSON.stringify(definition), workspaceId, workspaceId, id)
-      .run();
-    if (result.meta.changes === 0) throw errors.DRAFT_NOT_EDITABLE();
-    await context.database
-      .prepare(
-        `UPDATE campaigns SET name = ?, description = ?, updated_at = ?
-         WHERE workspace_id = ? AND id = ?`,
-      )
-      .bind(definition.name, definition.description, new Date().toISOString(), workspaceId, id)
-      .run();
+    const repository = new CampaignRepository(context.database, context.workspace);
+    const updated = await repository.saveDraft(id, {
+      name: definition.name,
+      description: definition.description,
+      timezone: definition.timezone,
+      graph: JSON.stringify(definition),
+    });
+    if (!updated) throw errors.DRAFT_NOT_EDITABLE();
     return { updated: true as const };
   },
 );
@@ -102,17 +57,8 @@ export const saveCampaignDraftProcedure = authed.campaigns.saveDraft.handler(
 export const publishCampaignProcedure = authed.campaigns.publish.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const database = context.database;
-    const workspaceId = context.workspace.workspaceId;
-    const row = await database
-      .prepare(
-        `SELECT c.draft_version_id, cv.version, cv.graph
-         FROM campaigns c JOIN campaign_versions cv
-           ON cv.id = c.draft_version_id AND cv.workspace_id = c.workspace_id
-         WHERE c.workspace_id = ? AND c.id = ? AND cv.status = 'draft'`,
-      )
-      .bind(workspaceId, input.id)
-      .first<{ draft_version_id: string; version: number; graph: string }>();
+    const repository = new CampaignRepository(context.database, context.workspace);
+    const row = await repository.findPublishableDraft(input.id);
     if (!row) throw errors.DRAFT_NOT_FOUND();
 
     const parsed = campaignDefinitionSchema.safeParse(JSON.parse(row.graph));
@@ -133,16 +79,7 @@ export const publishCampaignProcedure = authed.campaigns.publish.handler(
       ),
     ];
     if (templateIds.length > 0) {
-      const available = await database
-        .prepare(
-          `SELECT id FROM email_templates
-           WHERE workspace_id = ? AND archived_at IS NULL
-             AND remote_status = 'published' AND sync_error IS NULL
-             AND id IN (${templateIds.map(() => "?").join(", ")})`,
-        )
-        .bind(workspaceId, ...templateIds)
-        .all<{ id: string }>();
-      const availableIds = new Set(available.results.map((template) => template.id));
+      const availableIds = new Set(await repository.listPublishedTemplateIds(templateIds));
       const unavailableIds = templateIds.filter((templateId) => !availableIds.has(templateId));
       if (unavailableIds.length > 0) {
         throw errors.INVALID_GRAPH({
@@ -155,75 +92,31 @@ export const publishCampaignProcedure = authed.campaigns.publish.handler(
     const source = definition.nodes.find((node) => node.type === "source");
     if (!source) throw errors.INVALID_GRAPH({ message: "開始条件がありません" });
     const trigger = campaignTrigger(source.config);
-    const nextDraftId = uuidv7();
-    const now = new Date().toISOString();
-    await database.batch([
-      database
-        .prepare(
-          `UPDATE campaign_versions SET status = 'published', published_at = ?
-           WHERE workspace_id = ? AND id = ? AND status = 'draft'`,
-        )
-        .bind(now, workspaceId, row.draft_version_id),
-      database
-        .prepare(
-          `INSERT INTO campaign_versions
-           (id, workspace_id, campaign_id, version, status, timezone, graph, created_at)
-           VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
-        )
-        .bind(
-          nextDraftId,
-          workspaceId,
-          input.id,
-          row.version + 1,
-          definition.timezone,
-          row.graph,
-          now,
-        ),
-      database
-        .prepare(
-          `UPDATE campaigns SET status = 'active', published_version_id = ?,
-           draft_version_id = ?, updated_at = ? WHERE workspace_id = ? AND id = ?`,
-        )
-        .bind(row.draft_version_id, nextDraftId, now, workspaceId, input.id),
-      database
-        .prepare("DELETE FROM campaign_triggers WHERE workspace_id = ? AND campaign_id = ?")
-        .bind(workspaceId, input.id),
-      database
-        .prepare(
-          `INSERT INTO campaign_triggers
-           (campaign_version_id, workspace_id, campaign_id, source_node_id, source,
-            event_type, resource_id, reentry, inactivity_days, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          row.draft_version_id,
-          workspaceId,
-          input.id,
-          source.id,
-          source.config.source,
-          trigger.eventType,
-          trigger.resourceId,
-          source.config.reentry,
-          trigger.inactivityDays,
-          now,
-        ),
-    ]);
-    return { publishedVersionId: row.draft_version_id, draftVersionId: nextDraftId };
+    const published = await repository.publishDraft({
+      campaignId: input.id,
+      draftVersionId: row.draftVersionId,
+      currentVersion: row.version,
+      timezone: definition.timezone,
+      graph: row.graph,
+      trigger: {
+        sourceNodeId: source.id,
+        source: source.config.source,
+        eventType: trigger.eventType,
+        resourceId: trigger.resourceId,
+        reentry: source.config.reentry,
+        inactivityDays: trigger.inactivityDays,
+      },
+    });
+    return { publishedVersionId: row.draftVersionId, draftVersionId: published.draftVersionId };
   },
 );
 
 export const setCampaignStatusProcedure = authed.campaigns.setStatus.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const result = await context.database
-      .prepare(
-        `UPDATE campaigns SET status = ?, updated_at = ?
-         WHERE workspace_id = ? AND id = ? AND published_version_id IS NOT NULL
-           AND status IN ('active', 'paused')`,
-      )
-      .bind(input.status, new Date().toISOString(), context.workspace.workspaceId, input.id)
-      .run();
-    if (result.meta.changes !== 1) throw errors.NOT_CHANGEABLE();
+    const repository = new CampaignRepository(context.database, context.workspace);
+    const changed = await repository.setCampaignStatus(input.id, input.status);
+    if (!changed) throw errors.NOT_CHANGEABLE();
     return { status: input.status };
   },
 );

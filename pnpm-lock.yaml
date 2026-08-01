@@ -260,6 +260,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@kaenma/core':
+        specifier: workspace:*
+        version: link:../core
       '@kaenma/orpc':
         specifier: workspace:*
         version: link:../orpc

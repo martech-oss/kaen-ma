@@ -1,5 +1,7 @@
 export * from "./automations/repository";
+export * from "./broadcasts/repository";
 export * from "./consent/repository";
+export * from "./messaging/repository";
 export * from "./contacts/company-repository";
 export * from "./contacts/data-job-repository";
 export * from "./contacts/repository";
