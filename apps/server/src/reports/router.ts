@@ -2,6 +2,7 @@ import { hasWorkspaceRole } from "../auth/authorization";
 import { authed } from "../orpc/base";
 import { automationReport } from "./automations-report";
 import { contactReport } from "./contacts-report";
+import { getDashboard } from "./dashboard-service";
 import { dealReport } from "./deals-report";
 import { emailReport } from "./emails-report";
 import { toReportRange } from "./shared";
@@ -59,4 +60,8 @@ export const siteReportProcedure = authed.reports.site.handler(({ context, input
     context.workspace.workspaceId,
     toReportRange(input.from, input.to),
   );
+});
+
+export const dashboardProcedure = authed.operations.dashboard.handler(async ({ context }) => {
+  return getDashboard(context.database, context.workspace.workspaceId);
 });

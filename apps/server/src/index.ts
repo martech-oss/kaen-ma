@@ -1,7 +1,7 @@
 import { app } from "./app";
-import { email } from "./email/worker";
 import type { RuntimeEnv } from "./env";
-import { queue, scheduled } from "./runtime";
+import { email } from "./messaging/inbound-worker";
+import { queue, scheduled } from "./runtime/dispatch";
 
 export default {
   fetch: app.fetch,

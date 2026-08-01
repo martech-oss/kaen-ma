@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { uuidv7 } from "@kaenma/database";
 
-import { sha256Hex } from "../src/crypto";
+import { sha256Hex } from "../src/platform/crypto";
 
 /**
  * Executable specification of the public /api/v1 REST surface.
@@ -243,14 +243,7 @@ async function seedApiWorkspace(): Promise<
       `INSERT INTO api_keys
        (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
        VALUES (?, ?, ?, 'journey test', ?, ?, 'owner', ?)`,
-    ).bind(
-      uuidv7(),
-      workspaceId,
-      userId,
-      prefix,
-      await sha256Hex(token),
-      new Date().toISOString(),
-    ),
+    ).bind(uuidv7(), workspaceId, userId, prefix, await sha256Hex(token), new Date().toISOString()),
   ]);
 
   return (path, init) =>

@@ -16,16 +16,16 @@ import type {
 } from "@kaenma/shared";
 import type { SegmentFilter } from "@kaenma/shared/segments";
 
-import { recordContactEvent } from "../events/service";
-import { resourceSlug } from "../http/helpers";
-import { updateSegmentMemberCount } from "../segments/membership-service";
+import { recordContactEvent } from "../contacts/event-service";
+import { resourceSlug } from "../platform/values";
 import {
   nullablePrimitiveString,
   numericValue,
   parseJsonRecord,
   parseJsonValue,
   primitiveString,
-} from "../values";
+} from "../platform/values";
+import { updateSegmentMemberCount } from "../segments/membership-service";
 
 /** A resource name already taken within the workspace. */
 export class ResourceConflictError extends Error {

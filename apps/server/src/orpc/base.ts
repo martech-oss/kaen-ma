@@ -3,8 +3,8 @@ import { implement } from "@orpc/server";
 import { contract } from "@kaenma/orpc";
 import type { WorkspaceRole } from "@kaenma/shared";
 
+import { resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import { hasWorkspaceRole } from "../auth/authorization";
-import { resolveWorkspaceAccess, WorkspaceAccessError } from "../middleware";
 import type { OrpcInitialContext } from "./context";
 
 export const os = implement(contract).$context<OrpcInitialContext>();

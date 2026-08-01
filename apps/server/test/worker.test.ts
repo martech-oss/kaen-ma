@@ -8,7 +8,7 @@ import { ContactRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/databa
 import { contract } from "@kaenma/orpc";
 
 import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
-import { sha256Hex } from "../src/crypto";
+import { sha256Hex } from "../src/platform/crypto";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {

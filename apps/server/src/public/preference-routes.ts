@@ -2,9 +2,9 @@ import type { Hono } from "hono";
 
 import { uuidv7 } from "@kaenma/database";
 
-import { verifySignedToken } from "../crypto";
+import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
-import { apiError } from "../middleware";
+import { verifySignedToken } from "../platform/crypto";
 import { escapeHtml } from "./html";
 
 export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>): void {

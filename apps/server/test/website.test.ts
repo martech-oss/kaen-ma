@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { uuidv7 } from "@kaenma/database";
 import { contract } from "@kaenma/orpc";
 
-import { sha256Hex } from "../src/crypto";
+import { sha256Hex } from "../src/platform/crypto";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {

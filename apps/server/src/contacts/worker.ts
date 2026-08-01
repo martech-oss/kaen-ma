@@ -2,8 +2,8 @@ import { PermanentChannelError } from "@kaenma/channels";
 import { createDatabase, uuidv7, type DrizzleRawStatement } from "@kaenma/database";
 
 import { type RuntimeEnv } from "../env";
-import { safeRecord, stringValue } from "../runtime/helpers";
-import { primitiveString } from "../values";
+import { parseJsonRecord, stringValue } from "../platform/values";
+import { primitiveString } from "../platform/values";
 
 export async function processContactImport(
   jobId: string,
@@ -32,7 +32,7 @@ export async function processContactImport(
   const now = new Date().toISOString();
   for (const line of lines) {
     try {
-      const source = safeRecord(line);
+      const source = parseJsonRecord(line);
       const email =
         typeof source["email"] === "string" && source["email"].trim()
           ? source["email"].trim().toLowerCase()
@@ -117,7 +117,7 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
       cursor: string;
     }>();
   if (!job) return;
-  const cursor = safeRecord(job.cursor);
+  const cursor = parseJsonRecord(job.cursor);
   const lastId = typeof cursor["lastId"] === "string" ? cursor["lastId"] : "";
   const partNumber = typeof cursor["partNumber"] === "number" ? cursor["partNumber"] : 0;
   const batchSize = 1_000;

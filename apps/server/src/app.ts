@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
+import { apiError, requestContext } from "./auth/access";
 import { createAuth } from "./auth/service";
-import { registerEmailWebhookRoutes } from "./email/webhook-routes";
 import { type AppEnvironment } from "./env";
-import { apiError, requestContext } from "./middleware";
+import { registerEmailWebhookRoutes } from "./messaging/webhook-routes";
 import { logError } from "./observability";
 import { createOrpcRequestHandler } from "./orpc/handler";
 import { createOpenApiRequestHandler, generateOpenApiDocument } from "./orpc/openapi-handler";

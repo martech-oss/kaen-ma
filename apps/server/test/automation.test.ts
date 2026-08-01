@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
 import { createDatabase, uuidv7 } from "@kaenma/database";
 import { contract } from "@kaenma/orpc";
 
-import { enrollInactiveContacts } from "../src/campaigns/enrollment";
-import { sha256Hex } from "../src/crypto";
+import { enrollInactiveContacts } from "../src/automations/enrollment";
+import { sha256Hex } from "../src/platform/crypto";
 
 declare module "cloudflare:workers" {
   interface ProvidedEnv {
@@ -184,14 +184,7 @@ async function createWorkspaceClient(): Promise<{ client: Client; workspaceId: s
       `INSERT INTO api_keys
        (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
        VALUES (?, ?, ?, 'Automation test', ?, ?, 'owner', ?)`,
-    ).bind(
-      uuidv7(),
-      workspaceId,
-      userId,
-      prefix,
-      await sha256Hex(token),
-      new Date().toISOString(),
-    ),
+    ).bind(uuidv7(), workspaceId, userId, prefix, await sha256Hex(token), new Date().toISOString()),
   ]);
   const link = new RPCLink({
     url: "http://localhost:8787/api/rpc",

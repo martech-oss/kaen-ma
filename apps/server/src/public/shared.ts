@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import { type KaenmaDatabase, organization, siteTrackingSettings } from "@kaenma/database";
 
-import { sha256Hex } from "../crypto";
+import { sha256Hex } from "../platform/crypto";
 
 export async function loadPublicTrackingWorkspace(
   database: KaenmaDatabase,

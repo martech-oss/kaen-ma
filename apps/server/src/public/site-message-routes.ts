@@ -3,10 +3,10 @@ import * as z from "zod";
 
 import { uuidv7 } from "@kaenma/database";
 
+import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
-import { safeJson } from "../http/helpers";
-import { apiError } from "../middleware";
 import { originAllowed, pagePatternMatches } from "./domain";
+import { safeJson } from "./http";
 import { loadPublicTrackingWorkspace } from "./shared";
 
 export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>): void {

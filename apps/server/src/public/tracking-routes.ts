@@ -1,12 +1,12 @@
 import type { Hono } from "hono";
 import * as z from "zod";
 
-import { verifySignedToken } from "../crypto";
+import { apiError } from "../auth/access";
+import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
-import { recordContactEvent } from "../events/service";
-import { safeJson } from "../http/helpers";
-import { apiError } from "../middleware";
+import { verifySignedToken } from "../platform/crypto";
 import { originAllowed } from "./domain";
+import { safeJson } from "./http";
 import { loadPublicTrackingWorkspace } from "./shared";
 import { siteTrackingScript } from "./templates";
 

@@ -1,4 +1,4 @@
-import { primitiveString } from "../values";
+import { primitiveString } from "../platform/values";
 import {
   firstRow,
   publicRange,

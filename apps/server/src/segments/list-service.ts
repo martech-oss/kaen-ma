@@ -12,7 +12,7 @@ import {
   parseJsonRecord,
   parseJsonValue,
   primitiveString,
-} from "../values";
+} from "../platform/values";
 
 export async function listSegments(
   database: KaenmaDatabase,

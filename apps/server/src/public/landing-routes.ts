@@ -5,8 +5,8 @@ import { landingPages, landingPageVersions, organization } from "@kaenma/databas
 import { renderContent } from "@kaenma/email-renderer";
 import { contentDocumentSchema } from "@kaenma/shared";
 
+import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
-import { apiError } from "../middleware";
 
 export function registerPublicLandingRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/p/:workspaceSlug/:pageSlug", async (context) => {

@@ -1,6 +1,7 @@
-import { createWebhookEndpoint, listWebhookEndpoints } from "../integrations/service";
 import { authed, requireRole } from "../orpc/base";
+import { createApiKey } from "./api-key-service";
 import { getWorkspace } from "./service";
+import { createWebhookEndpoint, listWebhookEndpoints } from "./webhook-endpoint-service";
 
 export const getWorkspaceProcedure = authed.workspace.get.handler(async ({ context }) =>
   getWorkspace(context.database, context.workspace),
@@ -24,5 +25,12 @@ export const createWebhookEndpointProcedure = authed.workspace.createWebhookEndp
     );
     if (outcome.kind === "unsafe_url") throw errors.UNSAFE_WEBHOOK_URL();
     return { id: outcome.id, signingSecret: outcome.signingSecret };
+  },
+);
+
+export const createApiKeyProcedure = authed.operations.createApiKey.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
+    return createApiKey(context.database, context.workspace, input);
   },
 );

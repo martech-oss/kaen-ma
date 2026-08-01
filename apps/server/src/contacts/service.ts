@@ -3,8 +3,8 @@ import type { ContactListInput, ContactListResult, ContactSummary } from "@kaenm
 import type { WorkspaceContext } from "@kaenma/shared";
 import type { Contact, ContactCreate } from "@kaenma/shared/contacts";
 
-import { recordContactEvent } from "../events/service";
-import { nullablePrimitiveString, parseJsonRecord, primitiveString } from "../values";
+import { recordContactEvent } from "../contacts/event-service";
+import { nullablePrimitiveString, parseJsonRecord, primitiveString } from "../platform/values";
 
 export async function listContacts(
   database: KaenmaDatabase,

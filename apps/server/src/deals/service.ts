@@ -12,7 +12,7 @@ import type {
   DealUpdate,
 } from "@kaenma/shared/deals";
 
-import { primitiveString } from "../values";
+import { primitiveString } from "../platform/values";
 import {
   dealSelectSql,
   getDeal,

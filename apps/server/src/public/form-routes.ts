@@ -3,12 +3,12 @@ import * as z from "zod";
 
 import { uuidv7 } from "@kaenma/database";
 
+import { apiError } from "../auth/access";
+import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
-import { recordContactEvent } from "../events/service";
-import { safeJson } from "../http/helpers";
-import { apiError } from "../middleware";
-import { isRecord, primitiveString, stringOrNull } from "../values";
+import { isRecord, primitiveString, stringOrNull } from "../platform/values";
 import { originAllowed, redactFormPayload } from "./domain";
+import { safeJson } from "./http";
 import { hashIp, verifyTurnstile } from "./shared";
 import { formEmbedScript, renderPublicForm } from "./templates";
 

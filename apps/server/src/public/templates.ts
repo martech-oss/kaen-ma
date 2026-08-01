@@ -1,4 +1,4 @@
-import { isRecord } from "../values";
+import { isRecord } from "../platform/values";
 import { escapeHtml } from "./html";
 
 export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: string): string {

@@ -1,5 +1,5 @@
-import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { OpenAPIGenerator } from "@orpc/openapi";
+import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { onError } from "@orpc/server";
 import {
   experimental_ZodSmartCoercionPlugin as ZodSmartCoercionPlugin,

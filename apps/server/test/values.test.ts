@@ -8,7 +8,7 @@ import {
   parseJsonValue,
   primitiveString,
   stringOrNull,
-} from "../src/values";
+} from "../src/platform/values";
 
 describe("value normalization", () => {
   it("recognizes plain records", () => {

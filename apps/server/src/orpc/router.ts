@@ -1,13 +1,4 @@
 import {
-  assignAccountContactProcedure,
-  createAccountProcedure,
-  getAccountProcedure,
-  listAccountsProcedure,
-  removeAccountContactProcedure,
-  updateAccountProcedure,
-} from "../accounts/router";
-import { downloadAssetProcedure, uploadAssetProcedure } from "../assets/router";
-import {
   campaignAnalyticsProcedure,
   createCampaignProcedure,
   enrollCampaignProcedure,
@@ -16,8 +7,16 @@ import {
   publishCampaignProcedure,
   saveCampaignDraftProcedure,
   setCampaignStatusProcedure,
-} from "../campaigns/router";
+} from "../automations/router";
 import { createTopicProcedure, listTopicsProcedure } from "../consent/router";
+import {
+  assignAccountContactProcedure,
+  createAccountProcedure,
+  getAccountProcedure,
+  listAccountsProcedure,
+  removeAccountContactProcedure,
+  updateAccountProcedure,
+} from "../contacts/company-router";
 import {
   addListProcedure,
   addSegmentProcedure,
@@ -41,6 +40,12 @@ import {
   listContactsProcedure,
   recordContactEventProcedure,
   updateContactProcedure,
+} from "../contacts/router";
+import {
+  downloadContactExportProcedure,
+  exportContactsProcedure,
+  getDataJobProcedure,
+  importContactsProcedure,
 } from "../contacts/router";
 import {
   archiveDealProcedure,
@@ -71,25 +76,12 @@ import {
   syncTemplateProcedure,
   updateEmailCampaignProcedure,
   updateVariableProcedure,
-} from "../emails/router";
-import {
-  createApiKeyProcedure,
-  dashboardProcedure,
-  downloadContactExportProcedure,
-  exportContactsProcedure,
-  getDataJobProcedure,
-  importContactsProcedure,
-  listDeadLettersProcedure,
-  replayDeadLetterProcedure,
-} from "../operations/router";
-import {
-  addProjectItemProcedure,
-  createProjectProcedure,
-  listProjectsProcedure,
-} from "../projects/router";
+} from "../messaging/router";
+import { listDeadLettersProcedure, replayDeadLetterProcedure } from "../platform/router";
 import {
   automationsReportProcedure,
   contactsReportProcedure,
+  dashboardProcedure,
   dealsReportProcedure,
   emailsReportProcedure,
   siteReportProcedure,
@@ -100,6 +92,12 @@ import {
   previewSegmentProcedure,
   refreshSegmentProcedure,
 } from "../segments/router";
+import { downloadAssetProcedure, uploadAssetProcedure } from "../web/asset-router";
+import {
+  addProjectItemProcedure,
+  createProjectProcedure,
+  listProjectsProcedure,
+} from "../web/project-router";
 import {
   archiveFormProcedure,
   archiveMessageProcedure,
@@ -115,8 +113,9 @@ import {
   updateMessageProcedure,
   updatePageProcedure,
   updateTrackingProcedure,
-} from "../website/router";
+} from "../web/router";
 import {
+  createApiKeyProcedure,
   createWebhookEndpointProcedure,
   getWorkspaceProcedure,
   listWebhookEndpointsProcedure,

@@ -3,12 +3,12 @@ import { compileSegmentFilter } from "@kaenma/core";
 import { createDatabase, uuidv7, type DrizzleRawStatement } from "@kaenma/database";
 import { type QueueMessage as KaenmaQueueMessage } from "@kaenma/shared";
 
-import { createSignedToken } from "../crypto";
-import { readMessageVariables, senderForPurpose } from "../deliveries/worker";
-import { buildReplyAddress } from "../email/address";
 import { type RuntimeEnv } from "../env";
-import { safeRecord } from "../runtime/helpers";
-import { parseTemplateVariables, resolveTemplateVariables } from "../templates/resend";
+import { readMessageVariables, senderForPurpose } from "../messaging/delivery-worker";
+import { buildReplyAddress } from "../messaging/reply-address";
+import { parseTemplateVariables, resolveTemplateVariables } from "../messaging/resend";
+import { createSignedToken } from "../platform/crypto";
+import { parseJsonRecord } from "../platform/values";
 
 export interface BroadcastRow {
   id: string;
@@ -178,7 +178,7 @@ export async function createBroadcastDeliveries(
       phone: contact.phone,
       stage: contact.stage,
       score: contact.score,
-      ...safeRecord(contact.custom_fields),
+      ...parseJsonRecord(contact.custom_fields),
     };
     const unsubscribeToken = await createSignedToken(env.TRACKING_SIGNING_SECRET, {
       workspaceId: broadcast.workspace_id,
@@ -190,7 +190,7 @@ export async function createBroadcastDeliveries(
     const unsubscribeUrl = `${env.APP_URL}/u/${unsubscribeToken}`;
     const variables = resolveTemplateVariables(templateVariables, {
       contact: contactData,
-      customFields: safeRecord(contact.custom_fields),
+      customFields: parseJsonRecord(contact.custom_fields),
       message,
       unsubscribeUrl,
       preferenceUrl: `${env.APP_URL}/preference/${unsubscribeToken}`,
