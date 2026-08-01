@@ -1,4 +1,5 @@
 import { type KaenmaDatabase, uuidv7 } from "@kaenma/database";
+import type { CampaignDefinition } from "@kaenma/shared";
 
 export interface ContactEvent {
   id: string;
@@ -96,6 +97,47 @@ export async function enrollInactiveContacts(
     if (result) enrolled += 1;
   }
   return enrolled;
+}
+
+export type ManualEnrollOutcome =
+  | { kind: "not_active" }
+  | { kind: "source_missing" }
+  | { kind: "already_enrolled" }
+  | { kind: "enrolled"; result: EnrollmentResult };
+
+/** API/SDK-driven enrollment of one contact into the published version. */
+export async function enrollContactManually(
+  database: KaenmaDatabase,
+  input: {
+    workspaceId: string;
+    campaignId: string;
+    contactId: string;
+    sourceEventId: string;
+  },
+): Promise<ManualEnrollOutcome> {
+  const campaign = await database
+    .prepare(
+      `SELECT c.published_version_id, cv.graph
+       FROM campaigns c JOIN campaign_versions cv
+         ON cv.id = c.published_version_id AND cv.workspace_id = c.workspace_id
+       WHERE c.workspace_id = ? AND c.id = ? AND c.status = 'active'`,
+    )
+    .bind(input.workspaceId, input.campaignId)
+    .first<{ published_version_id: string; graph: string }>();
+  if (!campaign) return { kind: "not_active" };
+  const graph = JSON.parse(campaign.graph) as CampaignDefinition;
+  const source = graph.nodes.find((node) => node.type === "source");
+  if (!source) return { kind: "source_missing" };
+  const result = await enrollPublishedCampaign(database, {
+    workspaceId: input.workspaceId,
+    campaignId: input.campaignId,
+    campaignVersionId: campaign.published_version_id,
+    contactId: input.contactId,
+    sourceNodeId: source.id,
+    sourceEventId: input.sourceEventId,
+  });
+  if (!result) return { kind: "already_enrolled" };
+  return { kind: "enrolled", result };
 }
 
 export async function enrollPublishedCampaign(

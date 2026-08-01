@@ -16,3 +16,9 @@ export const workspaceErrors = {
     message: "許可されていないOriginです",
   },
 } as const;
+
+export const forbiddenError = {
+  FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
+} as const;
+
+export const authedErrors = { ...workspaceErrors, ...forbiddenError } as const;

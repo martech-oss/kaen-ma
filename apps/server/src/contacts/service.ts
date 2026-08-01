@@ -4,6 +4,7 @@ import type { WorkspaceContext } from "@kaenma/shared";
 import type { Contact, ContactCreate } from "@kaenma/shared/contacts";
 
 import { recordContactEvent } from "../events/service";
+import { nullablePrimitiveString, parseJsonRecord, primitiveString } from "../values";
 
 export async function listContacts(
   database: KaenmaDatabase,
@@ -36,6 +37,75 @@ export async function createContact(
     resourceId: contact.id,
   });
   return contact;
+}
+
+export interface ContactTimelineEvent {
+  id: string;
+  type: string;
+  resourceType: string | null;
+  resourceId: string | null;
+  properties: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export async function getContactTimeline(
+  database: KaenmaDatabase,
+  workspaceId: string,
+  contactId: string,
+): Promise<ContactTimelineEvent[] | null> {
+  const exists = await database
+    .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND id = ?")
+    .bind(workspaceId, contactId)
+    .first();
+  if (!exists) return null;
+  const result = await database
+    .prepare(
+      `SELECT id, type, resource_type, resource_id, properties, occurred_at
+       FROM contact_events WHERE workspace_id = ? AND contact_id = ?
+       ORDER BY occurred_at DESC, id DESC LIMIT 200`,
+    )
+    .bind(workspaceId, contactId)
+    .all<Record<string, unknown>>();
+  return result.results.map((row) => ({
+    id: primitiveString(row["id"]),
+    type: primitiveString(row["type"]),
+    resourceType: nullablePrimitiveString(row["resource_type"]),
+    resourceId: nullablePrimitiveString(row["resource_id"]),
+    properties: parseJsonRecord(row["properties"]),
+    occurredAt: primitiveString(row["occurred_at"]),
+  }));
+}
+
+export type ContactEventOutcome =
+  | { kind: "contact_not_found" }
+  | { kind: "recorded"; eventId: string; enrollmentCount: number };
+
+export async function recordContactApiEvent(
+  database: KaenmaDatabase,
+  workspaceId: string,
+  input: {
+    contactId: string;
+    eventName: string;
+    source: "api" | "webhook";
+    properties: Record<string, unknown>;
+    occurredAt?: string;
+  },
+): Promise<ContactEventOutcome> {
+  const contact = await database
+    .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND id = ? AND status != 'archived'")
+    .bind(workspaceId, input.contactId)
+    .first<{ id: string }>();
+  if (!contact) return { kind: "contact_not_found" };
+  const result = await recordContactEvent(database, {
+    workspaceId,
+    contactId: contact.id,
+    type: input.source === "webhook" ? "webhook_event" : "custom_event",
+    resourceType: input.source,
+    resourceId: input.eventName,
+    properties: input.properties,
+    ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
+  });
+  return { kind: "recorded", ...result };
 }
 
 async function attachContactRelations(

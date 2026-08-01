@@ -6,14 +6,18 @@ import {
   removeAccountContactProcedure,
   updateAccountProcedure,
 } from "../accounts/router";
+import { downloadAssetProcedure, uploadAssetProcedure } from "../assets/router";
 import {
+  campaignAnalyticsProcedure,
   createCampaignProcedure,
+  enrollCampaignProcedure,
   getCampaignDraftProcedure,
   listCampaignsProcedure,
   publishCampaignProcedure,
   saveCampaignDraftProcedure,
   setCampaignStatusProcedure,
 } from "../campaigns/router";
+import { createTopicProcedure, listTopicsProcedure } from "../consent/router";
 import {
   addListProcedure,
   addSegmentProcedure,
@@ -31,8 +35,11 @@ import {
 } from "../contacts/resource-router";
 import {
   archiveContactProcedure,
+  contactTimelineProcedure,
   createContactProcedure,
+  getContactProcedure,
   listContactsProcedure,
+  recordContactEventProcedure,
   updateContactProcedure,
 } from "../contacts/router";
 import {
@@ -53,6 +60,7 @@ import {
   archiveVariableProcedure,
   createEmailCampaignProcedure,
   createVariableProcedure,
+  getEmailCampaignProcedure,
   importTemplateProcedure,
   listEmailCampaignsProcedure,
   listSegmentOptionsProcedure,
@@ -64,7 +72,21 @@ import {
   updateEmailCampaignProcedure,
   updateVariableProcedure,
 } from "../emails/router";
-import { createApiKeyProcedure, dashboardProcedure } from "../operations/router";
+import {
+  createApiKeyProcedure,
+  dashboardProcedure,
+  downloadContactExportProcedure,
+  exportContactsProcedure,
+  getDataJobProcedure,
+  importContactsProcedure,
+  listDeadLettersProcedure,
+  replayDeadLetterProcedure,
+} from "../operations/router";
+import {
+  addProjectItemProcedure,
+  createProjectProcedure,
+  listProjectsProcedure,
+} from "../projects/router";
 import {
   automationsReportProcedure,
   contactsReportProcedure,
@@ -75,6 +97,7 @@ import {
 import {
   createSegmentProcedure,
   listSegmentsProcedure,
+  previewSegmentProcedure,
   refreshSegmentProcedure,
 } from "../segments/router";
 import {
@@ -93,7 +116,11 @@ import {
   updatePageProcedure,
   updateTrackingProcedure,
 } from "../website/router";
-import { getWorkspaceProcedure } from "../workspaces/router";
+import {
+  createWebhookEndpointProcedure,
+  getWorkspaceProcedure,
+  listWebhookEndpointsProcedure,
+} from "../workspaces/router";
 import { os } from "./base";
 
 export type { OrpcContext, OrpcInitialContext } from "./context";
@@ -101,9 +128,27 @@ export type { OrpcContext, OrpcInitialContext } from "./context";
 export const orpcRouter = os.router({
   workspace: {
     get: getWorkspaceProcedure,
+    listWebhookEndpoints: listWebhookEndpointsProcedure,
+    createWebhookEndpoint: createWebhookEndpointProcedure,
+  },
+  assets: {
+    upload: uploadAssetProcedure,
+    download: downloadAssetProcedure,
+  },
+  consent: {
+    listTopics: listTopicsProcedure,
+    createTopic: createTopicProcedure,
+  },
+  projects: {
+    list: listProjectsProcedure,
+    create: createProjectProcedure,
+    addItem: addProjectItemProcedure,
   },
   contacts: {
     list: listContactsProcedure,
+    get: getContactProcedure,
+    timeline: contactTimelineProcedure,
+    recordEvent: recordContactEventProcedure,
     create: createContactProcedure,
     update: updateContactProcedure,
     archive: archiveContactProcedure,
@@ -122,6 +167,7 @@ export const orpcRouter = os.router({
   },
   emails: {
     listCampaigns: listEmailCampaignsProcedure,
+    getCampaign: getEmailCampaignProcedure,
     createCampaign: createEmailCampaignProcedure,
     updateCampaign: updateEmailCampaignProcedure,
     startCampaign: startEmailCampaignProcedure,
@@ -147,11 +193,18 @@ export const orpcRouter = os.router({
   operations: {
     dashboard: dashboardProcedure,
     createApiKey: createApiKeyProcedure,
+    importContacts: importContactsProcedure,
+    exportContacts: exportContactsProcedure,
+    getDataJob: getDataJobProcedure,
+    downloadContactExport: downloadContactExportProcedure,
+    listDeadLetters: listDeadLettersProcedure,
+    replayDeadLetter: replayDeadLetterProcedure,
   },
   segments: {
     list: listSegmentsProcedure,
     create: createSegmentProcedure,
     refresh: refreshSegmentProcedure,
+    preview: previewSegmentProcedure,
   },
   campaigns: {
     list: listCampaignsProcedure,
@@ -160,6 +213,8 @@ export const orpcRouter = os.router({
     saveDraft: saveCampaignDraftProcedure,
     publish: publishCampaignProcedure,
     setStatus: setCampaignStatusProcedure,
+    enroll: enrollCampaignProcedure,
+    analytics: campaignAnalyticsProcedure,
   },
   contactResources: {
     options: contactOptionsProcedure,

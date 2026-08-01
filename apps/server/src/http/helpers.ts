@@ -68,6 +68,13 @@ export function randomString(length: number): string {
   return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
 }
 
+/** API key prefixes must satisfy the `[A-Za-z0-9]` auth pattern, so no dashes. */
+export function randomIdentifier(length: number): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
+}
+
 export function parseCsv(value: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];

@@ -8,7 +8,7 @@ import { campaignDefinitionSchema, type CampaignDefinition } from "@kaenma/share
 import { type AppEnvironment } from "../env";
 import { safeJson, validationError } from "../http/helpers";
 import { apiError, requireRole } from "../middleware";
-import { enrollPublishedCampaign } from "./enrollment";
+import { enrollContactManually } from "./enrollment";
 import { listCampaigns } from "./list-service";
 
 export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
@@ -231,41 +231,27 @@ export function registerCampaignRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.post("/campaigns/:id/enroll", requireRole("marketer"), async (context) => {
-    const database = context.get("database");
     const parsed = z
       .object({ contactId: z.string().min(1), sourceEventId: z.string().optional() })
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const workspace = context.get("workspace");
-    const campaign = await database
-      .prepare(
-        `SELECT c.published_version_id, cv.graph
-       FROM campaigns c JOIN campaign_versions cv
-         ON cv.id = c.published_version_id AND cv.workspace_id = c.workspace_id
-       WHERE c.workspace_id = ? AND c.id = ? AND c.status = 'active'`,
-      )
-      .bind(workspace.workspaceId, context.req.param("id"))
-      .first<{ published_version_id: string; graph: string }>();
-    if (!campaign) {
-      return apiError(context, 404, "campaign_not_active", "公開中のキャンペーンがありません");
-    }
-    const graph = JSON.parse(campaign.graph) as CampaignDefinition;
-    const source = graph.nodes.find((node) => node.type === "source");
-    if (!source) return apiError(context, 422, "source_missing", "Sourceノードがありません");
-    const sourceEventId =
-      parsed.data.sourceEventId ?? context.req.header("idempotency-key") ?? uuidv7();
-    const result = await enrollPublishedCampaign(database, {
-      workspaceId: workspace.workspaceId,
+    const outcome = await enrollContactManually(context.get("database"), {
+      workspaceId: context.get("workspace").workspaceId,
       campaignId: context.req.param("id"),
-      campaignVersionId: campaign.published_version_id,
       contactId: parsed.data.contactId,
-      sourceNodeId: source.id,
-      sourceEventId,
+      sourceEventId:
+        parsed.data.sourceEventId ?? context.req.header("idempotency-key") ?? uuidv7(),
     });
-    if (!result) {
-      return apiError(context, 409, "already_enrolled", "このイベントでは既に参加済みです");
+    switch (outcome.kind) {
+      case "not_active":
+        return apiError(context, 404, "campaign_not_active", "公開中のキャンペーンがありません");
+      case "source_missing":
+        return apiError(context, 422, "source_missing", "Sourceノードがありません");
+      case "already_enrolled":
+        return apiError(context, 409, "already_enrolled", "このイベントでは既に参加済みです");
+      case "enrolled":
+        return context.json({ data: outcome.result }, 202);
     }
-    return context.json({ data: result }, 202);
   });
 
   api.post("/campaigns/:id/status", requireRole("marketer"), async (context) => {

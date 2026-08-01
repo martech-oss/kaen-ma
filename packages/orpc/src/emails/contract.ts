@@ -33,6 +33,14 @@ export const emailsContract = {
     .errors(workspaceErrors)
     .input(archivedInput)
     .output(z.array(emailCampaignSchema)),
+  getCampaign: oc
+    .route({ method: "GET", path: "/broadcasts/{id}" })
+    .errors({
+      ...workspaceErrors,
+      BROADCAST_NOT_FOUND: { status: 404, message: "メールキャンペーンが見つかりません" },
+    })
+    .input(idInput)
+    .output(emailCampaignSchema),
   createCampaign: oc
     .route({ method: "POST", path: "/broadcasts", successStatus: 201 })
     .errors({ ...base, ...invalidResources })
@@ -147,12 +155,15 @@ export const emailsContract = {
     .input(idInput)
     .output(z.object({ archived: z.literal(true) })),
 
+  // Admin-UI option lists. Distinct REST paths so they never collide with the
+  // canonical /segments and /subscription-topics resources when both are
+  // exposed through the OpenAPI surface.
   listSegmentOptions: oc
-    .route({ method: "GET", path: "/segments" })
+    .route({ method: "GET", path: "/email-options/segments" })
     .errors(workspaceErrors)
     .output(z.array(broadcastSegmentOptionSchema)),
   listTopicOptions: oc
-    .route({ method: "GET", path: "/subscription-topics" })
+    .route({ method: "GET", path: "/email-options/topics" })
     .errors(workspaceErrors)
     .output(z.array(subscriptionTopicOptionSchema)),
 };

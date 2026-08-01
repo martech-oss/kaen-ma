@@ -3,14 +3,12 @@ import * as z from "zod";
 
 import { compileSegmentFilter } from "@kaenma/core";
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { Contact } from "@kaenma/shared/contacts";
 import { segmentFilterSchema } from "@kaenma/shared/segments";
 
 import { type AppEnvironment } from "../env";
 import { safeJson, validationError } from "../http/helpers";
 import { apiError, requireRole } from "../middleware";
-import { nullablePrimitiveString, numericValue, parseJsonRecord, primitiveString } from "../values";
-import { listSegments } from "./list-service";
+import { listSegments, previewSegment } from "./list-service";
 
 export function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
   api.get("/segments", async (context) => {
@@ -73,41 +71,16 @@ export function registerSegmentRoutes(api: Hono<AppEnvironment>): void {
   api.post("/segments/preview", requireRole("analyst"), async (context) => {
     const parsed = segmentFilterSchema.safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
-    const workspace = context.get("workspace");
-    const compiled = compileSegmentFilter(workspace.workspaceId, parsed.data);
-    const result = await context
-      .get("database")
-      .prepare(`${compiled.sql} ORDER BY c.id DESC LIMIT ?`)
-      .bind(...compiled.params, 100)
-      .all();
+    const preview = await previewSegment(
+      context.get("database"),
+      context.get("workspace").workspaceId,
+      parsed.data,
+    );
     return context.json({
-      data: result.results.map(toPreviewContact),
-      meta: { capped: result.results.length === 100, requestId: context.get("requestId") },
+      data: preview.contacts,
+      meta: { capped: preview.capped, requestId: context.get("requestId") },
     });
   });
-}
-
-function toPreviewContact(row: Record<string, unknown>): Contact {
-  const rawStatus = primitiveString(row["status"]);
-  const status =
-    rawStatus === "archived" || rawStatus === "anonymous" ? rawStatus : ("active" as const);
-  return {
-    id: primitiveString(row["id"]),
-    workspaceId: primitiveString(row["workspace_id"]),
-    visitorId: nullablePrimitiveString(row["visitor_id"]),
-    email: nullablePrimitiveString(row["email"]),
-    firstName: nullablePrimitiveString(row["first_name"]),
-    lastName: nullablePrimitiveString(row["last_name"]),
-    phone: nullablePrimitiveString(row["phone"]),
-    externalId: nullablePrimitiveString(row["external_id"]),
-    stage: primitiveString(row["stage"]),
-    score: numericValue(row["score"]),
-    status,
-    archivedAt: nullablePrimitiveString(row["archived_at"]),
-    customFields: parseJsonRecord(row["custom_fields"]),
-    createdAt: primitiveString(row["created_at"]),
-    updatedAt: primitiveString(row["updated_at"]),
-  };
 }
 
 export async function updateSegmentMemberCount(

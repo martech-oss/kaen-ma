@@ -1,7 +1,9 @@
 import { implement } from "@orpc/server";
 
 import { contract } from "@kaenma/orpc";
+import type { WorkspaceRole } from "@kaenma/shared";
 
+import { hasWorkspaceRole } from "../auth/authorization";
 import { resolveWorkspaceAccess, WorkspaceAccessError } from "../middleware";
 import type { OrpcInitialContext } from "./context";
 
@@ -33,3 +35,15 @@ const requireWorkspace = os.middleware(async ({ context, next, errors }) => {
 });
 
 export const authed = os.use(requireWorkspace);
+
+/**
+ * Shared role guard for oRPC handlers. Every role-gated contract declares a
+ * FORBIDDEN error; pass its constructor so the thrown error stays typed.
+ */
+export function requireRole(
+  role: WorkspaceRole,
+  minimum: WorkspaceRole,
+  forbidden: () => Error,
+): void {
+  if (!hasWorkspaceRole(role, minimum)) throw forbidden();
+}

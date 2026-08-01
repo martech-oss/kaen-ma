@@ -1,8 +1,8 @@
 import { segments, uuidv7 } from "@kaenma/database";
 
 import { hasWorkspaceRole } from "../auth/authorization";
-import { authed } from "../orpc/base";
-import { listSegments } from "./list-service";
+import { authed, requireRole } from "../orpc/base";
+import { listSegments, previewSegment } from "./list-service";
 import { refreshSegmentMemberships } from "./routes";
 
 export const listSegmentsProcedure = authed.segments.list.handler(async ({ context }) => {
@@ -49,5 +49,12 @@ export const refreshSegmentProcedure = authed.segments.refresh.handler(
     );
     if (!refreshed) throw errors.SEGMENT_NOT_FOUND();
     return { refreshed: true as const };
+  },
+);
+
+export const previewSegmentProcedure = authed.segments.preview.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
+    return previewSegment(context.database, context.workspace.workspaceId, input.filter);
   },
 );

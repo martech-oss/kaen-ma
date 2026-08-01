@@ -12,6 +12,18 @@
       "migrations_dir": "../../packages/database/migrations",
     },
   ],
+  "r2_buckets": [
+    {
+      "binding": "ASSETS_BUCKET",
+      "bucket_name": "kaenma-test-assets",
+    },
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "CAMPAIGN_QUEUE", "queue": "kaenma-campaign" },
+      { "binding": "DELIVERY_QUEUE", "queue": "kaenma-delivery" },
+    ],
+  },
   "vars": {
     "APP_NAME": "Kaenma",
     "APP_URL": "http://localhost:8787",

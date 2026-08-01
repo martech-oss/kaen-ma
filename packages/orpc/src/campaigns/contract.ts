@@ -79,4 +79,34 @@ export const campaignsContract = {
     })
     .input(z.object({ id: z.string().min(1), status: z.enum(["active", "paused"]) }))
     .output(z.object({ status: z.enum(["active", "paused"]) })),
+  enroll: oc
+    .route({ method: "POST", path: "/campaigns/{id}/enroll", successStatus: 202 })
+    .errors({
+      ...base,
+      CAMPAIGN_NOT_ACTIVE: { status: 404, message: "公開中のキャンペーンがありません" },
+      SOURCE_MISSING: { status: 422, message: "Sourceノードがありません" },
+      ALREADY_ENROLLED: { status: 409, message: "このイベントでは既に参加済みです" },
+    })
+    .input(
+      z.object({
+        id: z.string().min(1),
+        contactId: z.string().min(1),
+        sourceEventId: z.string().optional(),
+      }),
+    )
+    .output(z.object({ enrollmentId: z.string(), jobId: z.string() })),
+  analytics: oc
+    .route({ method: "GET", path: "/campaigns/{id}/analytics" })
+    .errors(workspaceErrors)
+    .input(z.object({ id: z.string().min(1) }))
+    .output(
+      z.object({
+        enrollments: z.array(
+          z.object({ status: z.string(), count: z.number().int().nonnegative() }),
+        ),
+        deliveries: z.array(
+          z.object({ status: z.string(), count: z.number().int().nonnegative() }),
+        ),
+      }),
+    ),
 };

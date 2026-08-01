@@ -8,6 +8,7 @@ import {
   archiveMessageVariable,
   createEmailCampaign,
   createMessageVariable,
+  getEmailCampaign,
   importEmailTemplate,
   listBroadcastSegmentOptions,
   listEmailCampaigns,
@@ -29,6 +30,14 @@ function requireRole(role: WorkspaceRole, minimum: WorkspaceRole, forbidden: () 
 
 export const listEmailCampaignsProcedure = authed.emails.listCampaigns.handler(
   ({ context, input }) => listEmailCampaigns(context.database, context.workspace, input.archived),
+);
+
+export const getEmailCampaignProcedure = authed.emails.getCampaign.handler(
+  async ({ context, input, errors }) => {
+    const campaign = await getEmailCampaign(context.database, context.workspace, input.id);
+    if (!campaign) throw errors.BROADCAST_NOT_FOUND();
+    return campaign;
+  },
 );
 
 export const createEmailCampaignProcedure = authed.emails.createCampaign.handler(

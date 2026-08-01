@@ -16,14 +16,7 @@ import { nullablePrimitiveString, numericValue, primitiveString } from "../value
 
 export * from "./template-service";
 
-export async function listEmailCampaigns(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  archived: boolean,
-): Promise<EmailCampaign[]> {
-  const result = await database
-    .prepare(
-      `SELECT b.id, b.name, b.segment_id, b.template_id, b.topic_id,
+const broadcastRowSelect = `SELECT b.id, b.name, b.segment_id, b.template_id, b.topic_id,
               b.status, b.scheduled_at, b.started_at, b.completed_at,
               b.archived_at, b.created_at, b.updated_at,
               s.name AS segment_name, s.member_count,
@@ -40,14 +33,10 @@ export async function listEmailCampaigns(
        FROM broadcasts b
        JOIN segments s ON s.workspace_id = b.workspace_id AND s.id = b.segment_id
        JOIN email_templates et
-         ON et.workspace_id = b.workspace_id AND et.id = b.template_id
-       WHERE b.workspace_id = ?
-         AND ${archived ? "b.archived_at IS NOT NULL" : "b.archived_at IS NULL"}
-       ORDER BY b.updated_at DESC LIMIT 200`,
-    )
-    .bind(workspace.workspaceId)
-    .all<Record<string, unknown>>();
-  return result.results.map((row) => ({
+         ON et.workspace_id = b.workspace_id AND et.id = b.template_id`;
+
+function toEmailCampaign(row: Record<string, unknown>): EmailCampaign {
+  return {
     id: primitiveString(row["id"]),
     name: primitiveString(row["name"]),
     segmentId: primitiveString(row["segment_id"]),
@@ -67,7 +56,36 @@ export async function listEmailCampaigns(
     recipientCount: numericValue(row["recipient_count"]),
     sentCount: numericValue(row["sent_count"]),
     deliveredCount: numericValue(row["delivered_count"]),
-  }));
+  };
+}
+
+export async function listEmailCampaigns(
+  database: KaenmaDatabase,
+  workspace: WorkspaceContext,
+  archived: boolean,
+): Promise<EmailCampaign[]> {
+  const result = await database
+    .prepare(
+      `${broadcastRowSelect}
+       WHERE b.workspace_id = ?
+         AND ${archived ? "b.archived_at IS NOT NULL" : "b.archived_at IS NULL"}
+       ORDER BY b.updated_at DESC LIMIT 200`,
+    )
+    .bind(workspace.workspaceId)
+    .all<Record<string, unknown>>();
+  return result.results.map(toEmailCampaign);
+}
+
+export async function getEmailCampaign(
+  database: KaenmaDatabase,
+  workspace: WorkspaceContext,
+  broadcastId: string,
+): Promise<EmailCampaign | null> {
+  const row = await database
+    .prepare(`${broadcastRowSelect} WHERE b.workspace_id = ? AND b.id = ?`)
+    .bind(workspace.workspaceId, broadcastId)
+    .first<Record<string, unknown>>();
+  return row ? toEmailCampaign(row) : null;
 }
 
 /** Create can only fail on resources; update can also find nothing editable. */

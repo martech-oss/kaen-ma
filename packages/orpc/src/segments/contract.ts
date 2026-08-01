@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
+import { contactSchema } from "@kaenma/shared/contacts";
 import { segmentFilterSchema } from "@kaenma/shared/segments";
 
 import { workspaceErrors } from "../shared/errors";
@@ -61,4 +62,9 @@ export const segmentsContract = {
     })
     .input(z.object({ id: z.string().min(1) }))
     .output(z.object({ refreshed: z.literal(true) })),
+  preview: oc
+    .route({ method: "POST", path: "/segments/preview" })
+    .errors({ ...workspaceErrors, ...forbidden })
+    .input(z.object({ filter: segmentFilterSchema }))
+    .output(z.object({ contacts: z.array(contactSchema), capped: z.boolean() })),
 };

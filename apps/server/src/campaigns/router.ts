@@ -5,6 +5,8 @@ import { campaignDefinitionSchema, type CampaignDefinition } from "@kaenma/share
 import { hasWorkspaceRole } from "../auth/authorization";
 import { authed } from "../orpc/base";
 import { isRecord } from "../values";
+import { getCampaignAnalytics } from "./analytics-service";
+import { enrollContactManually } from "./enrollment";
 import { listCampaigns, normalizeCampaignStatus } from "./list-service";
 import { campaignTrigger } from "./routes";
 
@@ -225,6 +227,33 @@ export const setCampaignStatusProcedure = authed.campaigns.setStatus.handler(
     if (result.meta.changes !== 1) throw errors.NOT_CHANGEABLE();
     return { status: input.status };
   },
+);
+
+export const enrollCampaignProcedure = authed.campaigns.enroll.handler(
+  async ({ context, input, errors }) => {
+    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    const outcome = await enrollContactManually(context.database, {
+      workspaceId: context.workspace.workspaceId,
+      campaignId: input.id,
+      contactId: input.contactId,
+      sourceEventId: input.sourceEventId ?? uuidv7(),
+    });
+    switch (outcome.kind) {
+      case "not_active":
+        throw errors.CAMPAIGN_NOT_ACTIVE();
+      case "source_missing":
+        throw errors.SOURCE_MISSING();
+      case "already_enrolled":
+        throw errors.ALREADY_ENROLLED();
+      case "enrolled":
+        return outcome.result;
+    }
+  },
+);
+
+export const campaignAnalyticsProcedure = authed.campaigns.analytics.handler(
+  async ({ context, input }) =>
+    getCampaignAnalytics(context.database, context.workspace.workspaceId, input.id),
 );
 
 // isRecord is re-exported for the client-side error shape check in tests.
