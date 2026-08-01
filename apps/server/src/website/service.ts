@@ -6,37 +6,15 @@ import type {
   SignupForm,
   SignupFormDefinition,
   SignupFormWrite,
-  SiteMessage,
-  SiteMessageWrite,
-  SiteTracking,
-  SiteTrackingWrite,
 } from "@kaenma/shared/website";
 
-import { isRecord, primitiveString } from "../values";
+import { nullablePrimitiveString, numericValue, parseJsonValue, primitiveString } from "../values";
 
-function num(value: unknown): number {
-  return Number(value ?? 0);
-}
-
-function text(value: unknown): string {
-  return primitiveString(value);
-}
-
-function nullableText(value: unknown): string | null {
-  return value === null || value === undefined ? null : primitiveString(value);
-}
+export * from "./message-service";
+export * from "./tracking-service";
 
 function status(value: unknown): "draft" | "published" {
   return value === "published" ? "published" : "draft";
-}
-
-function parseJson<T>(value: unknown, fallback: T): T {
-  if (typeof value !== "string") return fallback;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
 }
 
 export async function listSignupForms(
@@ -58,18 +36,18 @@ export async function listSignupForms(
     .bind(workspace.workspaceId)
     .all<Record<string, unknown>>();
   return result.results.map((row) => ({
-    id: text(row["id"]),
-    name: text(row["name"]),
-    slug: text(row["slug"]),
+    id: primitiveString(row["id"]),
+    name: primitiveString(row["name"]),
+    slug: primitiveString(row["slug"]),
     status: status(row["status"]),
-    version: num(row["version"]),
-    definition: parseJson<SignupFormDefinition>(row["definition"], {}),
-    allowedDomains: parseJson<string[]>(row["allowed_domains"], []),
+    version: numericValue(row["version"]),
+    definition: parseJsonValue<SignupFormDefinition>(row["definition"], {}),
+    allowedDomains: parseJsonValue<string[]>(row["allowed_domains"], []),
     turnstileEnabled: Boolean(row["turnstile_enabled"]),
-    successMessage: text(row["success_message"]),
-    submissionCount: num(row["submission_count"]),
-    createdAt: text(row["created_at"]),
-    updatedAt: text(row["updated_at"]),
+    successMessage: primitiveString(row["success_message"]),
+    submissionCount: numericValue(row["submission_count"]),
+    createdAt: primitiveString(row["created_at"]),
+    updatedAt: primitiveString(row["updated_at"]),
   }));
 }
 
@@ -166,15 +144,16 @@ export async function listLandingPages(
     .bind(workspace.workspaceId)
     .all<Record<string, unknown>>();
   return result.results.map((row) => ({
-    id: text(row["id"]),
-    name: text(row["name"]),
-    slug: text(row["slug"]),
+    id: primitiveString(row["id"]),
+    name: primitiveString(row["name"]),
+    slug: primitiveString(row["slug"]),
     status: status(row["status"]),
-    currentVersionId: nullableText(row["current_version_id"]),
-    version: row["version"] === null || row["version"] === undefined ? null : num(row["version"]),
-    contentDocument: parseJson<ContentDocument | null>(row["content_document"], null),
-    createdAt: text(row["created_at"]),
-    updatedAt: text(row["updated_at"]),
+    currentVersionId: nullablePrimitiveString(row["current_version_id"]),
+    version:
+      row["version"] === null || row["version"] === undefined ? null : numericValue(row["version"]),
+    contentDocument: parseJsonValue<ContentDocument | null>(row["content_document"], null),
+    createdAt: primitiveString(row["created_at"]),
+    updatedAt: primitiveString(row["updated_at"]),
   }));
 }
 
@@ -278,220 +257,4 @@ export async function archiveLandingPage(
     .bind(new Date().toISOString(), workspace.workspaceId, id)
     .run();
   return result.meta.changes === 1;
-}
-
-export async function listSiteMessages(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-): Promise<SiteMessage[]> {
-  const result = await database
-    .prepare(
-      `SELECT id, name, status, headline, body, cta_label, cta_url,
-              page_pattern, starts_at, ends_at, impression_count, click_count,
-              created_at, updated_at
-       FROM site_messages
-       WHERE workspace_id = ? AND status != 'archived'
-       ORDER BY updated_at DESC`,
-    )
-    .bind(workspace.workspaceId)
-    .all<Record<string, unknown>>();
-  return result.results.map((row) => ({
-    id: text(row["id"]),
-    name: text(row["name"]),
-    status: status(row["status"]),
-    headline: text(row["headline"]),
-    body: text(row["body"]),
-    ctaLabel: text(row["cta_label"]),
-    ctaUrl: nullableText(row["cta_url"]),
-    pagePattern: text(row["page_pattern"]),
-    startsAt: nullableText(row["starts_at"]),
-    endsAt: nullableText(row["ends_at"]),
-    impressionCount: num(row["impression_count"]),
-    clickCount: num(row["click_count"]),
-    createdAt: text(row["created_at"]),
-    updatedAt: text(row["updated_at"]),
-  }));
-}
-
-export async function createSiteMessage(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  input: SiteMessageWrite,
-): Promise<{ id: string }> {
-  const id = uuidv7();
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `INSERT INTO site_messages
-       (id, workspace_id, name, status, headline, body, cta_label, cta_url,
-        page_pattern, starts_at, ends_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      workspace.workspaceId,
-      input.name,
-      input.status,
-      input.headline,
-      input.body,
-      input.ctaLabel,
-      input.ctaUrl,
-      input.pagePattern,
-      input.startsAt,
-      input.endsAt,
-      now,
-      now,
-    )
-    .run();
-  return { id };
-}
-
-export async function updateSiteMessage(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  id: string,
-  input: SiteMessageWrite,
-): Promise<boolean> {
-  const result = await database
-    .prepare(
-      `UPDATE site_messages
-       SET name = ?, status = ?, headline = ?, body = ?, cta_label = ?,
-           cta_url = ?, page_pattern = ?, starts_at = ?, ends_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
-    )
-    .bind(
-      input.name,
-      input.status,
-      input.headline,
-      input.body,
-      input.ctaLabel,
-      input.ctaUrl,
-      input.pagePattern,
-      input.startsAt,
-      input.endsAt,
-      new Date().toISOString(),
-      workspace.workspaceId,
-      id,
-    )
-    .run();
-  return result.meta.changes === 1;
-}
-
-export async function archiveSiteMessage(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  id: string,
-): Promise<boolean> {
-  const now = new Date().toISOString();
-  const result = await database
-    .prepare(
-      `UPDATE site_messages
-       SET status = 'archived', archived_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
-    )
-    .bind(now, now, workspace.workspaceId, id)
-    .run();
-  return result.meta.changes === 1;
-}
-
-export async function getSiteTracking(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-): Promise<SiteTracking> {
-  const workspaceId = workspace.workspaceId;
-  const [settings, summary, topPages, recentEvents, organization] = await Promise.all([
-    database
-      .prepare(
-        `SELECT enabled, allowed_domains, consent_mode, created_at, updated_at
-         FROM site_tracking_settings WHERE workspace_id = ?`,
-      )
-      .bind(workspaceId)
-      .first<{ enabled: number; allowed_domains: string; updated_at: string }>(),
-    database
-      .prepare(
-        `SELECT COUNT(*) AS page_views,
-                COUNT(DISTINCT visitor_id) AS unique_visitors,
-                COUNT(DISTINCT contact_id) AS identified_contacts
-         FROM contact_events
-         WHERE workspace_id = ? AND type = 'page_viewed'
-           AND occurred_at >= datetime('now', '-30 days')`,
-      )
-      .bind(workspaceId)
-      .first<Record<string, unknown>>(),
-    database
-      .prepare(
-        `SELECT resource_id AS url, COUNT(*) AS views
-         FROM contact_events
-         WHERE workspace_id = ? AND type = 'page_viewed'
-           AND occurred_at >= datetime('now', '-30 days')
-           AND resource_id IS NOT NULL
-         GROUP BY resource_id ORDER BY views DESC LIMIT 10`,
-      )
-      .bind(workspaceId)
-      .all<Record<string, unknown>>(),
-    database
-      .prepare(
-        `SELECT visitor_id, contact_id, resource_id, properties, occurred_at
-         FROM contact_events
-         WHERE workspace_id = ? AND type = 'page_viewed'
-         ORDER BY occurred_at DESC LIMIT 20`,
-      )
-      .bind(workspaceId)
-      .all<Record<string, unknown>>(),
-    database.prepare("SELECT slug FROM organization WHERE id = ?").bind(workspaceId).first<{
-      slug: string;
-    }>(),
-  ]);
-  return {
-    enabled: settings?.enabled === 1,
-    allowedDomains: settings ? parseJson<string[]>(settings.allowed_domains, []) : [],
-    consentMode: "required",
-    workspaceSlug: organization?.slug ?? "",
-    summary: {
-      pageViews: num(summary?.["page_views"]),
-      uniqueVisitors: num(summary?.["unique_visitors"]),
-      identifiedContacts: num(summary?.["identified_contacts"]),
-    },
-    topPages: topPages.results.map((row) => ({
-      url: text(row["url"]),
-      views: num(row["views"]),
-    })),
-    recentEvents: recentEvents.results.map((row) => {
-      const properties = parseJson<unknown>(row["properties"], {});
-      return {
-        visitorId: text(row["visitor_id"]),
-        contactId: nullableText(row["contact_id"]),
-        resourceId: text(row["resource_id"]),
-        properties: isRecord(properties) ? properties : {},
-        occurredAt: text(row["occurred_at"]),
-      };
-    }),
-    updatedAt: settings?.updated_at ?? null,
-  };
-}
-
-export async function saveSiteTracking(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  input: SiteTrackingWrite,
-): Promise<void> {
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `INSERT INTO site_tracking_settings
-       (workspace_id, enabled, allowed_domains, consent_mode, created_at, updated_at)
-       VALUES (?, ?, ?, 'required', ?, ?)
-       ON CONFLICT(workspace_id) DO UPDATE SET
-         enabled = excluded.enabled,
-         allowed_domains = excluded.allowed_domains,
-         updated_at = excluded.updated_at`,
-    )
-    .bind(
-      workspace.workspaceId,
-      input.enabled ? 1 : 0,
-      JSON.stringify([...new Set(input.allowedDomains)]),
-      now,
-      now,
-    )
-    .run();
 }

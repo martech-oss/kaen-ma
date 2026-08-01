@@ -1,7 +1,8 @@
+import { and, count, desc, eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import * as z from "zod";
 
-import { uuidv7 } from "@kaenma/database";
+import { projectItems, projects, uuidv7 } from "@kaenma/database";
 
 import type { AppEnvironment } from "../env";
 import { safeJson, validationError } from "../http/helpers";
@@ -9,18 +10,29 @@ import { apiError, requireRole } from "../middleware";
 
 export function registerProjectRoutes(api: Hono<AppEnvironment>): void {
   api.get("/projects", async (context) => {
-    const result = await context
+    const rows = await context
       .get("database")
-      .prepare(
-        `SELECT p.id, p.name, p.description, p.color, p.created_at, p.updated_at,
-                COUNT(pi.resource_id) AS item_count
-         FROM projects p LEFT JOIN project_items pi
-           ON pi.workspace_id = p.workspace_id AND pi.project_id = p.id
-         WHERE p.workspace_id = ? GROUP BY p.id ORDER BY p.updated_at DESC`,
+      .orm.select({
+        id: projects.id,
+        name: projects.name,
+        description: projects.description,
+        color: projects.color,
+        created_at: projects.createdAt,
+        updated_at: projects.updatedAt,
+        item_count: count(projectItems.resourceId),
+      })
+      .from(projects)
+      .leftJoin(
+        projectItems,
+        and(
+          eq(projectItems.workspaceId, projects.workspaceId),
+          eq(projectItems.projectId, projects.id),
+        ),
       )
-      .bind(context.get("workspace").workspaceId)
-      .all();
-    return context.json({ data: result.results });
+      .where(eq(projects.workspaceId, context.get("workspace").workspaceId))
+      .groupBy(projects.id)
+      .orderBy(desc(projects.updatedAt));
+    return context.json({ data: rows });
   });
 
   api.post("/projects", requireRole("marketer"), async (context) => {
@@ -39,21 +51,16 @@ export function registerProjectRoutes(api: Hono<AppEnvironment>): void {
     const now = new Date().toISOString();
     await context
       .get("database")
-      .prepare(
-        `INSERT INTO projects
-         (id, workspace_id, name, description, color, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
+      .orm.insert(projects)
+      .values({
         id,
-        context.get("workspace").workspaceId,
-        parsed.data.name,
-        parsed.data.description,
-        parsed.data.color,
-        now,
-        now,
-      )
-      .run();
+        workspaceId: context.get("workspace").workspaceId,
+        name: parsed.data.name,
+        description: parsed.data.description,
+        color: parsed.data.color,
+        createdAt: now,
+        updatedAt: now,
+      });
     return context.json({ data: { id } }, 201);
   });
 
@@ -65,25 +72,27 @@ export function registerProjectRoutes(api: Hono<AppEnvironment>): void {
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
+    const workspaceId = context.get("workspace").workspaceId;
+    const project = await context.get("database").orm.query.projects.findFirst({
+      columns: { id: true },
+      where: and(eq(projects.workspaceId, workspaceId), eq(projects.id, context.req.param("id"))),
+    });
+    if (!project) {
+      return apiError(context, 404, "project_not_found", "Projectが見つかりません");
+    }
     const result = await context
       .get("database")
-      .prepare(
-        `INSERT OR IGNORE INTO project_items
-         (workspace_id, project_id, resource_type, resource_id, created_at)
-         SELECT ?, p.id, ?, ?, ? FROM projects p
-         WHERE p.workspace_id = ? AND p.id = ?`,
-      )
-      .bind(
-        context.get("workspace").workspaceId,
-        parsed.data.resourceType,
-        parsed.data.resourceId,
-        new Date().toISOString(),
-        context.get("workspace").workspaceId,
-        context.req.param("id"),
-      )
-      .run();
+      .orm.insert(projectItems)
+      .values({
+        workspaceId,
+        projectId: project.id,
+        resourceType: parsed.data.resourceType,
+        resourceId: parsed.data.resourceId,
+        createdAt: new Date().toISOString(),
+      })
+      .onConflictDoNothing();
     return result.meta.changes === 1
       ? context.json({ data: { added: true } }, 201)
-      : apiError(context, 404, "project_not_found", "Projectが見つかりません");
+      : context.json({ data: { added: false } });
   });
 }

@@ -1,4 +1,6 @@
-import type { KaenmaDatabase } from "@kaenma/database";
+import { and, eq } from "drizzle-orm";
+
+import { type KaenmaDatabase, organization, siteTrackingSettings } from "@kaenma/database";
 
 import { sha256Hex } from "../crypto";
 
@@ -6,20 +8,17 @@ export async function loadPublicTrackingWorkspace(
   database: KaenmaDatabase,
   workspaceSlug: string,
 ): Promise<{ id: string; allowedDomains: string[] } | null> {
-  const row = await database
-    .prepare(
-      `SELECT o.id, sts.allowed_domains
-     FROM organization o JOIN site_tracking_settings sts
-       ON sts.workspace_id = o.id
-     WHERE o.slug = ? AND sts.enabled = 1`,
-    )
-    .bind(workspaceSlug)
-    .first<{ id: string; allowed_domains: string }>();
+  const [row] = await database.orm
+    .select({ id: organization.id, allowedDomains: siteTrackingSettings.allowedDomains })
+    .from(organization)
+    .innerJoin(siteTrackingSettings, eq(siteTrackingSettings.workspaceId, organization.id))
+    .where(and(eq(organization.slug, workspaceSlug), eq(siteTrackingSettings.enabled, 1)))
+    .limit(1);
   if (!row) return null;
   try {
     return {
       id: row.id,
-      allowedDomains: JSON.parse(row.allowed_domains) as string[],
+      allowedDomains: JSON.parse(row.allowedDomains) as string[],
     };
   } catch {
     return null;

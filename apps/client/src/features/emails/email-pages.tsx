@@ -1,7 +1,8 @@
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { CalendarClock, FileText, Plus, Send, UsersRound } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 
-import { AppDialog, ErrorAlert, PageLayout } from "@/components/app-ui";
+import { AppDialog, PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -11,40 +12,39 @@ import {
   type EmailTemplateRow,
   type EmailTemplatesData,
   type EmailVariablesData,
-  loadEmailArchive,
-  loadEmailCampaigns,
-  loadEmailTemplates,
-  loadEmailVariables,
+  emailArchiveQueryOptions,
+  emailCampaignsQueryOptions,
+  emailQueryKey,
+  emailTemplatesQueryOptions,
+  emailVariablesQueryOptions,
   type MessageVariableRow,
-  type SegmentOption,
-  type TopicOption,
 } from "@/features/emails/email-api";
 
+import { ArchivedResources } from "./email-archived-resources";
 import { CampaignForm, TemplateForm, VariableForm } from "./email-forms";
-import {
-  ArchivedResources,
-  CampaignTable,
-  TemplateTable,
-  VariableReference,
-  VariableTable,
-} from "./email-tables";
+import { CampaignTable, TemplateTable } from "./email-tables";
+import { VariableReference, VariableTable } from "./email-variable-tables";
 
 type EmailSection = "campaigns" | "templates" | "variables" | "archive";
 
-export function EmailCampaignsPage({ data }: { data: EmailCampaignsData }): ReactNode {
-  return <EmailCenterPage view="campaigns" data={data} />;
+export function EmailCampaignsPage(): ReactNode {
+  const query = useSuspenseQuery(emailCampaignsQueryOptions());
+  return <EmailCenterPage view="campaigns" data={query.data} loading={query.isFetching} />;
 }
 
-export function EmailTemplatesPage({ data }: { data: EmailTemplatesData }): ReactNode {
-  return <EmailCenterPage view="templates" data={data} />;
+export function EmailTemplatesPage(): ReactNode {
+  const query = useSuspenseQuery(emailTemplatesQueryOptions());
+  return <EmailCenterPage view="templates" data={query.data} loading={query.isFetching} />;
 }
 
-export function EmailVariablesPage({ data }: { data: EmailVariablesData }): ReactNode {
-  return <EmailCenterPage view="variables" data={data} />;
+export function EmailVariablesPage(): ReactNode {
+  const query = useSuspenseQuery(emailVariablesQueryOptions());
+  return <EmailCenterPage view="variables" data={query.data} loading={query.isFetching} />;
 }
 
-export function EmailArchivePage({ data }: { data: EmailArchiveData }): ReactNode {
-  return <EmailCenterPage view="archive" data={data} />;
+export function EmailArchivePage(): ReactNode {
+  const query = useSuspenseQuery(emailArchiveQueryOptions());
+  return <EmailCenterPage view="archive" data={query.data} loading={query.isFetching} />;
 }
 
 type EmailPageData =
@@ -53,72 +53,43 @@ type EmailPageData =
   | EmailVariablesData
   | EmailArchiveData;
 
-function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageData }): ReactNode {
-  const [campaigns, setCampaigns] = useState<EmailCampaignRow[]>(
-    view === "campaigns" ? (data as EmailCampaignsData).campaigns : [],
-  );
-  const [templates, setTemplates] = useState<EmailTemplateRow[]>(
+function EmailCenterPage({
+  view,
+  data,
+  loading,
+}: {
+  view: EmailSection;
+  data: EmailPageData;
+  loading: boolean;
+}): ReactNode {
+  const queryClient = useQueryClient();
+  const campaigns = view === "campaigns" ? (data as EmailCampaignsData).campaigns : [];
+  const templates =
     view === "campaigns"
       ? (data as EmailCampaignsData).templates
       : view === "templates"
         ? (data as EmailTemplatesData).templates
-        : [],
-  );
-  const [variables, setVariables] = useState<MessageVariableRow[]>(
+        : [];
+  const variables =
     view === "templates"
       ? (data as EmailTemplatesData).variables
       : view === "variables"
         ? (data as EmailVariablesData).variables
-        : [],
-  );
-  const [archivedCampaigns, setArchivedCampaigns] = useState<EmailCampaignRow[]>(
-    view === "archive" ? (data as EmailArchiveData).campaigns : [],
-  );
-  const [archivedTemplates, setArchivedTemplates] = useState<EmailTemplateRow[]>(
-    view === "archive" ? (data as EmailArchiveData).templates : [],
-  );
-  const [segments, setSegments] = useState<SegmentOption[]>(
-    view === "campaigns" ? (data as EmailCampaignsData).segments : [],
-  );
-  const [topics, setTopics] = useState<TopicOption[]>(
-    view === "campaigns" ? (data as EmailCampaignsData).topics : [],
-  );
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+        : [];
+  const archivedCampaigns = view === "archive" ? (data as EmailArchiveData).campaigns : [];
+  const archivedTemplates = view === "archive" ? (data as EmailArchiveData).templates : [];
+  const segments = view === "campaigns" ? (data as EmailCampaignsData).segments : [];
+  const topics = view === "campaigns" ? (data as EmailCampaignsData).topics : [];
   const [showCampaignForm, setShowCampaignForm] = useState(false);
   const [showTemplateForm, setShowTemplateForm] = useState(false);
   const [showVariableForm, setShowVariableForm] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<EmailCampaignRow | null>(null);
   const [editingVariable, setEditingVariable] = useState<MessageVariableRow | null>(null);
 
-  const load = useCallback(async () => {
-    setError("");
-    setLoading(true);
-    try {
-      if (view === "campaigns") {
-        const result = await loadEmailCampaigns();
-        setCampaigns(result.campaigns);
-        setTemplates(result.templates);
-        setSegments(result.segments);
-        setTopics(result.topics);
-      } else if (view === "templates") {
-        const result = await loadEmailTemplates();
-        setTemplates(result.templates);
-        setVariables(result.variables);
-      } else if (view === "variables") {
-        const result = await loadEmailVariables();
-        setVariables(result.variables);
-      } else {
-        const result = await loadEmailArchive();
-        setArchivedCampaigns(result.campaigns);
-        setArchivedTemplates(result.templates);
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "メール情報を読み込めませんでした");
-    } finally {
-      setLoading(false);
-    }
-  }, [view]);
+  const reload = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: emailQueryKey }),
+    [queryClient],
+  );
 
   const pageTitle = {
     campaigns: "メールキャンペーン",
@@ -157,8 +128,6 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
 
   return (
     <PageLayout title={pageTitle} action={action}>
-      {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-
       {view === "campaigns" ? (
         <>
           <EmailSummary campaigns={campaigns} templates={templates} />
@@ -169,14 +138,14 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
               setEditingCampaign(campaign);
               setShowCampaignForm(true);
             }}
-            onChanged={load}
+            onChanged={reload}
           />
         </>
       ) : null}
 
       {view === "templates" ? (
         <>
-          <TemplateTable items={templates} loading={loading} onChanged={load} />
+          <TemplateTable items={templates} loading={loading} onChanged={reload} />
           <VariableReference variables={variables} />
         </>
       ) : null}
@@ -191,7 +160,7 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
               setEditingVariable(variable);
               setShowVariableForm(true);
             }}
-            onChanged={load}
+            onChanged={reload}
           />
         </>
       ) : null}
@@ -221,7 +190,7 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
           onSaved={async () => {
             setShowCampaignForm(false);
             setEditingCampaign(null);
-            await load();
+            await reload();
           }}
         />
       </AppDialog>
@@ -236,7 +205,7 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
         <TemplateForm
           onSaved={async () => {
             setShowTemplateForm(false);
-            await load();
+            await reload();
           }}
         />
       </AppDialog>
@@ -252,7 +221,7 @@ function EmailCenterPage({ view, data }: { view: EmailSection; data: EmailPageDa
           onSaved={async () => {
             setShowVariableForm(false);
             setEditingVariable(null);
-            await load();
+            await reload();
           }}
         />
       </AppDialog>

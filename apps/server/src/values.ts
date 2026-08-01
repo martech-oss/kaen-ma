@@ -17,3 +17,29 @@ export function primitiveString(value: unknown, fallback = ""): string {
   }
   return fallback;
 }
+
+/** Coerces values returned by aggregate SQL expressions to a number. */
+export function numericValue(value: unknown): number {
+  return Number(value ?? 0);
+}
+
+/** Reads a nullable text column while preserving its nullability. */
+export function nullablePrimitiveString(value: unknown): string | null {
+  return value === null || value === undefined ? null : primitiveString(value);
+}
+
+/** Parses a JSON text column, returning the provided fallback for invalid values. */
+export function parseJsonValue<T>(value: unknown, fallback: T): T {
+  if (typeof value !== "string") return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Reads an object-shaped JSON column without leaking non-object values. */
+export function parseJsonRecord(value: unknown): Record<string, unknown> {
+  const parsed = typeof value === "string" ? parseJsonValue<unknown>(value, null) : value;
+  return isRecord(parsed) ? parsed : {};
+}

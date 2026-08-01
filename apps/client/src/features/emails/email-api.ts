@@ -1,3 +1,5 @@
+import { queryOptions } from "@tanstack/react-query";
+
 import { orpc } from "@/lib/orpc";
 import type {
   BroadcastSegmentOption,
@@ -36,6 +38,36 @@ export interface EmailVariablesData {
 export interface EmailArchiveData {
   campaigns: EmailCampaignRow[];
   templates: EmailTemplateRow[];
+}
+
+export const emailQueryKey = ["emails"] as const;
+
+export function emailCampaignsQueryOptions() {
+  return queryOptions({
+    queryKey: [...emailQueryKey, "campaigns"],
+    queryFn: ({ signal }) => loadEmailCampaigns(signal),
+  });
+}
+
+export function emailTemplatesQueryOptions() {
+  return queryOptions({
+    queryKey: [...emailQueryKey, "templates"],
+    queryFn: ({ signal }) => loadEmailTemplates(signal),
+  });
+}
+
+export function emailVariablesQueryOptions() {
+  return queryOptions({
+    queryKey: [...emailQueryKey, "variables"],
+    queryFn: ({ signal }) => loadEmailVariables(signal),
+  });
+}
+
+export function emailArchiveQueryOptions() {
+  return queryOptions({
+    queryKey: [...emailQueryKey, "archive"],
+    queryFn: ({ signal }) => loadEmailArchive(signal),
+  });
 }
 
 export async function loadEmailCampaigns(signal?: AbortSignal): Promise<EmailCampaignsData> {

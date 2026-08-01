@@ -6,14 +6,9 @@ import { workspaceRoleSchema } from "@kaenma/shared";
 
 import { sha256Hex } from "../crypto";
 import { type AppEnvironment } from "../env";
-import {
-  parseCsv,
-  parseJsonColumns,
-  randomString,
-  safeJson,
-  validationError,
-} from "../http/helpers";
+import { parseCsv, randomString, safeJson, validationError } from "../http/helpers";
 import { apiError, requireRole } from "../middleware";
+import { getDashboard } from "./dashboard-service";
 
 export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   api.post("/contacts/import", requireRole("marketer"), async (context) => {
@@ -164,46 +159,8 @@ export function registerOperationsRoutes(api: Hono<AppEnvironment>): void {
   });
 
   api.get("/dashboard", async (context) => {
-    const database = context.get("database");
-    const workspaceId = context.get("workspace").workspaceId;
-    const batch = await database.batch([
-      database
-        .prepare(
-          "SELECT COUNT(*) AS count FROM contacts WHERE workspace_id = ? AND status = 'active'",
-        )
-        .bind(workspaceId),
-      database
-        .prepare(
-          "SELECT COUNT(*) AS count FROM campaigns WHERE workspace_id = ? AND status = 'active'",
-        )
-        .bind(workspaceId),
-      database
-        .prepare(
-          `SELECT COUNT(*) AS sent,
-          SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
-          SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
-         FROM deliveries WHERE workspace_id = ? AND created_at >= datetime('now', '-30 day')`,
-        )
-        .bind(workspaceId),
-      database
-        .prepare(
-          `SELECT type, occurred_at, contact_id, properties FROM contact_events
-         WHERE workspace_id = ? ORDER BY occurred_at DESC LIMIT 20`,
-        )
-        .bind(workspaceId),
-    ]);
-    const contacts = batch[0];
-    const campaigns = batch[1];
-    const deliveries = batch[2];
-    const recent = batch[3];
-    return context.json({
-      data: {
-        contacts: contacts?.results[0] ?? { count: 0 },
-        campaigns: campaigns?.results[0] ?? { count: 0 },
-        deliveries: deliveries?.results[0] ?? { sent: 0, delivered: 0, failed: 0 },
-        recentEvents: (recent?.results ?? []).map(parseJsonColumns(["properties"])),
-      },
-    });
+    const data = await getDashboard(context.get("database"), context.get("workspace").workspaceId);
+    return context.json({ data });
   });
 
   api.post("/api-keys", requireRole("admin"), async (context) => {

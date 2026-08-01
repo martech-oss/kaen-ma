@@ -1,8 +1,33 @@
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  gt,
+  gte,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+  type SQLWrapper,
+} from "drizzle-orm";
+
 import type { WorkspaceContext } from "@kaenma/shared";
 import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/shared/contacts";
 
 import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
 import { uuidv7 } from "../shared/uuid";
+import {
+  companyContacts,
+  contactListMemberships,
+  contacts,
+  contactTags,
+  segmentMemberships,
+} from "./schema";
 
 export interface CursorPage<T> {
   items: T[];
@@ -10,23 +35,7 @@ export interface CursorPage<T> {
   nextCursor?: string;
 }
 
-interface ContactRow {
-  id: string;
-  workspace_id: string;
-  visitor_id: string | null;
-  email: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  phone: string | null;
-  external_id: string | null;
-  stage: string;
-  score: number;
-  status: "active" | "archived" | "anonymous";
-  archived_at: string | null;
-  custom_fields: string;
-  created_at: string;
-  updated_at: string;
-}
+type ContactRow = typeof contacts.$inferSelect;
 
 export class ContactRepository {
   private readonly database: KaenmaDatabase;
@@ -54,157 +63,172 @@ export class ContactRepository {
     direction?: "asc" | "desc" | undefined;
   }): Promise<CursorPage<Contact>> {
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
-    const params: Array<string | number> = [this.context.workspaceId];
-    const conditions = ["c.workspace_id = ?"];
-    const direction = input.direction === "asc" ? "ASC" : "DESC";
+    const conditions: SQL[] = [eq(contacts.workspaceId, this.context.workspaceId)];
+    const ascending = input.direction === "asc";
     const sortColumn = {
-      createdAt: "c.created_at",
-      updatedAt: "c.updated_at",
-      score: "c.score",
-      name: "COALESCE(c.last_name, c.first_name, c.email, '')",
-      email: "COALESCE(c.email, '')",
+      createdAt: contacts.createdAt,
+      updatedAt: contacts.updatedAt,
+      score: contacts.score,
+      name: sql<string>`coalesce(${contacts.lastName}, ${contacts.firstName}, ${contacts.email}, '')`,
+      email: sql<string>`coalesce(${contacts.email}, '')`,
     }[input.sort ?? "updatedAt"];
     if (input.query) {
-      conditions.push(
-        `(c.email LIKE ? ESCAPE '\\'
-          OR c.first_name LIKE ? ESCAPE '\\'
-          OR c.last_name LIKE ? ESCAPE '\\'
-          OR c.phone LIKE ? ESCAPE '\\'
-          OR c.external_id LIKE ? ESCAPE '\\')`,
-      );
       const query = `%${escapeLike(input.query)}%`;
-      params.push(query, query, query, query, query);
+      conditions.push(
+        or(
+          escapedLike(contacts.email, query),
+          escapedLike(contacts.firstName, query),
+          escapedLike(contacts.lastName, query),
+          escapedLike(contacts.phone, query),
+          escapedLike(contacts.externalId, query),
+        )!,
+      );
     }
     const status = input.status ?? "active";
     if (status !== "all") {
-      conditions.push("c.status = ?");
-      params.push(status);
+      conditions.push(eq(contacts.status, status));
     }
     if (input.stage) {
-      conditions.push("c.stage = ?");
-      params.push(input.stage);
+      conditions.push(eq(contacts.stage, input.stage));
     }
     if (input.scoreMin !== undefined) {
-      conditions.push("c.score >= ?");
-      params.push(input.scoreMin);
+      conditions.push(gte(contacts.score, input.scoreMin));
     }
     if (input.scoreMax !== undefined) {
-      conditions.push("c.score <= ?");
-      params.push(input.scoreMax);
+      conditions.push(lte(contacts.score, input.scoreMax));
     }
     if (input.tagId) {
       conditions.push(
-        `EXISTS (
-          SELECT 1 FROM contact_tags ct
-          WHERE ct.workspace_id = c.workspace_id AND ct.contact_id = c.id AND ct.tag_id = ?
-        )`,
+        exists(
+          this.database.orm
+            .select({ value: sql`1` })
+            .from(contactTags)
+            .where(
+              and(
+                eq(contactTags.workspaceId, contacts.workspaceId),
+                eq(contactTags.contactId, contacts.id),
+                eq(contactTags.tagId, input.tagId),
+              ),
+            ),
+        ),
       );
-      params.push(input.tagId);
     }
     if (input.listId) {
       conditions.push(
-        `EXISTS (
-          SELECT 1 FROM contact_list_memberships clm
-          WHERE clm.workspace_id = c.workspace_id AND clm.contact_id = c.id
-            AND clm.list_id = ? AND clm.status = 'active'
-        )`,
+        exists(
+          this.database.orm
+            .select({ value: sql`1` })
+            .from(contactListMemberships)
+            .where(
+              and(
+                eq(contactListMemberships.workspaceId, contacts.workspaceId),
+                eq(contactListMemberships.contactId, contacts.id),
+                eq(contactListMemberships.listId, input.listId),
+                eq(contactListMemberships.status, "active"),
+              ),
+            ),
+        ),
       );
-      params.push(input.listId);
     }
     if (input.accountId) {
       conditions.push(
-        `EXISTS (
-          SELECT 1 FROM company_contacts cc
-          WHERE cc.workspace_id = c.workspace_id AND cc.contact_id = c.id
-            AND cc.company_id = ?
-        )`,
+        exists(
+          this.database.orm
+            .select({ value: sql`1` })
+            .from(companyContacts)
+            .where(
+              and(
+                eq(companyContacts.workspaceId, contacts.workspaceId),
+                eq(companyContacts.contactId, contacts.id),
+                eq(companyContacts.companyId, input.accountId),
+              ),
+            ),
+        ),
       );
-      params.push(input.accountId);
     }
     if (input.segmentId) {
       conditions.push(
-        `EXISTS (
-          SELECT 1 FROM segment_memberships sm
-          WHERE sm.workspace_id = c.workspace_id AND sm.contact_id = c.id AND sm.segment_id = ?
-        )`,
+        exists(
+          this.database.orm
+            .select({ value: sql`1` })
+            .from(segmentMemberships)
+            .where(
+              and(
+                eq(segmentMemberships.workspaceId, contacts.workspaceId),
+                eq(segmentMemberships.contactId, contacts.id),
+                eq(segmentMemberships.segmentId, input.segmentId),
+              ),
+            ),
+        ),
       );
-      params.push(input.segmentId);
     }
-    const whereSql = conditions.join(" AND ");
-    const count = await this.database
-      .prepare(`SELECT COUNT(*) AS count FROM contacts c WHERE ${whereSql}`)
-      .bind(...params)
-      .first<{ count: number }>();
-    const pageConditions = [...conditions];
-    const pageParams = [...params];
+    const [totalRow] = await this.database.orm
+      .select({ count: count() })
+      .from(contacts)
+      .where(and(...conditions));
+    const pageConditions: SQL[] = [...conditions];
     if (input.cursor) {
-      const cursor = await this.database
-        .prepare(
-          `SELECT ${sortColumn} AS sort_value
-           FROM contacts c WHERE c.workspace_id = ? AND c.id = ?`,
+      const [cursor] = await this.database.orm
+        .select({ sortValue: sortColumn })
+        .from(contacts)
+        .where(
+          and(eq(contacts.workspaceId, this.context.workspaceId), eq(contacts.id, input.cursor)),
         )
-        .bind(this.context.workspaceId, input.cursor)
-        .first<{ sort_value: string | number }>();
+        .limit(1);
       if (cursor) {
-        const comparison = direction === "ASC" ? ">" : "<";
         pageConditions.push(
-          `(${sortColumn} ${comparison} ? OR (${sortColumn} = ? AND c.id ${comparison} ?))`,
+          or(
+            compare(sortColumn, cursor.sortValue, ascending),
+            and(
+              equal(sortColumn, cursor.sortValue),
+              ascending ? gt(contacts.id, input.cursor) : lt(contacts.id, input.cursor),
+            ),
+          )!,
         );
-        pageParams.push(cursor.sort_value, cursor.sort_value, input.cursor);
       }
     }
-    pageParams.push(limit + 1);
-    const result = await this.database
-      .prepare(
-        `SELECT c.* FROM contacts c
-         WHERE ${pageConditions.join(" AND ")}
-         ORDER BY ${sortColumn} ${direction}, c.id ${direction} LIMIT ?`,
-      )
-      .bind(...pageParams)
-      .all<ContactRow>();
-    const rows = result.results;
+    const order = ascending ? asc : desc;
+    const rows = await this.database.orm
+      .select()
+      .from(contacts)
+      .where(and(...pageConditions))
+      .orderBy(order(sortColumn), order(contacts.id))
+      .limit(limit + 1);
     const hasMore = rows.length > limit;
     const items = rows.slice(0, limit).map(toContact);
     const last = items.at(-1);
     return {
       items,
-      total: count?.count ?? 0,
+      total: totalRow?.count ?? 0,
       ...(hasMore && last ? { nextCursor: last.id } : {}),
     };
   }
 
   public async getContact(id: string): Promise<Contact | null> {
-    const row = await this.database
-      .prepare("SELECT * FROM contacts WHERE workspace_id = ? AND id = ?")
-      .bind(this.context.workspaceId, id)
-      .first<ContactRow>();
+    const row = await this.database.orm.query.contacts.findFirst({
+      where: and(eq(contacts.workspaceId, this.context.workspaceId), eq(contacts.id, id)),
+    });
     return row ? toContact(row) : null;
   }
 
   public async createContact(input: ContactCreate): Promise<Contact> {
     const id = uuidv7();
     const now = new Date().toISOString();
-    await this.database
-      .prepare(
-        `INSERT INTO contacts (
-          id, workspace_id, email, first_name, last_name, phone, external_id,
-          stage, score, status, custom_fields, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 'active', ?, ?, ?)`,
-      )
-      .bind(
-        id,
-        this.context.workspaceId,
-        input.email?.toLowerCase() ?? null,
-        input.firstName ?? null,
-        input.lastName ?? null,
-        input.phone ?? null,
-        input.externalId ?? null,
-        input.stage ?? "lead",
-        JSON.stringify(input.customFields),
-        now,
-        now,
-      )
-      .run();
+    await this.database.orm.insert(contacts).values({
+      id,
+      workspaceId: this.context.workspaceId,
+      email: input.email?.toLowerCase() ?? null,
+      firstName: input.firstName ?? null,
+      lastName: input.lastName ?? null,
+      phone: input.phone ?? null,
+      externalId: input.externalId ?? null,
+      stage: input.stage ?? "lead",
+      score: 0,
+      status: "active",
+      customFields: JSON.stringify(input.customFields),
+      createdAt: now,
+      updatedAt: now,
+    });
     const contact = await this.getContact(id);
     if (!contact) throw new Error("Created contact could not be loaded");
     return contact;
@@ -222,47 +246,48 @@ export class ContactRepository {
       stage: input.stage === undefined ? existing.stage : input.stage,
       customFields: input.customFields === undefined ? existing.customFields : input.customFields,
     };
-    await this.database
-      .prepare(
-        `UPDATE contacts SET email = ?, first_name = ?, last_name = ?, phone = ?,
-         external_id = ?, stage = ?, custom_fields = ?, updated_at = ?
-         WHERE workspace_id = ? AND id = ?`,
-      )
-      .bind(
-        fields.email,
-        fields.firstName,
-        fields.lastName,
-        fields.phone,
-        fields.externalId,
-        fields.stage,
-        JSON.stringify(fields.customFields),
-        new Date().toISOString(),
-        this.context.workspaceId,
-        id,
-      )
-      .run();
+    await this.database.orm
+      .update(contacts)
+      .set({
+        email: fields.email,
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        phone: fields.phone,
+        externalId: fields.externalId,
+        stage: fields.stage,
+        customFields: JSON.stringify(fields.customFields),
+        updatedAt: new Date().toISOString(),
+      })
+      .where(and(eq(contacts.workspaceId, this.context.workspaceId), eq(contacts.id, id)));
     return this.getContact(id);
   }
 
   public async archiveContact(id: string): Promise<boolean> {
-    const result = await this.database
-      .prepare(
-        `UPDATE contacts SET status = 'archived', archived_at = ?, updated_at = ?
-         WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
-      )
-      .bind(new Date().toISOString(), new Date().toISOString(), this.context.workspaceId, id)
-      .run();
+    const now = new Date().toISOString();
+    const result = await this.database.orm
+      .update(contacts)
+      .set({ status: "archived", archivedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(contacts.workspaceId, this.context.workspaceId),
+          eq(contacts.id, id),
+          ne(contacts.status, "archived"),
+        ),
+      );
     return result.meta.changes > 0;
   }
 
   public async restoreContact(id: string): Promise<boolean> {
-    const result = await this.database
-      .prepare(
-        `UPDATE contacts SET status = 'active', archived_at = NULL, updated_at = ?
-         WHERE workspace_id = ? AND id = ? AND status = 'archived'`,
-      )
-      .bind(new Date().toISOString(), this.context.workspaceId, id)
-      .run();
+    const result = await this.database.orm
+      .update(contacts)
+      .set({ status: "active", archivedAt: null, updatedAt: new Date().toISOString() })
+      .where(
+        and(
+          eq(contacts.workspaceId, this.context.workspaceId),
+          eq(contacts.id, id),
+          eq(contacts.status, "archived"),
+        ),
+      );
     return result.meta.changes > 0;
   }
 }
@@ -270,20 +295,20 @@ export class ContactRepository {
 function toContact(row: ContactRow): Contact {
   return {
     id: row.id,
-    workspaceId: row.workspace_id,
-    visitorId: row.visitor_id,
+    workspaceId: row.workspaceId,
+    visitorId: row.visitorId,
     email: row.email,
-    firstName: row.first_name,
-    lastName: row.last_name,
+    firstName: row.firstName,
+    lastName: row.lastName,
     phone: row.phone,
-    externalId: row.external_id,
+    externalId: row.externalId,
     stage: row.stage,
     score: row.score,
-    status: row.status,
-    archivedAt: row.archived_at,
-    customFields: safeJson(row.custom_fields),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    status: row.status as Contact["status"],
+    archivedAt: row.archivedAt,
+    customFields: safeJson(row.customFields),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
@@ -300,4 +325,16 @@ function safeJson(value: string): Record<string, unknown> {
 
 function escapeLike(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+}
+
+function escapedLike(column: SQLWrapper, pattern: string): SQL {
+  return sql`${column} LIKE ${pattern} ESCAPE '\\'`;
+}
+
+function compare(column: SQLWrapper, value: string | number, ascending: boolean): SQL {
+  return ascending ? gt(column, value) : lt(column, value);
+}
+
+function equal(column: SQLWrapper, value: string | number): SQL {
+  return sql`${column} = ${value}`;
 }

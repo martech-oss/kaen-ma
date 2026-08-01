@@ -16,6 +16,7 @@ import { processCampaignJob } from "./campaigns/worker";
 import { processContactExport, processContactImport } from "./contacts/worker";
 import { processDelivery } from "./deliveries/worker";
 import { type RuntimeEnv } from "./env";
+import { logError } from "./observability";
 import { persistDeadLetter, runDailyMaintenance } from "./operations/worker";
 
 export async function scheduled(
@@ -141,11 +142,10 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
       }
       message.ack();
     } catch (error) {
-      console.error("Queue message failed", {
+      logError("queue.message_failed", error, {
         queue: batch.queue,
         messageId: message.id,
         attempts: message.attempts,
-        error: error instanceof Error ? error.message : String(error),
       });
       if (error instanceof PermanentChannelError) {
         await persistDeadLetter(batch.queue, message.body, message.attempts, env, error.message);

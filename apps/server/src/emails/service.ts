@@ -1,8 +1,3 @@
-import {
-  PermanentChannelError,
-  TransientChannelError,
-  type ResendHostedTemplate,
-} from "@kaenma/channels";
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
 import type { WorkspaceContext } from "@kaenma/shared";
 import type {
@@ -10,51 +5,16 @@ import type {
   BroadcastStatus,
   BroadcastWrite,
   EmailCampaign,
-  EmailTemplate,
   MessageVariable,
   MessageVariableWrite,
-  ResendTemplateVariable,
   SubscriptionTopicOption,
 } from "@kaenma/shared/emails";
 
 import { hasValidBroadcastResources } from "../broadcasts/routes";
 import type { RuntimeEnv } from "../env";
-import { createResendTemplateAdapter, templateCompatibilityError } from "../templates/resend";
-import { primitiveString } from "../values";
+import { nullablePrimitiveString, numericValue, primitiveString } from "../values";
 
-/** Raised when Resend cannot serve a template; `transient` picks the status. */
-export class RemoteTemplateError extends Error {
-  public constructor(
-    public readonly transient: boolean,
-    message: string,
-  ) {
-    super(message);
-    this.name = "RemoteTemplateError";
-  }
-}
-
-export class TemplateAlreadyRegisteredError extends Error {}
-
-function num(value: unknown): number {
-  return Number(value ?? 0);
-}
-
-function text(value: unknown): string {
-  return primitiveString(value);
-}
-
-function nullableText(value: unknown): string | null {
-  return value === null || value === undefined ? null : primitiveString(value);
-}
-
-function parseJson<T>(value: unknown, fallback: T): T {
-  if (typeof value !== "string") return fallback;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
+export * from "./template-service";
 
 export async function listEmailCampaigns(
   database: KaenmaDatabase,
@@ -88,25 +48,25 @@ export async function listEmailCampaigns(
     .bind(workspace.workspaceId)
     .all<Record<string, unknown>>();
   return result.results.map((row) => ({
-    id: text(row["id"]),
-    name: text(row["name"]),
-    segmentId: text(row["segment_id"]),
-    templateId: text(row["template_id"]),
-    topicId: nullableText(row["topic_id"]),
-    status: text(row["status"]) as BroadcastStatus,
-    scheduledAt: nullableText(row["scheduled_at"]),
-    startedAt: nullableText(row["started_at"]),
-    completedAt: nullableText(row["completed_at"]),
-    archivedAt: nullableText(row["archived_at"]),
-    createdAt: text(row["created_at"]),
-    updatedAt: text(row["updated_at"]),
-    segmentName: text(row["segment_name"]),
-    memberCount: num(row["member_count"]),
-    templateName: text(row["template_name"]),
-    subject: nullableText(row["subject"]),
-    recipientCount: num(row["recipient_count"]),
-    sentCount: num(row["sent_count"]),
-    deliveredCount: num(row["delivered_count"]),
+    id: primitiveString(row["id"]),
+    name: primitiveString(row["name"]),
+    segmentId: primitiveString(row["segment_id"]),
+    templateId: primitiveString(row["template_id"]),
+    topicId: nullablePrimitiveString(row["topic_id"]),
+    status: primitiveString(row["status"]) as BroadcastStatus,
+    scheduledAt: nullablePrimitiveString(row["scheduled_at"]),
+    startedAt: nullablePrimitiveString(row["started_at"]),
+    completedAt: nullablePrimitiveString(row["completed_at"]),
+    archivedAt: nullablePrimitiveString(row["archived_at"]),
+    createdAt: primitiveString(row["created_at"]),
+    updatedAt: primitiveString(row["updated_at"]),
+    segmentName: primitiveString(row["segment_name"]),
+    memberCount: numericValue(row["member_count"]),
+    templateName: primitiveString(row["template_name"]),
+    subject: nullablePrimitiveString(row["subject"]),
+    recipientCount: numericValue(row["recipient_count"]),
+    sentCount: numericValue(row["sent_count"]),
+    deliveredCount: numericValue(row["delivered_count"]),
   }));
 }
 
@@ -232,170 +192,6 @@ export async function archiveEmailCampaign(
   return result.meta.changes === 1;
 }
 
-function toEmailTemplate(row: Record<string, unknown>): EmailTemplate {
-  const remoteStatus = row["remote_status"] === "published" ? "published" : "draft";
-  const syncError = nullableText(row["sync_error"]);
-  const archivedAt = nullableText(row["archived_at"]);
-  return {
-    id: text(row["id"]),
-    name: text(row["name"]),
-    purpose: row["purpose"] === "transactional" ? "transactional" : "marketing",
-    resendTemplateId: text(row["resend_template_id"]),
-    resendAlias: nullableText(row["resend_alias"]),
-    subject: nullableText(row["subject"]),
-    remoteStatus,
-    remoteCurrentVersionId: text(row["remote_current_version_id"]),
-    hasUnpublishedVersions: Boolean(row["has_unpublished_versions"]),
-    variables: parseJson<ResendTemplateVariable[]>(row["variables"], []),
-    publishedAt: nullableText(row["published_at"]),
-    lastSyncedAt: text(row["last_synced_at"]),
-    syncError,
-    archivedAt,
-    createdAt: text(row["created_at"]),
-    updatedAt: text(row["updated_at"]),
-    sendable: remoteStatus === "published" && !syncError && !archivedAt,
-  };
-}
-
-const TEMPLATE_COLUMNS = `id, name, purpose, resend_template_id, resend_alias, subject,
-              remote_status, remote_current_version_id, has_unpublished_versions,
-              variables, published_at, last_synced_at, sync_error, archived_at,
-              created_at, updated_at`;
-
-export async function listEmailTemplates(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  archived: boolean,
-): Promise<EmailTemplate[]> {
-  const result = await database
-    .prepare(
-      `SELECT ${TEMPLATE_COLUMNS}
-       FROM email_templates
-       WHERE workspace_id = ?
-         AND archived_at IS ${archived ? "NOT NULL" : "NULL"}
-       ORDER BY updated_at DESC LIMIT 200`,
-    )
-    .bind(workspace.workspaceId)
-    .all<Record<string, unknown>>();
-  return result.results.map(toEmailTemplate);
-}
-
-async function fetchRemoteTemplate(
-  env: RuntimeEnv,
-  identifier: string,
-): Promise<ResendHostedTemplate> {
-  try {
-    return await createResendTemplateAdapter(env).get(identifier);
-  } catch (error) {
-    if (error instanceof PermanentChannelError) throw new RemoteTemplateError(false, error.message);
-    if (error instanceof TransientChannelError) throw new RemoteTemplateError(true, error.message);
-    throw error;
-  }
-}
-
-export async function importEmailTemplate(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  env: RuntimeEnv,
-  input: { resendTemplateId: string; purpose: "marketing" | "transactional" },
-): Promise<{ id: string }> {
-  const remote = await fetchRemoteTemplate(env, input.resendTemplateId);
-  const existing = await database
-    .prepare("SELECT id FROM email_templates WHERE resend_template_id = ?")
-    .bind(remote.id)
-    .first<{ id: string }>();
-  if (existing) throw new TemplateAlreadyRegisteredError();
-  const id = uuidv7();
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `INSERT INTO email_templates
-       (id, workspace_id, name, purpose, resend_template_id, resend_alias, subject,
-        remote_status, remote_current_version_id, has_unpublished_versions,
-        variables, published_at, last_synced_at, sync_error, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      workspace.workspaceId,
-      remote.name,
-      input.purpose,
-      remote.id,
-      remote.alias,
-      remote.subject,
-      remote.status,
-      remote.currentVersionId,
-      remote.hasUnpublishedVersions ? 1 : 0,
-      JSON.stringify(remote.variables),
-      remote.publishedAt,
-      now,
-      templateCompatibilityError(remote, input.purpose),
-      now,
-      now,
-    )
-    .run();
-  return { id };
-}
-
-export async function syncEmailTemplate(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  env: RuntimeEnv,
-  id: string,
-): Promise<boolean> {
-  const workspaceId = workspace.workspaceId;
-  const local = await database
-    .prepare(`SELECT ${TEMPLATE_COLUMNS} FROM email_templates WHERE workspace_id = ? AND id = ?`)
-    .bind(workspaceId, id)
-    .first<Record<string, unknown>>();
-  if (!local) return false;
-  const purpose = local["purpose"] === "transactional" ? "transactional" : "marketing";
-  const remote = await fetchRemoteTemplate(env, text(local["resend_template_id"]));
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `UPDATE email_templates
-       SET name = ?, resend_alias = ?, subject = ?, remote_status = ?,
-           remote_current_version_id = ?, has_unpublished_versions = ?,
-           variables = ?, published_at = ?, last_synced_at = ?, sync_error = ?,
-           updated_at = ?
-       WHERE workspace_id = ? AND id = ?`,
-    )
-    .bind(
-      remote.name,
-      remote.alias,
-      remote.subject,
-      remote.status,
-      remote.currentVersionId,
-      remote.hasUnpublishedVersions ? 1 : 0,
-      JSON.stringify(remote.variables),
-      remote.publishedAt,
-      now,
-      templateCompatibilityError(remote, purpose),
-      now,
-      workspaceId,
-      text(local["id"]),
-    )
-    .run();
-  return true;
-}
-
-export async function archiveEmailTemplate(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  id: string,
-): Promise<boolean> {
-  const now = new Date().toISOString();
-  const result = await database
-    .prepare(
-      `UPDATE email_templates SET archived_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
-    )
-    .bind(now, now, workspace.workspaceId, id)
-    .run();
-  return result.meta.changes === 1;
-}
-
 export async function listMessageVariables(
   database: KaenmaDatabase,
   workspace: WorkspaceContext,
@@ -412,18 +208,20 @@ export async function listMessageVariables(
     .bind(workspace.workspaceId)
     .all<Record<string, unknown>>();
   return result.results.map((row) => ({
-    id: text(row["id"]),
-    key: text(row["key"]),
-    name: text(row["name"]),
-    value: text(row["value"]),
-    description: text(row["description"]),
-    archivedAt: nullableText(row["archived_at"]),
-    createdAt: text(row["created_at"]),
-    updatedAt: text(row["updated_at"]),
+    id: primitiveString(row["id"]),
+    key: primitiveString(row["key"]),
+    name: primitiveString(row["name"]),
+    value: primitiveString(row["value"]),
+    description: primitiveString(row["description"]),
+    archivedAt: nullablePrimitiveString(row["archived_at"]),
+    createdAt: primitiveString(row["created_at"]),
+    updatedAt: primitiveString(row["updated_at"]),
   }));
 }
 
-export class VariableConflictError extends Error {}
+export class VariableConflictError extends Error {
+  public override readonly name = "VariableConflictError";
+}
 
 export async function createMessageVariable(
   database: KaenmaDatabase,
@@ -513,9 +311,9 @@ export async function listBroadcastSegmentOptions(
     .bind(workspace.workspaceId)
     .all<Record<string, unknown>>();
   return result.results.map((row) => ({
-    id: text(row["id"]),
-    name: text(row["name"]),
-    memberCount: num(row["member_count"]),
+    id: primitiveString(row["id"]),
+    name: primitiveString(row["name"]),
+    memberCount: numericValue(row["member_count"]),
   }));
 }
 
@@ -530,8 +328,8 @@ export async function listSubscriptionTopicOptions(
     .bind(workspace.workspaceId)
     .all<Record<string, unknown>>();
   return result.results.map((row) => ({
-    id: text(row["id"]),
-    name: text(row["name"]),
+    id: primitiveString(row["id"]),
+    name: primitiveString(row["name"]),
     isDefault: Boolean(row["is_default"]),
   }));
 }

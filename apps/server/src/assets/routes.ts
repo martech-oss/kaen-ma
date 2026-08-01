@@ -1,6 +1,7 @@
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 
-import { uuidv7 } from "@kaenma/database";
+import { assets, uuidv7 } from "@kaenma/database";
 
 import { type AppEnvironment } from "../env";
 import { sanitizeFilename, sha256HexFromBytes } from "../http/helpers";
@@ -26,32 +27,36 @@ export function registerAssetRoutes(api: Hono<AppEnvironment>): void {
       sha256: checksum,
     });
     const now = new Date().toISOString();
-    await context
-      .get("database")
-      .prepare(
-        `INSERT INTO assets
-       (id, workspace_id, name, r2_key, content_type, size, checksum, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(id, workspace.workspaceId, name, key, contentType, body.byteLength, checksum, now, now)
-      .run();
+    await context.get("database").orm.insert(assets).values({
+      id,
+      workspaceId: workspace.workspaceId,
+      name,
+      r2Key: key,
+      contentType,
+      size: body.byteLength,
+      checksum,
+      createdAt: now,
+      updatedAt: now,
+    });
     return context.json({ data: { id, name, contentType, size: body.byteLength } }, 201);
   });
 
   api.get("/assets/:id", async (context) => {
     const workspace = context.get("workspace");
-    const row = await context
-      .get("database")
-      .prepare("SELECT r2_key, content_type, name FROM assets WHERE workspace_id = ? AND id = ?")
-      .bind(workspace.workspaceId, context.req.param("id"))
-      .first<{ r2_key: string; content_type: string; name: string }>();
+    const row = await context.get("database").orm.query.assets.findFirst({
+      columns: { r2Key: true, contentType: true, name: true },
+      where: and(
+        eq(assets.workspaceId, workspace.workspaceId),
+        eq(assets.id, context.req.param("id")),
+      ),
+    });
     if (!row) return apiError(context, 404, "asset_not_found", "Assetが見つかりません");
-    const object = await context.env.ASSETS_BUCKET.get(row.r2_key);
+    const object = await context.env.ASSETS_BUCKET.get(row.r2Key);
     if (!object)
       return apiError(context, 404, "asset_object_missing", "R2オブジェクトがありません");
     return new Response(object.body, {
       headers: {
-        "Content-Type": row.content_type,
+        "Content-Type": row.contentType,
         "Content-Disposition": `inline; filename="${sanitizeFilename(row.name)}"`,
         ETag: object.httpEtag,
         "Cache-Control": "private, max-age=300",

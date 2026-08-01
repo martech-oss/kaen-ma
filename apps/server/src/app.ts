@@ -20,6 +20,7 @@ import { registerFormRoutes } from "./forms/routes";
 import { registerIntegrationRoutes } from "./integrations/routes";
 import { registerMessageVariableRoutes } from "./message-variables/routes";
 import { apiError, requestContext, requireWorkspace } from "./middleware";
+import { logError } from "./observability";
 import { registerOperationsRoutes } from "./operations/routes";
 import { createOrpcRequestHandler } from "./orpc/handler";
 import { registerPageRoutes } from "./pages/routes";
@@ -77,10 +78,10 @@ app.route("/api/v1", adminApi);
 registerPublicRoutes(app);
 app.notFound((context) => apiError(context, 404, "not_found", "リソースが見つかりません"));
 app.onError((error, context) => {
-  console.error("Unhandled request error", {
+  logError("request.unhandled", error, {
     requestId: context.get("requestId"),
-    error: error.message,
-    stack: error.stack,
+    method: context.req.method,
+    path: context.req.path,
   });
   return apiError(context, 500, "internal_error", "処理中にエラーが発生しました");
 });

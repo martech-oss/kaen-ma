@@ -3,17 +3,13 @@ import { RPCHandler } from "@orpc/server/fetch";
 import { createMiddleware } from "hono/factory";
 
 import type { AppEnvironment } from "../env";
+import { logError } from "../observability";
 import { orpcRouter } from "./router";
 
 const handler = new RPCHandler(orpcRouter, {
   interceptors: [
     onError((error) => {
-      console.error(
-        JSON.stringify({
-          message: "oRPC request failed",
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
+      logError("orpc.request_failed", error);
     }),
   ],
 });

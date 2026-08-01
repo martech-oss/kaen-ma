@@ -19,7 +19,13 @@ import type { SegmentFilter } from "@kaenma/shared/segments";
 import { recordContactEvent } from "../events/service";
 import { resourceSlug } from "../http/helpers";
 import { updateSegmentMemberCount } from "../segments/routes";
-import { isRecord, primitiveString } from "../values";
+import {
+  nullablePrimitiveString,
+  numericValue,
+  parseJsonRecord,
+  parseJsonValue,
+  primitiveString,
+} from "../values";
 
 /** A resource name already taken within the workspace. */
 export class ResourceConflictError extends Error {
@@ -29,32 +35,8 @@ export class ResourceConflictError extends Error {
   }
 }
 
-function count(value: unknown): number {
-  return Number(value ?? 0);
-}
-
-/** Reads a column that the schema allows to be null. */
-function nullableText(value: unknown): string | null {
-  return value === null || value === undefined ? null : primitiveString(value);
-}
-
 function parseFilterAst(value: unknown): SegmentFilter | null {
-  if (typeof value !== "string") return null;
-  try {
-    return JSON.parse(value) as SegmentFilter;
-  } catch {
-    return null;
-  }
-}
-
-function parseProperties(value: unknown): Record<string, unknown> {
-  if (typeof value !== "string") return isRecord(value) ? value : {};
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
+  return parseJsonValue<SegmentFilter | null>(value, null);
 }
 
 export async function getContactOptions(
@@ -119,7 +101,7 @@ export async function getContactOptions(
       name: primitiveString(row["name"]),
       slug: primitiveString(row["slug"]),
       color: primitiveString(row["color"]),
-      contactCount: count(row["contact_count"]),
+      contactCount: numericValue(row["contact_count"]),
     })),
     lists: rows(1).map((row) => ({
       id: primitiveString(row["id"]),
@@ -127,7 +109,7 @@ export async function getContactOptions(
       slug: primitiveString(row["slug"]),
       description: primitiveString(row["description"]),
       color: primitiveString(row["color"]),
-      contactCount: count(row["contact_count"]),
+      contactCount: numericValue(row["contact_count"]),
     })),
     segments: rows(2).map((row) => ({
       id: primitiveString(row["id"]),
@@ -135,18 +117,18 @@ export async function getContactOptions(
       slug: primitiveString(row["slug"]),
       kind: row["kind"] === "dynamic" ? "dynamic" : "static",
       filterAst: parseFilterAst(row["filter_ast"]),
-      memberCount: count(row["member_count"]),
-      evaluatedAt: nullableText(row["evaluated_at"]),
+      memberCount: numericValue(row["member_count"]),
+      evaluatedAt: nullablePrimitiveString(row["evaluated_at"]),
     })),
     accounts: rows(4).map((row) => ({
       id: primitiveString(row["id"]),
       name: primitiveString(row["name"]),
-      domain: nullableText(row["domain"]),
-      contactCount: count(row["contact_count"]),
+      domain: nullablePrimitiveString(row["domain"]),
+      contactCount: numericValue(row["contact_count"]),
     })),
     stages: rows(3).map((row) => ({
       stage: primitiveString(row["stage"]),
-      contactCount: count(row["contact_count"]),
+      contactCount: numericValue(row["contact_count"]),
     })),
   };
 }
@@ -240,23 +222,23 @@ export async function getContactProfile(
     accounts: rows(3).map((row) => ({
       id: primitiveString(row["id"]),
       name: primitiveString(row["name"]),
-      domain: nullableText(row["domain"]),
-      title: nullableText(row["title"]),
+      domain: nullablePrimitiveString(row["domain"]),
+      title: nullablePrimitiveString(row["title"]),
       isPrimary: Boolean(row["is_primary"]),
     })),
     scoreEvents: rows(4).map((row) => ({
       id: primitiveString(row["id"]),
-      delta: count(row["delta"]),
-      total: count(row["total"]),
+      delta: numericValue(row["delta"]),
+      total: numericValue(row["total"]),
       reason: primitiveString(row["reason"]),
       createdAt: primitiveString(row["created_at"]),
     })),
     timeline: rows(5).map((row) => ({
       id: primitiveString(row["id"]),
       type: primitiveString(row["type"]),
-      resourceType: nullableText(row["resource_type"]),
-      resourceId: nullableText(row["resource_id"]),
-      properties: parseProperties(row["properties"]),
+      resourceType: nullablePrimitiveString(row["resource_type"]),
+      resourceId: nullablePrimitiveString(row["resource_id"]),
+      properties: parseJsonRecord(row["properties"]),
       occurredAt: primitiveString(row["occurred_at"]),
     })),
   };

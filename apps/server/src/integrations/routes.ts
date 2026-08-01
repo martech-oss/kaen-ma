@@ -1,25 +1,33 @@
+import { desc, eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import * as z from "zod";
 
-import { uuidv7 } from "@kaenma/database";
+import { assertSafeWebhookUrl } from "@kaenma/channels";
+import { uuidv7, webhookEndpoints } from "@kaenma/database";
 
 import { encryptCredentials } from "../crypto";
 import type { AppEnvironment } from "../env";
 import { parseJsonColumns, randomString, safeJson, validationError } from "../http/helpers";
-import { requireRole } from "../middleware";
+import { apiError, requireRole } from "../middleware";
 
 export function registerIntegrationRoutes(api: Hono<AppEnvironment>): void {
   api.get("/webhook-endpoints", requireRole("admin"), async (context) => {
-    const result = await context
+    const rows = await context
       .get("database")
-      .prepare(
-        `SELECT id, name, url, event_types, enabled, created_at, updated_at
-         FROM webhook_endpoints WHERE workspace_id = ? ORDER BY updated_at DESC`,
-      )
-      .bind(context.get("workspace").workspaceId)
-      .all();
+      .orm.select({
+        id: webhookEndpoints.id,
+        name: webhookEndpoints.name,
+        url: webhookEndpoints.url,
+        event_types: webhookEndpoints.eventTypes,
+        enabled: webhookEndpoints.enabled,
+        created_at: webhookEndpoints.createdAt,
+        updated_at: webhookEndpoints.updatedAt,
+      })
+      .from(webhookEndpoints)
+      .where(eq(webhookEndpoints.workspaceId, context.get("workspace").workspaceId))
+      .orderBy(desc(webhookEndpoints.updatedAt));
     return context.json({
-      data: result.results.map(parseJsonColumns(["event_types"])),
+      data: rows.map(parseJsonColumns(["event_types"])),
     });
   });
 
@@ -32,6 +40,16 @@ export function registerIntegrationRoutes(api: Hono<AppEnvironment>): void {
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return validationError(context, parsed.error);
+    try {
+      assertSafeWebhookUrl(parsed.data.url);
+    } catch {
+      return apiError(
+        context,
+        422,
+        "unsafe_webhook_url",
+        "Webhook URLには公開HTTPSエンドポイントを指定してください",
+      );
+    }
     const secret = randomString(40);
     const encryptedSecret = await encryptCredentials(context.env.CREDENTIAL_ENCRYPTION_KEY, {
       secret,
@@ -40,22 +58,17 @@ export function registerIntegrationRoutes(api: Hono<AppEnvironment>): void {
     const now = new Date().toISOString();
     await context
       .get("database")
-      .prepare(
-        `INSERT INTO webhook_endpoints
-         (id, workspace_id, name, url, encrypted_secret, event_types, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
+      .orm.insert(webhookEndpoints)
+      .values({
         id,
-        context.get("workspace").workspaceId,
-        parsed.data.name,
-        parsed.data.url,
+        workspaceId: context.get("workspace").workspaceId,
+        name: parsed.data.name,
+        url: parsed.data.url,
         encryptedSecret,
-        JSON.stringify(parsed.data.eventTypes),
-        now,
-        now,
-      )
-      .run();
+        eventTypes: JSON.stringify(parsed.data.eventTypes),
+        createdAt: now,
+        updatedAt: now,
+      });
     return context.json({ data: { id, signingSecret: secret } }, 201);
   });
 }

@@ -1,6 +1,7 @@
 import type { WorkspaceContext } from "@kaenma/shared";
 
 import { createDatabase, type DatabaseSource } from "../client";
+import { auditLogs } from "../operations/schema";
 import { uuidv7 } from "../shared/uuid";
 
 export async function writeAuditLog(
@@ -15,23 +16,17 @@ export async function writeAuditLog(
   },
 ): Promise<void> {
   await createDatabase(database)
-    .prepare(
-      `INSERT INTO audit_logs (
-        id, workspace_id, actor_user_id, api_key_id, action, resource_type,
-        resource_id, metadata, ip_address, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      uuidv7(),
-      context.workspaceId,
-      context.userId,
-      context.apiKeyId ?? null,
-      input.action,
-      input.resourceType,
-      input.resourceId ?? null,
-      JSON.stringify(input.metadata ?? {}),
-      input.ipAddress ?? null,
-      new Date().toISOString(),
-    )
-    .run();
+    .orm.insert(auditLogs)
+    .values({
+      id: uuidv7(),
+      workspaceId: context.workspaceId,
+      actorUserId: context.userId,
+      apiKeyId: context.apiKeyId ?? null,
+      action: input.action,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId ?? null,
+      metadata: JSON.stringify(input.metadata ?? {}),
+      ipAddress: input.ipAddress ?? null,
+      createdAt: new Date().toISOString(),
+    });
 }

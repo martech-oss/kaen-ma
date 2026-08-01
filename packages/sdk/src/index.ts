@@ -2,6 +2,42 @@ import type { ApiResponse, CampaignDefinition, WorkspaceRole } from "@kaenma/sha
 import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/shared/contacts";
 import type { SegmentFilter } from "@kaenma/shared/segments";
 
+export interface SegmentSummary {
+  id: string;
+  name: string;
+  slug: string;
+  kind: "static" | "dynamic";
+  filterAst: SegmentFilter | null;
+  memberCount: number;
+  evaluatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CampaignSummary {
+  id: string;
+  name: string;
+  description: string;
+  status: "draft" | "active" | "paused" | "archived";
+  triggerSource: string | null;
+  enrollmentCount: number;
+  activeCount: number;
+  completedCount: number;
+  updatedAt: string;
+}
+
+export interface DashboardData {
+  contacts: { count: number };
+  campaigns: { count: number };
+  deliveries: { sent: number; delivered: number; failed: number };
+  recentEvents: Array<{
+    type: string;
+    occurredAt: string;
+    contactId: string | null;
+    properties: Record<string, unknown>;
+  }>;
+}
+
 export interface KaenmaClientOptions {
   baseUrl: string;
   apiKey: string;
@@ -69,9 +105,9 @@ export class KaenmaClient {
   };
 
   public readonly segments = {
-    list: () => this.request<unknown[]>("/segments"),
+    list: () => this.request<SegmentSummary[]>("/segments"),
     preview: (filter: SegmentFilter) =>
-      this.request<unknown[]>("/segments/preview", { method: "POST", body: filter }),
+      this.request<Contact[]>("/segments/preview", { method: "POST", body: filter }),
     create: (input: {
       name: string;
       slug: string;
@@ -81,7 +117,7 @@ export class KaenmaClient {
   };
 
   public readonly campaigns = {
-    list: () => this.request<unknown[]>("/campaigns"),
+    list: () => this.request<CampaignSummary[]>("/campaigns"),
     create: (definition: CampaignDefinition) =>
       this.request<{ id: string; draftVersionId: string }>("/campaigns", {
         method: "POST",
@@ -120,7 +156,7 @@ export class KaenmaClient {
   };
 
   public readonly dashboard = {
-    get: () => this.request<Record<string, unknown>>("/dashboard"),
+    get: () => this.request<DashboardData>("/dashboard"),
   };
 
   public readonly apiKeys = {
@@ -168,6 +204,17 @@ export class KaenmaClient {
         error?.requestId,
       );
     }
-    return payload as ApiResponse<T>;
+    if (!isRecord(payload) || !("data" in payload)) {
+      throw new KaenmaApiError(
+        "Kaenma API returned an invalid response",
+        response.status,
+        "invalid_response",
+      );
+    }
+    return payload as unknown as ApiResponse<T>;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

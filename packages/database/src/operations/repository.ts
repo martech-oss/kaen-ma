@@ -1,4 +1,5 @@
 import { createDatabase, type DatabaseSource } from "../client";
+import { idempotencyKeys } from "./schema";
 
 export async function reserveIdempotencyKey(
   database: DatabaseSource,
@@ -8,12 +9,14 @@ export async function reserveIdempotencyKey(
   expiresAt: string,
 ): Promise<boolean> {
   const result = await createDatabase(database)
-    .prepare(
-      `INSERT OR IGNORE INTO idempotency_keys
-       (workspace_id, scope, idempotency_key, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?)`,
-    )
-    .bind(workspaceId, scope, key, new Date().toISOString(), expiresAt)
-    .run();
+    .orm.insert(idempotencyKeys)
+    .values({
+      workspaceId,
+      scope,
+      idempotencyKey: key,
+      createdAt: new Date().toISOString(),
+      expiresAt,
+    })
+    .onConflictDoNothing();
   return result.meta.changes === 1;
 }

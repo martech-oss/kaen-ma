@@ -1,21 +1,36 @@
-import type { KaenmaDatabase } from "@kaenma/database";
+import { eq } from "drizzle-orm";
+
+import { type KaenmaDatabase, organization } from "@kaenma/database";
 import type { Workspace } from "@kaenma/orpc";
 import type { WorkspaceContext } from "@kaenma/shared";
-
-type WorkspaceRow = Omit<Workspace, "role">;
 
 export async function getWorkspace(
   database: KaenmaDatabase,
   workspace: WorkspaceContext,
 ): Promise<Workspace> {
-  const organization = await database
-    .prepare("SELECT id, name, slug, logo, timezone, created_at FROM organization WHERE id = ?")
-    .bind(workspace.workspaceId)
-    .first<WorkspaceRow>();
+  const row = await database.orm.query.organization.findFirst({
+    columns: {
+      id: true,
+      name: true,
+      slug: true,
+      logo: true,
+      timezone: true,
+      createdAt: true,
+    },
+    where: eq(organization.id, workspace.workspaceId),
+  });
 
-  if (!organization) {
+  if (!row) {
     throw new Error("Workspace organization could not be loaded");
   }
 
-  return { ...organization, role: workspace.role };
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    logo: row.logo,
+    timezone: row.timezone,
+    created_at: row.createdAt.getTime(),
+    role: workspace.role,
+  };
 }

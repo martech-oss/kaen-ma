@@ -11,6 +11,9 @@ function splitClientVendorChunk(id: string): string | undefined {
   if (/\/node_modules\/(?:react|react-dom|scheduler)\//.test(normalizedId)) {
     return "vendor-react";
   }
+  if (normalizedId.includes("/node_modules/better-auth/")) {
+    return "vendor-auth";
+  }
   if (normalizedId.includes("/node_modules/zod/")) {
     return "vendor-zod";
   }

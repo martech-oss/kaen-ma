@@ -55,7 +55,6 @@ import { formatLongDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
-import { type SegmentFilter } from "@kaenma/shared/segments";
 
 import {
   type BulkAction,
@@ -70,6 +69,7 @@ import {
 import { ContactDrawer } from "./contact-drawer";
 import { useContactFilters } from "./contact-filters";
 import { ContactCreateForm, SegmentSaveForm } from "./contact-forms";
+import { createSegmentFilter } from "./segment-filter";
 
 export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }): ReactNode {
   const queryClient = useQueryClient();
@@ -174,93 +174,11 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
     }
   }
 
-  function buildSegmentFilter(): SegmentFilter | null {
-    const children: SegmentFilter[] = [];
-    if (query.trim()) {
-      children.push({
-        kind: "group",
-        combinator: "or",
-        children: [
-          {
-            kind: "condition",
-            field: "email",
-            operator: "contains",
-            value: query.trim(),
-          },
-          {
-            kind: "condition",
-            field: "first_name",
-            operator: "contains",
-            value: query.trim(),
-          },
-          {
-            kind: "condition",
-            field: "last_name",
-            operator: "contains",
-            value: query.trim(),
-          },
-        ],
-      });
-    }
-    if (status !== "all") {
-      children.push({
-        kind: "condition",
-        field: "status",
-        operator: "eq",
-        value: status,
-      });
-    }
-    if (stage)
-      children.push({
-        kind: "condition",
-        field: "stage",
-        operator: "eq",
-        value: stage,
-      });
-    if (scoreMin) {
-      children.push({
-        kind: "condition",
-        field: "score",
-        operator: "gte",
-        value: Number(scoreMin),
-      });
-    }
-    if (scoreMax) {
-      children.push({
-        kind: "condition",
-        field: "score",
-        operator: "lte",
-        value: Number(scoreMax),
-      });
-    }
-    const tag = options.tags.find((item) => item.id === tagId);
-    if (tag)
-      children.push({
-        kind: "condition",
-        field: "tag",
-        operator: "eq",
-        value: tag.slug,
-      });
-    const list = options.lists.find((item) => item.id === listId);
-    if (list) {
-      children.push({
-        kind: "condition",
-        field: "list",
-        operator: "eq",
-        value: list.slug,
-      });
-    }
-    const account = options.accounts.find((item) => item.id === accountId);
-    if (account) {
-      children.push({
-        kind: "condition",
-        field: "company",
-        operator: "eq",
-        value: account.name,
-      });
-    }
-    if (children.length === 0) return null;
-    return children.length === 1 ? children[0]! : { kind: "group", combinator: "and", children };
+  function buildSegmentFilter() {
+    return createSegmentFilter(
+      { q: query, status, stage, tagId, listId, accountId, scoreMin, scoreMax },
+      options,
+    );
   }
 
   return (

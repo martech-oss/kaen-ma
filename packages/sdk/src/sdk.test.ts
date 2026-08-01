@@ -16,4 +16,18 @@ describe("KaenmaClient", () => {
     await client.contacts.list();
     expect(authorization).toContain("kaenma_");
   });
+
+  it("rejects a successful response without an API envelope", async () => {
+    const client = new KaenmaClient({
+      baseUrl: "https://kaenma.example",
+      apiKey: "kaenma_test_key",
+      fetcher: async () => Response.json(null),
+    });
+
+    await expect(client.dashboard.get()).rejects.toMatchObject({
+      name: "KaenmaApiError",
+      code: "invalid_response",
+      status: 200,
+    });
+  });
 });
