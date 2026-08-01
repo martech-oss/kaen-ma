@@ -1,5 +1,5 @@
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/shared";
+import type { WorkspaceContext } from "@kaenma/orpc";
 import type {
   BroadcastSegmentOption,
   BroadcastStatus,
@@ -8,7 +8,7 @@ import type {
   MessageVariable,
   MessageVariableWrite,
   SubscriptionTopicOption,
-} from "@kaenma/shared/emails";
+} from "@kaenma/orpc";
 
 import type { RuntimeEnv } from "../env";
 import { nullablePrimitiveString, numericValue, primitiveString } from "../platform/values";

@@ -6,7 +6,7 @@ import type {
   SignupFormDefinition,
   SiteMessage,
   SiteTracking,
-} from "@kaenma/shared/website";
+} from "@kaenma/orpc";
 
 export type { LandingPage, PublishStatus, SignupForm, SignupFormDefinition, SiteMessage };
 

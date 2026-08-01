@@ -1,7 +1,5 @@
-import type { WorkspaceRole } from "@kaenma/shared";
 
-import { hasWorkspaceRole } from "../auth/authorization";
-import { authed } from "../orpc/base";
+import { authed, requireRole } from "../orpc/base";
 import {
   archiveEmailCampaign,
   archiveEmailTemplate,
@@ -23,10 +21,6 @@ import {
   updateMessageVariable,
   VariableConflictError,
 } from "./service";
-
-function requireRole(role: WorkspaceRole, minimum: WorkspaceRole, forbidden: () => Error): void {
-  if (!hasWorkspaceRole(role, minimum)) throw forbidden();
-}
 
 export const listEmailCampaignsProcedure = authed.emails.listCampaigns.handler(
   ({ context, input }) => listEmailCampaigns(context.database, context.workspace, input.archived),

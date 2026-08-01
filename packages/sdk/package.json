@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@kaenma/orpc": "workspace:*",
-    "@kaenma/shared": "workspace:*",
     "@orpc/client": "1.14.13",
     "@orpc/contract": "1.14.13",
     "@orpc/openapi-client": "1.14.13"

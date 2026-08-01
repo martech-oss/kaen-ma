@@ -11,7 +11,7 @@ import type {
   AccountDetail,
   AccountUpdate,
   WorkspaceContext,
-} from "@kaenma/shared";
+} from "@kaenma/orpc";
 
 /** Raised when a write conflicts with the unique domain constraint. */
 export class AccountConflictError extends Error {

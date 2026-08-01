@@ -13,7 +13,7 @@ import type {
   DealTaskType,
   DealTaskUpdate,
   DealUpdate,
-} from "@kaenma/shared/deals";
+} from "@kaenma/orpc";
 
 export type {
   DealCreate,

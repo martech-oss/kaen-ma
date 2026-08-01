@@ -1,6 +1,6 @@
 import { Activity, Clock3, Sparkles, UserPlus } from "lucide-react";
 
-import { type CampaignDefinition } from "@kaenma/shared";
+import { type CampaignDefinition } from "@kaenma/orpc";
 
 import { chainEdges, delayNode, emailNode, sourceNode } from "./campaign-graph";
 import { type EmailTemplateOption } from "./campaign-types";

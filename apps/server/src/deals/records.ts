@@ -1,5 +1,5 @@
 import type { KaenmaDatabase } from "@kaenma/database";
-import type { DealSummary, DealTask } from "@kaenma/shared/deals";
+import type { DealSummary, DealTask } from "@kaenma/orpc";
 
 export interface PipelineRow {
   id: string;

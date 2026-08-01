@@ -16,7 +16,6 @@
     "@base-ui/react": "^1.6.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@kaenma/orpc": "workspace:*",
-    "@kaenma/shared": "workspace:*",
     "@orpc/client": "^1.14.13",
     "@orpc/contract": "^1.14.13",
     "@orpc/tanstack-query": "1.14.13",

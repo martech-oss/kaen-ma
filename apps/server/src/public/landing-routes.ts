@@ -2,8 +2,8 @@ import { and, eq } from "drizzle-orm";
 import type { Hono } from "hono";
 
 import { landingPages, landingPageVersions, organization } from "@kaenma/database";
-import { renderContent } from "@kaenma/email-renderer";
-import { contentDocumentSchema } from "@kaenma/shared";
+import { renderContent } from "@kaenma/content-renderer";
+import { contentDocumentSchema } from "@kaenma/orpc";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";

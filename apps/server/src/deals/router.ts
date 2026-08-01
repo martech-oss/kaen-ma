@@ -1,7 +1,5 @@
-import type { WorkspaceRole } from "@kaenma/shared";
 
-import { hasWorkspaceRole } from "../auth/authorization";
-import { authed } from "../orpc/base";
+import { authed, requireRole } from "../orpc/base";
 import {
   archiveDeal,
   createDeal,
@@ -14,10 +12,6 @@ import {
   updateDeal,
   updateDealTask,
 } from "./service";
-
-function requireRole(role: WorkspaceRole, minimum: WorkspaceRole, forbidden: () => Error): void {
-  if (!hasWorkspaceRole(role, minimum)) throw forbidden();
-}
 
 export const dealOptionsProcedure = authed.deals.options.handler(({ context }) =>
   getDealOptions(context.database, context.workspace),

@@ -1,5 +1,4 @@
-import { hasWorkspaceRole } from "../auth/authorization";
-import { authed } from "../orpc/base";
+import { authed, requireRole } from "../orpc/base";
 import { automationReport } from "./automations-report";
 import { contactReport } from "./contacts-report";
 import { getDashboard } from "./dashboard-service";
@@ -8,13 +7,9 @@ import { emailReport } from "./emails-report";
 import { toReportRange } from "./shared";
 import { siteReport } from "./site-report";
 
-function guard(role: string, forbidden: () => Error): void {
-  if (!hasWorkspaceRole(role as never, "analyst")) throw forbidden();
-}
-
 export const contactsReportProcedure = authed.reports.contacts.handler(
   ({ context, input, errors }) => {
-    guard(context.workspace.role, errors.FORBIDDEN);
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
     return contactReport(
       context.database,
       context.workspace.workspaceId,
@@ -25,7 +20,7 @@ export const contactsReportProcedure = authed.reports.contacts.handler(
 
 export const automationsReportProcedure = authed.reports.automations.handler(
   ({ context, input, errors }) => {
-    guard(context.workspace.role, errors.FORBIDDEN);
+    requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
     return automationReport(
       context.database,
       context.workspace.workspaceId,
@@ -35,7 +30,7 @@ export const automationsReportProcedure = authed.reports.automations.handler(
 );
 
 export const emailsReportProcedure = authed.reports.emails.handler(({ context, input, errors }) => {
-  guard(context.workspace.role, errors.FORBIDDEN);
+  requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
   return emailReport(
     context.database,
     context.workspace.workspaceId,
@@ -44,7 +39,7 @@ export const emailsReportProcedure = authed.reports.emails.handler(({ context, i
 });
 
 export const dealsReportProcedure = authed.reports.deals.handler(({ context, input, errors }) => {
-  guard(context.workspace.role, errors.FORBIDDEN);
+  requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
   return dealReport(
     context.database,
     context.workspace.workspaceId,
@@ -54,7 +49,7 @@ export const dealsReportProcedure = authed.reports.deals.handler(({ context, inp
 });
 
 export const siteReportProcedure = authed.reports.site.handler(({ context, input, errors }) => {
-  guard(context.workspace.role, errors.FORBIDDEN);
+  requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
   return siteReport(
     context.database,
     context.workspace.workspaceId,

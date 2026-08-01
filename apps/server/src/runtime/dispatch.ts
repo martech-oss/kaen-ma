@@ -1,14 +1,6 @@
 import { PermanentChannelError } from "@kaenma/channels";
 import { retryDelaySeconds } from "@kaenma/core";
 import { claimDueJobs, createDatabase } from "@kaenma/database";
-import {
-  campaignQueueMessageSchema,
-  broadcastQueueMessageSchema,
-  contactExportQueueMessageSchema,
-  contactImportQueueMessageSchema,
-  deliveryQueueMessageSchema,
-  type QueueMessage as KaenmaQueueMessage,
-} from "@kaenma/shared";
 
 import { enrollInactiveContacts } from "../automations/enrollment";
 import { processCampaignJob } from "../automations/worker";
@@ -18,6 +10,11 @@ import { type RuntimeEnv } from "../env";
 import { processDelivery } from "../messaging/delivery-worker";
 import { logError } from "../observability";
 import { persistDeadLetter, runDailyMaintenance } from "../platform/maintenance-worker";
+import {
+  campaignQueueBatchMessageSchema,
+  deliveryQueueMessageSchema,
+  type QueueMessage as KaenmaQueueMessage,
+} from "./queues";
 
 export async function scheduled(
   controller: ScheduledController,
@@ -108,30 +105,31 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
     }
     try {
       if (batch.queue === "kaenma-campaign") {
-        const campaign = campaignQueueMessageSchema.safeParse(message.body);
-        const broadcast = broadcastQueueMessageSchema.safeParse(message.body);
-        const contactImport = contactImportQueueMessageSchema.safeParse(message.body);
-        const contactExport = contactExportQueueMessageSchema.safeParse(message.body);
-        if (campaign.success) {
-          await processCampaignJob(campaign.data.jobId, campaign.data.leaseId, env);
-        } else if (broadcast.success) {
-          await processBroadcastBatch(
-            broadcast.data.broadcastId,
-            broadcast.data.phase,
-            broadcast.data.cursor,
-            env,
-          );
-        } else if (contactImport.success) {
-          await processContactImport(
-            contactImport.data.importJobId,
-            contactImport.data.part,
-            contactImport.data.totalParts,
-            env,
-          );
-        } else if (contactExport.success) {
-          await processContactExport(contactExport.data.exportJobId, env);
-        } else {
-          throw new PermanentChannelError("Invalid campaign queue message");
+        const parsed = campaignQueueBatchMessageSchema.safeParse(message.body);
+        if (!parsed.success) throw new PermanentChannelError("Invalid campaign queue message");
+        switch (parsed.data.kind) {
+          case "campaign_job":
+            await processCampaignJob(parsed.data.jobId, parsed.data.leaseId, env);
+            break;
+          case "broadcast_batch":
+            await processBroadcastBatch(
+              parsed.data.broadcastId,
+              parsed.data.phase,
+              parsed.data.cursor,
+              env,
+            );
+            break;
+          case "contact_import":
+            await processContactImport(
+              parsed.data.importJobId,
+              parsed.data.part,
+              parsed.data.totalParts,
+              env,
+            );
+            break;
+          case "contact_export":
+            await processContactExport(parsed.data.exportJobId, env);
+            break;
         }
       } else if (batch.queue === "kaenma-delivery") {
         const parsed = deliveryQueueMessageSchema.safeParse(message.body);

@@ -1,7 +1,7 @@
 import { implement } from "@orpc/server";
 
 import { contract } from "@kaenma/orpc";
-import type { WorkspaceRole } from "@kaenma/shared";
+import type { WorkspaceRole } from "@kaenma/orpc";
 
 import { resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import { hasWorkspaceRole } from "../auth/authorization";

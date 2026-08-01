@@ -1,6 +1,6 @@
 import type { KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/shared";
-import type { SiteTracking, SiteTrackingWrite } from "@kaenma/shared/website";
+import type { WorkspaceContext } from "@kaenma/orpc";
+import type { SiteTracking, SiteTrackingWrite } from "@kaenma/orpc";
 
 import {
   isRecord,

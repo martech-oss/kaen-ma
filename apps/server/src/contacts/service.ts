@@ -1,7 +1,7 @@
 import { ContactRepository, type KaenmaDatabase } from "@kaenma/database";
 import type { ContactListInput, ContactListResult, ContactSummary } from "@kaenma/orpc";
-import type { WorkspaceContext } from "@kaenma/shared";
-import type { Contact, ContactCreate } from "@kaenma/shared/contacts";
+import type { WorkspaceContext } from "@kaenma/orpc";
+import type { Contact, ContactCreate } from "@kaenma/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { nullablePrimitiveString, parseJsonRecord, primitiveString } from "../platform/values";

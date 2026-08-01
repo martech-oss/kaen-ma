@@ -6,7 +6,7 @@ import {
   type CampaignDefinition,
   type CampaignEdge,
   type CampaignNode,
-} from "@kaenma/shared";
+} from "@kaenma/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { type RuntimeEnv } from "../env";

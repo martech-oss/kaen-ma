@@ -1,4 +1,4 @@
-import type { CampaignDefinition } from "@kaenma/shared";
+import type { CampaignDefinition } from "@kaenma/orpc";
 
 export function campaignTrigger(
   config: Extract<CampaignDefinition["nodes"][number], { type: "source" }>["config"],

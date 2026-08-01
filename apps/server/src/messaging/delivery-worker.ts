@@ -7,7 +7,7 @@ import {
 } from "@kaenma/channels";
 import { evaluateSendEligibility, retryDelaySeconds } from "@kaenma/core";
 import { createDatabase, uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import { type CampaignNode } from "@kaenma/shared";
+import { type CampaignNode } from "@kaenma/orpc";
 
 import { type CampaignJobRow } from "../automations/worker";
 import { type RuntimeEnv } from "../env";

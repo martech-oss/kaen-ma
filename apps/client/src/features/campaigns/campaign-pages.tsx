@@ -50,7 +50,7 @@ import { Input } from "@/components/ui/input";
 import { formatDateTime } from "@/lib/format";
 import { orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
-import { type CampaignDefinition, type CampaignEdge, type CampaignNode } from "@kaenma/shared";
+import { type CampaignDefinition, type CampaignEdge, type CampaignNode } from "@kaenma/orpc";
 
 import { campaignNodeTypes, nodeHandles, StepButton } from "./campaign-flow-node";
 import {

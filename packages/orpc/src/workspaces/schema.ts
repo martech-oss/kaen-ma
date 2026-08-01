@@ -1,6 +1,6 @@
 import * as z from "zod";
 
-import { workspaceRoleSchema } from "@kaenma/shared";
+import { workspaceRoleSchema } from "../shared/schema";
 
 export const workspaceSchema = z.object({
   id: z.string(),

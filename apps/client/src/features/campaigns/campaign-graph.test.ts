@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CampaignDefinition, CampaignEdge, CampaignNode } from "@kaenma/shared";
+import type { CampaignDefinition, CampaignEdge, CampaignNode } from "@kaenma/orpc";
 
 import {
   chainEdges,

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { type CampaignEdge, type CampaignNode } from "@kaenma/shared";
+import { type CampaignEdge, type CampaignNode } from "@kaenma/orpc";
 
 import { connectionBranches, sourceConfig } from "./campaign-graph";
 import { formatDuration, nodeLabel, nodeTypeLabel } from "./campaign-labels";

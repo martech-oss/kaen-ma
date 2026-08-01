@@ -1,6 +1,5 @@
 import { segments, uuidv7 } from "@kaenma/database";
 
-import { hasWorkspaceRole } from "../auth/authorization";
 import { authed, requireRole } from "../orpc/base";
 import { listSegments, previewSegment } from "./list-service";
 import { refreshSegmentMemberships } from "./membership-service";
@@ -11,7 +10,7 @@ export const listSegmentsProcedure = authed.segments.list.handler(async ({ conte
 
 export const createSegmentProcedure = authed.segments.create.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (input.kind === "dynamic" && !input.filter) throw errors.FILTER_REQUIRED();
     const id = uuidv7();
     const now = new Date().toISOString();
@@ -41,7 +40,7 @@ export const createSegmentProcedure = authed.segments.create.handler(
 
 export const refreshSegmentProcedure = authed.segments.refresh.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const refreshed = await refreshSegmentMemberships(
       context.database,
       context.workspace.workspaceId,

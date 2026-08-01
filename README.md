@@ -59,17 +59,20 @@ apps/
   client/                公開Worker、TanStack Start/Query、Vite、Tailwind、React Flow
   server/                内部API Worker、Hono、Cron、Queue、Email Routing
 packages/
-  orpc/                  管理画面とWorkerで共有するドメイン別oRPC contract
+  orpc/                  ドメイン別のoRPC contractとDTO Zod schema(APIの単一の正本)
   channels/              Resend、Webhook adapter
-  core/                  Segment、Campaign、Consent、Schedule
+  core/                  Segment、Automation、Consent、Scheduleの純粋ロジック
   create-kaenma/         Setup、doctor、backup、update CLI
   database/              Drizzle schema/client、D1 migration、repository
-  email-renderer/        安全なHTML/Text renderer
+  content-renderer/      Landing Page等の安全なHTML/Text renderer
   email-templates/       認証メール用React EmailとResend同期スクリプト
   mcp-server/            Kaenma MCP server
-  sdk/                   TypeScript SDK
-  shared/                Zod schema、DTO、公開型、OpenAPI
+  sdk/                   contract型付きTypeScript SDK
 ```
+
+サーバーとpackagesは同じドメイン名で構成します:
+auth / automations / broadcasts / consent / contacts / deals / messaging /
+platform / reports / segments / web / workspaces(+ server専用の runtime, public, orpc)。
 
 ## 必要環境
 

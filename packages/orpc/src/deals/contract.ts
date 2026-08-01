@@ -11,7 +11,7 @@ import {
   dealTaskSchema,
   dealTaskUpdateSchema,
   dealUpdateSchema,
-} from "@kaenma/shared/deals";
+} from "./schema";
 
 import { workspaceErrors } from "../shared/errors";
 

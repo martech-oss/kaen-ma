@@ -1,5 +1,5 @@
 import { uuidv7, type DrizzleRawStatement, type KaenmaDatabase } from "@kaenma/database";
-import type { DealCreate } from "@kaenma/shared/deals";
+import type { DealCreate } from "@kaenma/orpc";
 
 const defaultStages = [
   { name: "新規", color: "#64748b", probability: 10 },

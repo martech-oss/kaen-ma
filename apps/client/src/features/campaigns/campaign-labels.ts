@@ -1,4 +1,4 @@
-import { type CampaignEdge, type CampaignNode } from "@kaenma/shared";
+import { type CampaignEdge, type CampaignNode } from "@kaenma/orpc";
 
 export function nodeLabel(node: CampaignNode): string {
   if (node.type === "source") return triggerLabel(node.config.source);

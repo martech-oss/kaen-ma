@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { workspaceRoleSchema } from "@kaenma/shared";
+import { workspaceRoleSchema } from "../shared/schema";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
 

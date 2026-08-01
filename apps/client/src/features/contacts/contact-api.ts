@@ -8,7 +8,7 @@ import type {
   ContactOptions,
   SegmentOption,
   Tag as TagOption,
-} from "@kaenma/shared/contacts";
+} from "@kaenma/orpc";
 
 export type { AccountOption, ContactOptions, ListOption, SegmentOption, TagOption };
 

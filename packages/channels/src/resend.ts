@@ -1,6 +1,6 @@
 import { Resend, type ErrorResponse } from "resend";
 
-import type { DeliveryEvent } from "@kaenma/shared";
+import type { DeliveryEvent } from "@kaenma/orpc";
 
 import { PermanentChannelError, TransientChannelError } from "./errors";
 import { isStaleTimestamp, verifySvixSignature } from "./signatures";

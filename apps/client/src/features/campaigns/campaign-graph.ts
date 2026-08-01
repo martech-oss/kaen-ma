@@ -1,6 +1,6 @@
 import { type Edge } from "@xyflow/react";
 
-import { type CampaignDefinition, type CampaignEdge, type CampaignNode } from "@kaenma/shared";
+import { type CampaignDefinition, type CampaignEdge, type CampaignNode } from "@kaenma/orpc";
 
 import { type EmailTemplateOption } from "./campaign-types";
 

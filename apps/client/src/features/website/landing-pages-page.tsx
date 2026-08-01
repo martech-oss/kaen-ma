@@ -30,7 +30,7 @@ import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/websi
 import { formatDateTime } from "@/lib/format";
 import { orpc } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
-import type { ContentDocument } from "@kaenma/shared";
+import type { ContentDocument } from "@kaenma/orpc";
 
 export function LandingPagesPage({
   items,

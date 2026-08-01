@@ -1,4 +1,4 @@
-import type { DeliveryEvent } from "@kaenma/shared";
+import type { DeliveryEvent } from "@kaenma/orpc";
 
 import { PermanentChannelError, TransientChannelError } from "./errors";
 import { hmacHex, isStaleTimestamp, timingSafeEqual } from "./signatures";

@@ -1,5 +1,5 @@
 import { orpc } from "@/lib/orpc";
-import type { ContactList, ContactOptions, Tag } from "@kaenma/shared/contacts";
+import type { ContactList, ContactOptions, Tag } from "@kaenma/orpc";
 
 export type TagResource = Tag;
 export type ListResource = ContactList;

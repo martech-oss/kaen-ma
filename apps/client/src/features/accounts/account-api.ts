@@ -1,5 +1,5 @@
 import { orpc, orpcQuery } from "@/lib/orpc";
-import type { AccountContact, AccountDetail, AccountSummary } from "@kaenma/shared";
+import type { AccountContact, AccountDetail, AccountSummary } from "@kaenma/orpc";
 
 export type { AccountContact, AccountDetail, AccountSummary };
 

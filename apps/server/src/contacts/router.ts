@@ -2,7 +2,6 @@ import { writeAuditLog } from "@kaenma/database";
 import { ContactRepository } from "@kaenma/database";
 import { CSV_MAX_BYTES } from "@kaenma/orpc";
 
-import { hasWorkspaceRole } from "../auth/authorization";
 import { authed, requireRole } from "../orpc/base";
 import {
   getContactExportFile,
@@ -54,9 +53,7 @@ export const recordContactEventProcedure = authed.contacts.recordEvent.handler(
 
 export const createContactProcedure = authed.contacts.create.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) {
-      throw errors.FORBIDDEN();
-    }
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
 
     try {
       const contact = await createContact(context.database, context.workspace, input);
@@ -76,7 +73,7 @@ export const createContactProcedure = authed.contacts.create.handler(
 
 export const updateContactProcedure = authed.contacts.update.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...changes } = input;
     const repository = new ContactRepository(context.database, context.workspace);
     const existing = await repository.getContact(id);
@@ -90,7 +87,7 @@ export const updateContactProcedure = authed.contacts.update.handler(
 
 export const archiveContactProcedure = authed.contacts.archive.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "admin")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     const archived = await new ContactRepository(
       context.database,
       context.workspace,

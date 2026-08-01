@@ -1,5 +1,5 @@
 import type { KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/shared";
+import type { WorkspaceContext } from "@kaenma/orpc";
 
 export interface RuntimeSecrets {
   BETTER_AUTH_SECRET: string;

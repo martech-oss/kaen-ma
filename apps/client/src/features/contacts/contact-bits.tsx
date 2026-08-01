@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { type Contact } from "@kaenma/shared/contacts";
+import { type Contact } from "@kaenma/orpc";
 
 export type BulkAction =
   | "add_tag"

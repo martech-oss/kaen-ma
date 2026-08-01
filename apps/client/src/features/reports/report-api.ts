@@ -6,7 +6,7 @@ import type {
   EmailsReport,
   ReportCategory,
   SiteReport,
-} from "@kaenma/shared/reports";
+} from "@kaenma/orpc";
 
 export type { AutomationsReport, ContactsReport, DealsReport, EmailsReport, SiteReport };
 

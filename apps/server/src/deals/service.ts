@@ -1,5 +1,5 @@
 import { uuidv7, writeAuditLog, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/shared";
+import type { WorkspaceContext } from "@kaenma/orpc";
 import type {
   DealCreate,
   DealDetailData,
@@ -10,7 +10,7 @@ import type {
   DealTaskCreate,
   DealTaskUpdate,
   DealUpdate,
-} from "@kaenma/shared/deals";
+} from "@kaenma/orpc";
 
 import { primitiveString } from "../platform/values";
 import {

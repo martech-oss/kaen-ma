@@ -16,18 +16,13 @@ import {
   type SQLWrapper,
 } from "drizzle-orm";
 
-import type { WorkspaceContext } from "@kaenma/shared";
-import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/shared/contacts";
+import type { WorkspaceContext } from "@kaenma/orpc";
+import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/orpc";
 
 import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { segmentMemberships } from "../segments/schema";
 import { uuidv7 } from "../shared/uuid";
-import {
-  companyContacts,
-  contactListMemberships,
-  contacts,
-  contactTags,
-  segmentMemberships,
-} from "./schema";
+import { companyContacts, contactListMemberships, contacts, contactTags } from "./schema";
 
 export interface CursorPage<T> {
   items: T[];

@@ -1,4 +1,4 @@
-import type { SegmentFilter } from "@kaenma/shared/segments";
+import type { SegmentFilter } from "@kaenma/orpc";
 
 import type { ContactSearch } from "./contact-api";
 

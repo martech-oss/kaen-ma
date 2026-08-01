@@ -1,4 +1,4 @@
-import type { CampaignNode } from "@kaenma/shared";
+import type { CampaignNode } from "@kaenma/orpc";
 
 type DelayNode = Extract<CampaignNode, { type: "delay" }>;
 

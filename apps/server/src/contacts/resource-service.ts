@@ -13,8 +13,8 @@ import type {
   ContactScoreAdjust,
   TagCreate,
   WorkspaceContext,
-} from "@kaenma/shared";
-import type { SegmentFilter } from "@kaenma/shared/segments";
+} from "@kaenma/orpc";
+import type { SegmentFilter } from "@kaenma/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { resourceSlug } from "../platform/values";

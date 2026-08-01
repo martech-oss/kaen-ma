@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { type KaenmaDatabase, organization } from "@kaenma/database";
 import type { Workspace } from "@kaenma/orpc";
-import type { WorkspaceContext } from "@kaenma/shared";
+import type { WorkspaceContext } from "@kaenma/orpc";
 
 export async function getWorkspace(
   database: KaenmaDatabase,

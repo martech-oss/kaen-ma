@@ -28,7 +28,7 @@ import {
   uuidv7,
   writeAuditLog,
 } from "@kaenma/database";
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/shared";
+import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
 
 const database = () => createDatabase(env.DB);
 

@@ -26,14 +26,14 @@ import { formatDateTime } from "@/lib/format";
 import { orpc } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
 import type { SegmentRow } from "@kaenma/orpc";
-import type { SegmentFilter } from "@kaenma/shared/segments";
+import type { SegmentFilter } from "@kaenma/orpc";
 
 export type { SegmentRow };
 import {
   getSegmentFieldDefinition,
   type SegmentField,
   type SegmentOperator,
-} from "@kaenma/shared/segments/fields";
+} from "@kaenma/orpc";
 
 export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNode {
   const router = useRouter();

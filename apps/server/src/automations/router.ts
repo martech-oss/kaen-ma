@@ -1,9 +1,8 @@
 import { validateCampaign } from "@kaenma/core";
 import { uuidv7 } from "@kaenma/database";
-import { campaignDefinitionSchema, type CampaignDefinition } from "@kaenma/shared";
+import { campaignDefinitionSchema, type CampaignDefinition } from "@kaenma/orpc";
 
-import { hasWorkspaceRole } from "../auth/authorization";
-import { authed } from "../orpc/base";
+import { authed, requireRole } from "../orpc/base";
 import { isRecord } from "../platform/values";
 import { getCampaignAnalytics } from "./analytics-service";
 import { enrollContactManually } from "./enrollment";
@@ -16,7 +15,7 @@ export const listCampaignsProcedure = authed.campaigns.list.handler(async ({ con
 
 export const createCampaignProcedure = authed.campaigns.create.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const id = uuidv7();
     const versionId = uuidv7();
     const now = new Date().toISOString();
@@ -76,7 +75,7 @@ export const getCampaignDraftProcedure = authed.campaigns.getDraft.handler(
 
 export const saveCampaignDraftProcedure = authed.campaigns.saveDraft.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...definition } = input;
     const workspaceId = context.workspace.workspaceId;
     const result = await context.database
@@ -102,7 +101,7 @@ export const saveCampaignDraftProcedure = authed.campaigns.saveDraft.handler(
 
 export const publishCampaignProcedure = authed.campaigns.publish.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const database = context.database;
     const workspaceId = context.workspace.workspaceId;
     const row = await database
@@ -215,7 +214,7 @@ export const publishCampaignProcedure = authed.campaigns.publish.handler(
 
 export const setCampaignStatusProcedure = authed.campaigns.setStatus.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const result = await context.database
       .prepare(
         `UPDATE campaigns SET status = ?, updated_at = ?
@@ -231,7 +230,7 @@ export const setCampaignStatusProcedure = authed.campaigns.setStatus.handler(
 
 export const enrollCampaignProcedure = authed.campaigns.enroll.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const outcome = await enrollContactManually(context.database, {
       workspaceId: context.workspace.workspaceId,
       campaignId: input.id,

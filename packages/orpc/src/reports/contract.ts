@@ -8,7 +8,7 @@ import {
   emailsReportSchema,
   reportDateRangeSchema,
   siteReportSchema,
-} from "@kaenma/shared/reports";
+} from "./schema";
 
 import { workspaceErrors } from "../shared/errors";
 

@@ -192,61 +192,6 @@ export const scoreEvents = sqliteTable(
   ],
 );
 
-export const segments = sqliteTable(
-  "segments",
-  {
-    id: text().primaryKey().notNull(),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    name: text().notNull(),
-    slug: text().notNull(),
-    kind: text().notNull(),
-    filterAst: text("filter_ast"),
-    memberCount: integer("member_count").default(0).notNull(),
-    evaluatedAt: text("evaluated_at"),
-    createdAt: text("created_at").notNull(),
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("segments_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
-    uniqueIndex("segments_workspace_slug_unique").on(table.workspaceId, table.slug),
-    check("segments_kind_check", sql`${table.kind} IN ('static', 'dynamic')`),
-  ],
-);
-
-export const segmentMemberships = sqliteTable(
-  "segment_memberships",
-  {
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    segmentId: text("segment_id")
-      .notNull()
-      .references(() => segments.id, { onDelete: "cascade" }),
-    contactId: text("contact_id")
-      .notNull()
-      .references(() => contacts.id, { onDelete: "cascade" }),
-    source: text().notNull(),
-    joinedAt: text("joined_at").notNull(),
-  },
-  (table) => [
-    index("segment_memberships_workspace_contact_idx").on(
-      table.workspaceId,
-      table.contactId,
-      table.segmentId,
-    ),
-    primaryKey({
-      columns: [table.workspaceId, table.segmentId, table.contactId],
-      name: "segment_memberships_workspace_id_segment_id_contact_id_pk",
-    }),
-    check(
-      "segment_memberships_source_check",
-      sql`${table.source} IN ('static', 'dynamic', 'campaign')`,
-    ),
-  ],
-);
-
 export const contactEvents = sqliteTable(
   "contact_events",
   {
@@ -339,6 +284,33 @@ export const contactListMemberships = sqliteTable(
     check(
       "contact_list_memberships_status_check",
       sql`${table.status} IN ('active', 'unsubscribed')`,
+    ),
+  ],
+);
+
+export const importJobs = sqliteTable(
+  "import_jobs",
+  {
+    id: text().primaryKey().notNull(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    kind: text().notNull(),
+    r2Key: text("r2_key").notNull(),
+    status: text().default("pending").notNull(),
+    cursor: text(),
+    processed: integer().default(0).notNull(),
+    succeeded: integer().default(0).notNull(),
+    failed: integer().default(0).notNull(),
+    errorManifestKey: text("error_manifest_key"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("import_jobs_workspace_status_idx").on(table.workspaceId, table.status, table.createdAt),
+    check(
+      "import_jobs_kind_check",
+      sql`${table.kind} IN ('contact_import', 'contact_export', 'event_archive')`,
     ),
   ],
 );

@@ -1,7 +1,11 @@
 import * as z from "zod";
 
-import { contactSchema } from "@kaenma/shared/contacts";
+import { contactSchema } from "./contact-schema";
 
+/**
+ * Chip shape embedded in contact summaries. The management-row variants with
+ * counts live in resource-schema.ts (tagSchema / contactListSchema).
+ */
 export const contactTagSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -9,7 +13,7 @@ export const contactTagSchema = z.object({
   color: z.string(),
 });
 
-export const contactListSchema = contactTagSchema;
+const contactListChipSchema = contactTagSchema;
 
 export const contactAccountSchema = z.object({
   id: z.string(),
@@ -21,7 +25,7 @@ export const contactAccountSchema = z.object({
 
 export const contactSummarySchema = contactSchema.extend({
   tags: z.array(contactTagSchema),
-  lists: z.array(contactListSchema),
+  lists: z.array(contactListChipSchema),
   accounts: z.array(contactAccountSchema),
 });
 

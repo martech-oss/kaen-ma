@@ -1,5 +1,5 @@
 import { type KaenmaDatabase, uuidv7 } from "@kaenma/database";
-import type { CampaignDefinition } from "@kaenma/shared";
+import type { CampaignDefinition } from "@kaenma/orpc";
 
 export interface ContactEvent {
   id: string;

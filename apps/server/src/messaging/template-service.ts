@@ -4,8 +4,8 @@ import {
   type ResendHostedTemplate,
 } from "@kaenma/channels";
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/shared";
-import type { EmailTemplate, ResendTemplateVariable } from "@kaenma/shared/emails";
+import type { WorkspaceContext } from "@kaenma/orpc";
+import type { EmailTemplate, ResendTemplateVariable } from "@kaenma/orpc";
 
 import type { RuntimeEnv } from "../env";
 import { createResendTemplateAdapter, templateCompatibilityError } from "../messaging/resend";

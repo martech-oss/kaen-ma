@@ -1,12 +1,12 @@
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { ContentDocument, WorkspaceContext } from "@kaenma/shared";
+import type { ContentDocument, WorkspaceContext } from "@kaenma/orpc";
 import type {
   LandingPage,
   LandingPageWrite,
   SignupForm,
   SignupFormDefinition,
   SignupFormWrite,
-} from "@kaenma/shared/website";
+} from "@kaenma/orpc";
 
 import {
   nullablePrimitiveString,

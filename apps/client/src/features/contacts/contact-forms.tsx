@@ -13,7 +13,7 @@ import { optionalString } from "@/lib/form-data";
 import { orpcQuery } from "@/lib/orpc";
 import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
-import { type SegmentFilter } from "@kaenma/shared/segments";
+import { type SegmentFilter } from "@kaenma/orpc";
 
 import { slugify } from "./contact-bits";
 

@@ -1,5 +1,4 @@
-import { hasWorkspaceRole } from "../auth/authorization";
-import { authed } from "../orpc/base";
+import { authed, requireRole } from "../orpc/base";
 import {
   AccountConflictError,
   assignAccountContact,
@@ -27,7 +26,7 @@ export const getAccountProcedure = authed.accounts.get.handler(
 
 export const createAccountProcedure = authed.accounts.create.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
       return await createAccount(
         context.database,
@@ -44,7 +43,7 @@ export const createAccountProcedure = authed.accounts.create.handler(
 
 export const updateAccountProcedure = authed.accounts.update.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...changes } = input;
     try {
       const account = await updateAccount(context.database, context.workspace, id, changes);
@@ -59,7 +58,7 @@ export const updateAccountProcedure = authed.accounts.update.handler(
 
 export const assignAccountContactProcedure = authed.accounts.assignContact.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const assigned = await assignAccountContact(context.database, context.workspace, input);
     if (!assigned) throw errors.ACCOUNT_CONTACT_NOT_FOUND();
     return { assigned: true as const };
@@ -68,7 +67,7 @@ export const assignAccountContactProcedure = authed.accounts.assignContact.handl
 
 export const removeAccountContactProcedure = authed.accounts.removeContact.handler(
   async ({ context, input, errors }) => {
-    if (!hasWorkspaceRole(context.workspace.role, "marketer")) throw errors.FORBIDDEN();
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const removed = await removeAccountContact(context.database, context.workspace, input);
     if (!removed) throw errors.ACCOUNT_CONTACT_NOT_FOUND();
     return { removed: true as const };

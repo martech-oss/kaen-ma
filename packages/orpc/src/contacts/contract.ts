@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { contactCreateSchema, contactSchema, contactUpdateSchema } from "@kaenma/shared/contacts";
+import { contactCreateSchema, contactSchema, contactUpdateSchema } from "./contact-schema";
 
 import { workspaceErrors } from "../shared/errors";
 import { contactListInputSchema, contactListResultSchema } from "./schema";

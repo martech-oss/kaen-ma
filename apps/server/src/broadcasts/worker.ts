@@ -1,7 +1,7 @@
 import { PermanentChannelError, type ChannelMessage } from "@kaenma/channels";
 import { compileSegmentFilter } from "@kaenma/core";
 import { createDatabase, uuidv7, type DrizzleRawStatement } from "@kaenma/database";
-import { type QueueMessage as KaenmaQueueMessage } from "@kaenma/shared";
+import { type QueueMessage as KaenmaQueueMessage } from "../runtime/queues";
 
 import { type RuntimeEnv } from "../env";
 import { readMessageVariables, senderForPurpose } from "../messaging/delivery-worker";

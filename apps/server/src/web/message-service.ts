@@ -1,6 +1,6 @@
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/shared";
-import type { SiteMessage, SiteMessageWrite } from "@kaenma/shared/website";
+import type { WorkspaceContext } from "@kaenma/orpc";
+import type { SiteMessage, SiteMessageWrite } from "@kaenma/orpc";
 
 import { nullablePrimitiveString, numericValue, primitiveString } from "../platform/values";
 

@@ -1,4 +1,4 @@
-import type { MessagePurpose } from "@kaenma/shared";
+import type { MessagePurpose } from "@kaenma/orpc";
 
 export interface ConsentSnapshot {
   contactStatus?: "active" | "archived" | "anonymous";

@@ -1,10 +1,10 @@
-import type { SegmentCondition } from "@kaenma/shared/segments";
+import type { SegmentCondition } from "@kaenma/orpc";
 import {
   getSegmentFieldDefinition,
   isSegmentOperatorAllowed,
   type SegmentField,
   type SegmentOperator,
-} from "@kaenma/shared/segments/fields";
+} from "@kaenma/orpc";
 
 export const segmentFieldOptions = [
   { field: "email", label: "メールアドレス" },

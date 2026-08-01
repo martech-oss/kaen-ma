@@ -1,4 +1,4 @@
-import type { DeliveryEvent, MessagePurpose } from "@kaenma/shared";
+import type { DeliveryEvent, MessagePurpose } from "@kaenma/orpc";
 
 export interface HostedEmailMessage {
   kind: "email";

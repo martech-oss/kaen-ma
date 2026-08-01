@@ -2,7 +2,7 @@ import { createMiddleware } from "hono/factory";
 
 import { timingSafeEqual } from "@kaenma/channels";
 import { createDatabase, resolveMemberContext, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/shared";
+import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
 
 import type { AppEnvironment, SessionValue } from "../env";
 import { sha256Hex } from "../platform/crypto";

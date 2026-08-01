@@ -3,8 +3,8 @@ import { desc, eq } from "drizzle-orm";
 import { compileSegmentFilter } from "@kaenma/core";
 import { segments, type KaenmaDatabase } from "@kaenma/database";
 import type { SegmentRow } from "@kaenma/orpc";
-import type { Contact } from "@kaenma/shared/contacts";
-import { segmentFilterSchema, type SegmentFilter } from "@kaenma/shared/segments";
+import type { Contact } from "@kaenma/orpc";
+import { segmentFilterSchema, type SegmentFilter } from "@kaenma/orpc";
 
 import {
   nullablePrimitiveString,

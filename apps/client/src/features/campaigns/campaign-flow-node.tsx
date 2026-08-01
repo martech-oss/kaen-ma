@@ -5,7 +5,7 @@ import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { type CampaignNode } from "@kaenma/shared";
+import { type CampaignNode } from "@kaenma/orpc";
 
 import { nodeLabel, nodeTypeLabel } from "./campaign-labels";
 

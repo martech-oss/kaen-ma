@@ -1,6 +1,6 @@
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
 import type { DataJob } from "@kaenma/orpc";
-import type { WorkspaceContext } from "@kaenma/shared";
+import type { WorkspaceContext } from "@kaenma/orpc";
 
 import { nullablePrimitiveString, numericValue, primitiveString } from "../platform/values";
 import { parseCsv } from "./csv";

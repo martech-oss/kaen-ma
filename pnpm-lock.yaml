@@ -38,9 +38,6 @@ importers:
       '@kaenma/orpc':
         specifier: workspace:*
         version: link:../../packages/orpc
-      '@kaenma/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@orpc/client':
         specifier: ^1.14.13
         version: 1.14.13
@@ -138,21 +135,18 @@ importers:
       '@kaenma/channels':
         specifier: workspace:*
         version: link:../../packages/channels
+      '@kaenma/content-renderer':
+        specifier: workspace:*
+        version: link:../../packages/content-renderer
       '@kaenma/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@kaenma/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@kaenma/email-renderer':
-        specifier: workspace:*
-        version: link:../../packages/email-renderer
       '@kaenma/orpc':
         specifier: workspace:*
         version: link:../../packages/orpc
-      '@kaenma/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@orpc/openapi':
         specifier: 1.14.13
         version: 1.14.13(ws@8.21.0)
@@ -199,9 +193,9 @@ importers:
 
   packages/channels:
     dependencies:
-      '@kaenma/shared':
+      '@kaenma/orpc':
         specifier: workspace:*
-        version: link:../shared
+        version: link:../orpc
       resend:
         specifier: ^6.18.1
         version: 6.18.1(@react-email/render@2.1.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8))
@@ -216,11 +210,24 @@ importers:
         specifier: ^4.0.17
         version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
 
+  packages/content-renderer:
+    dependencies:
+      '@kaenma/orpc':
+        specifier: workspace:*
+        version: link:../orpc
+    devDependencies:
+      typescript:
+        specifier: ^7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: ^4.0.17
+        version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
+
   packages/core:
     dependencies:
-      '@kaenma/shared':
+      '@kaenma/orpc':
         specifier: workspace:*
-        version: link:../shared
+        version: link:../orpc
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -253,9 +260,9 @@ importers:
 
   packages/database:
     dependencies:
-      '@kaenma/shared':
+      '@kaenma/orpc':
         specifier: workspace:*
-        version: link:../shared
+        version: link:../orpc
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@cloudflare/workers-types@5.20260728.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.1)(kysely@0.29.4)
@@ -266,19 +273,6 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^4.0.17
-        version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
-
-  packages/email-renderer:
-    dependencies:
-      '@kaenma/shared':
-        specifier: workspace:*
-        version: link:../shared
-    devDependencies:
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -335,9 +329,6 @@ importers:
 
   packages/orpc:
     dependencies:
-      '@kaenma/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@orpc/contract':
         specifier: ^1.14.13
         version: 1.14.13
@@ -357,9 +348,6 @@ importers:
       '@kaenma/orpc':
         specifier: workspace:*
         version: link:../orpc
-      '@kaenma/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@orpc/client':
         specifier: 1.14.13
         version: 1.14.13
@@ -369,19 +357,6 @@ importers:
       '@orpc/openapi-client':
         specifier: 1.14.13
         version: 1.14.13
-    devDependencies:
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^4.0.17
-        version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
-
-  packages/shared:
-    dependencies:
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       typescript:
         specifier: ^7.0.2

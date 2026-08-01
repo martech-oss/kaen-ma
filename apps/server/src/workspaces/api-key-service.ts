@@ -1,5 +1,5 @@
 import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/shared";
+import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
 
 import { randomIdentifier, randomString, sha256Hex } from "../platform/crypto";
 

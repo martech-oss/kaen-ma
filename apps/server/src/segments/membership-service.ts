@@ -1,6 +1,6 @@
 import { compileSegmentFilter } from "@kaenma/core";
 import type { KaenmaDatabase } from "@kaenma/database";
-import { segmentFilterSchema } from "@kaenma/shared/segments";
+import { segmentFilterSchema } from "@kaenma/orpc";
 
 export async function updateSegmentMemberCount(
   database: KaenmaDatabase,

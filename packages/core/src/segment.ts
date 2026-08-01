@@ -1,5 +1,5 @@
-import type { SegmentCondition, SegmentFilter } from "@kaenma/shared/segments";
-import { isSegmentOperatorAllowed } from "@kaenma/shared/segments/fields";
+import type { SegmentCondition, SegmentFilter } from "@kaenma/orpc";
+import { isSegmentOperatorAllowed } from "@kaenma/orpc";
 
 export interface CompiledSegment {
   sql: string;

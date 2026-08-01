@@ -1,8 +1,8 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { contactSchema } from "@kaenma/shared/contacts";
-import { segmentFilterSchema } from "@kaenma/shared/segments";
+import { contactSchema } from "../contacts/contact-schema";
+import { segmentFilterSchema } from "./schema";
 
 import { workspaceErrors } from "../shared/errors";
 

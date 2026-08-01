@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/shared";
+import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
 
 import { member } from "../auth/schema";
 import { createDatabase, type DatabaseSource } from "../client";

@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@kaenma/shared": "workspace:*"
+    "@kaenma/orpc": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

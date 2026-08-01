@@ -1,8 +1,5 @@
-import type { WorkspaceRole } from "@kaenma/shared";
 
-import { hasWorkspaceRole } from "../auth/authorization";
-import { authed } from "../orpc/base";
-import type { OrpcContext } from "../orpc/context";
+import { authed, requireRole } from "../orpc/base";
 import {
   addContactList,
   addContactSegment,
@@ -20,14 +17,6 @@ import {
   restoreContact,
 } from "./resource-service";
 
-function assertRole(
-  context: Pick<OrpcContext, "workspace">,
-  minimum: WorkspaceRole,
-  forbidden: () => Error,
-): void {
-  if (!hasWorkspaceRole(context.workspace.role, minimum)) throw forbidden();
-}
-
 export const contactOptionsProcedure = authed.contactResources.options.handler(({ context }) =>
   getContactOptions(context.database, context.workspace),
 );
@@ -42,7 +31,7 @@ export const contactProfileProcedure = authed.contactResources.profile.handler(
 
 export const createTagProcedure = authed.contactResources.createTag.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
       return await createTag(context.database, context.workspace, input);
     } catch (error) {
@@ -54,7 +43,7 @@ export const createTagProcedure = authed.contactResources.createTag.handler(
 
 export const createListProcedure = authed.contactResources.createList.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
       return await createContactList(context.database, context.workspace, input);
     } catch (error) {
@@ -66,7 +55,7 @@ export const createListProcedure = authed.contactResources.createList.handler(
 
 export const addTagProcedure = authed.contactResources.addTag.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await addContactTag(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
@@ -76,7 +65,7 @@ export const addTagProcedure = authed.contactResources.addTag.handler(
 
 export const removeTagProcedure = authed.contactResources.removeTag.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await removeContactTag(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
@@ -86,7 +75,7 @@ export const removeTagProcedure = authed.contactResources.removeTag.handler(
 
 export const addListProcedure = authed.contactResources.addList.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await addContactList(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
@@ -96,7 +85,7 @@ export const addListProcedure = authed.contactResources.addList.handler(
 
 export const removeListProcedure = authed.contactResources.removeList.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await removeContactList(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
@@ -106,7 +95,7 @@ export const removeListProcedure = authed.contactResources.removeList.handler(
 
 export const addSegmentProcedure = authed.contactResources.addSegment.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await addContactSegment(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
@@ -117,7 +106,7 @@ export const addSegmentProcedure = authed.contactResources.addSegment.handler(
 // Mirrors the REST route, which reports success even when nothing matched.
 export const removeSegmentProcedure = authed.contactResources.removeSegment.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     await removeContactSegment(context.database, context.workspace, input);
     return { removed: true as const };
   },
@@ -125,7 +114,7 @@ export const removeSegmentProcedure = authed.contactResources.removeSegment.hand
 
 export const adjustScoreProcedure = authed.contactResources.adjustScore.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { contactId, ...adjustment } = input;
     const contact = await adjustContactScore(
       context.database,
@@ -140,7 +129,7 @@ export const adjustScoreProcedure = authed.contactResources.adjustScore.handler(
 
 export const restoreContactProcedure = authed.contactResources.restore.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "admin", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     if (!(await restoreContact(context.database, context.workspace, input.contactId))) {
       throw errors.CONTACT_NOT_ARCHIVED();
     }
@@ -150,7 +139,7 @@ export const restoreContactProcedure = authed.contactResources.restore.handler(
 
 export const bulkActionProcedure = authed.contactResources.bulkAction.handler(
   async ({ context, input, errors }) => {
-    assertRole(context, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const outcome = await applyContactBulkAction(context.database, context.workspace, input);
     if (outcome.kind === "archive_forbidden") throw errors.ARCHIVE_FORBIDDEN();
     if (outcome.kind === "resource_required") throw errors.RESOURCE_REQUIRED();

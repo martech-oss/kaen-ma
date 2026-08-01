@@ -8,7 +8,7 @@ import type {
   MessageVariable,
   ResendTemplateVariable,
   SubscriptionTopicOption,
-} from "@kaenma/shared/emails";
+} from "@kaenma/orpc";
 
 export type { EmailCampaign, EmailTemplate, MessageVariable, ResendTemplateVariable };
 
