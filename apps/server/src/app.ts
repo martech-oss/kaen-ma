@@ -1,39 +1,16 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
-import { createDatabase } from "@kaenma/database";
-import { createOpenApiDocument } from "@kaenma/shared/openapi";
-
-import { registerAccountRoutes } from "./accounts/routes";
-import { registerAnalyticsRoutes } from "./analytics/routes";
-import { registerAssetRoutes } from "./assets/routes";
 import { createAuth } from "./auth/service";
-import { registerBroadcastRoutes } from "./broadcasts/routes";
-import { registerCampaignRoutes } from "./campaigns/routes";
-import { registerConsentRoutes } from "./consent/routes";
-import { registerContactManagementRoutes } from "./contacts/management-routes";
-import { registerContactRoutes } from "./contacts/routes";
-import { registerDealRoutes } from "./deals/routes";
 import { registerEmailWebhookRoutes } from "./email/webhook-routes";
 import { type AppEnvironment } from "./env";
-import { registerFormRoutes } from "./forms/routes";
-import { registerIntegrationRoutes } from "./integrations/routes";
-import { registerMessageVariableRoutes } from "./message-variables/routes";
-import { apiError, requestContext, requireWorkspace } from "./middleware";
+import { apiError, requestContext } from "./middleware";
 import { logError } from "./observability";
-import { registerOperationsRoutes } from "./operations/routes";
 import { createOrpcRequestHandler } from "./orpc/handler";
-import { registerPageRoutes } from "./pages/routes";
-import { registerProjectRoutes } from "./projects/routes";
+import { createOpenApiRequestHandler, generateOpenApiDocument } from "./orpc/openapi-handler";
 import { registerPublicRoutes } from "./public/routes";
-import { registerReportRoutes } from "./reports/routes";
-import { registerSegmentRoutes } from "./segments/routes";
-import { registerTemplateRoutes } from "./templates/routes";
-import { registerWebsiteRoutes } from "./website/routes";
-import { registerWorkspaceRoutes } from "./workspaces/routes";
 
 const app = new Hono<AppEnvironment>();
-const adminApi = createApi();
 app.use("*", requestContext);
 app.use(
   "/api/public/*",
@@ -48,6 +25,7 @@ app.on(["GET", "POST"], "/api/auth/*", (context) => {
   return createAuth(context.env, requestOrigin).handler(context.req.raw);
 });
 app.use("/api/rpc/*", createOrpcRequestHandler());
+app.use("/api/v1/*", createOpenApiRequestHandler());
 app.get("/api/health", async (context) => {
   try {
     const result = await context
@@ -72,9 +50,10 @@ app.get("/api/health", async (context) => {
     );
   }
 });
-app.get("/api/openapi.json", (context) => context.json(createOpenApiDocument(context.env.APP_URL)));
+app.get("/api/openapi.json", async (context) =>
+  context.json(await generateOpenApiDocument(context.env.APP_URL)),
+);
 registerEmailWebhookRoutes(app);
-app.route("/api/v1", adminApi);
 registerPublicRoutes(app);
 app.notFound((context) => apiError(context, 404, "not_found", "リソースが見つかりません"));
 app.onError((error, context) => {
@@ -86,39 +65,3 @@ app.onError((error, context) => {
   return apiError(context, 500, "internal_error", "処理中にエラーが発生しました");
 });
 export { app };
-function createApi(): Hono<AppEnvironment> {
-  const api = new Hono<AppEnvironment>();
-  api.use("*", async (context, next) => {
-    if (!context.get("database")) {
-      context.set("database", createDatabase(context.env.DB));
-    }
-    if (!context.get("requestId")) {
-      context.set("requestId", context.req.header("cf-ray") ?? crypto.randomUUID());
-    }
-    await next();
-  });
-  api.use("*", requireWorkspace);
-
-  registerWorkspaceRoutes(api);
-  registerContactRoutes(api);
-
-  registerAccountRoutes(api);
-  registerDealRoutes(api);
-  registerContactManagementRoutes(api);
-  registerSegmentRoutes(api);
-  registerTemplateRoutes(api);
-  registerMessageVariableRoutes(api);
-  registerCampaignRoutes(api);
-  registerBroadcastRoutes(api);
-  registerFormRoutes(api);
-  registerWebsiteRoutes(api);
-  registerAssetRoutes(api);
-  registerProjectRoutes(api);
-  registerPageRoutes(api);
-  registerConsentRoutes(api);
-  registerIntegrationRoutes(api);
-  registerAnalyticsRoutes(api);
-  registerReportRoutes(api);
-  registerOperationsRoutes(api);
-  return api;
-}

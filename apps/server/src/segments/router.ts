@@ -3,7 +3,7 @@ import { segments, uuidv7 } from "@kaenma/database";
 import { hasWorkspaceRole } from "../auth/authorization";
 import { authed, requireRole } from "../orpc/base";
 import { listSegments, previewSegment } from "./list-service";
-import { refreshSegmentMemberships } from "./routes";
+import { refreshSegmentMemberships } from "./membership-service";
 
 export const listSegmentsProcedure = authed.segments.list.handler(async ({ context }) => {
   return listSegments(context.database, context.workspace.workspaceId);

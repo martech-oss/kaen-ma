@@ -1,220 +1,49 @@
-import type { ApiResponse, CampaignDefinition, WorkspaceRole } from "@kaenma/shared";
-import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/shared/contacts";
-import type { SegmentFilter } from "@kaenma/shared/segments";
+import { createORPCClient } from "@orpc/client";
+import type { ContractRouterClient } from "@orpc/contract";
+import { OpenAPILink } from "@orpc/openapi-client/fetch";
 
-export interface SegmentSummary {
-  id: string;
-  name: string;
-  slug: string;
-  kind: "static" | "dynamic";
-  filterAst: SegmentFilter | null;
-  memberCount: number;
-  evaluatedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import { contract } from "@kaenma/orpc";
 
-export interface CampaignSummary {
-  id: string;
-  name: string;
-  description: string;
-  status: "draft" | "active" | "paused" | "archived";
-  triggerSource: string | null;
-  enrollmentCount: number;
-  activeCount: number;
-  completedCount: number;
-  updatedAt: string;
-}
-
-export interface DashboardData {
-  contacts: { count: number };
-  campaigns: { count: number };
-  deliveries: { sent: number; delivered: number; failed: number };
-  recentEvents: Array<{
-    type: string;
-    occurredAt: string;
-    contactId: string | null;
-    properties: Record<string, unknown>;
-  }>;
-}
-
+/**
+ * The SDK is generated from the same oRPC contract that serves /api/rpc and
+ * /api/v1, so request/response types can never drift from the server.
+ * Calls go through the public OpenAPI surface at /api/v1.
+ */
 export interface KaenmaClientOptions {
   baseUrl: string;
   apiKey: string;
-  fetcher?: typeof fetch;
+  fetch?: typeof fetch;
 }
 
-export interface Page<T> {
-  data: T[];
-  nextCursor?: string;
+export type KaenmaClient = ContractRouterClient<typeof contract>;
+
+export function createKaenmaClient(options: KaenmaClientOptions): KaenmaClient {
+  const link = new OpenAPILink(contract, {
+    url: new URL("/api/v1", options.baseUrl).toString(),
+    headers: { authorization: `Bearer ${options.apiKey}` },
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+  return createORPCClient(link);
 }
 
-export class KaenmaApiError extends Error {
-  public constructor(
-    message: string,
-    public readonly status: number,
-    public readonly code: string,
-    public readonly requestId?: string,
-  ) {
-    super(message);
-    this.name = "KaenmaApiError";
-  }
-}
+// Error helpers for consumers: every declared contract error surfaces as a
+// typed ORPCError with `defined: true` and its contract code.
+export { isDefinedError, ORPCError, safe } from "@orpc/client";
 
-export class KaenmaClient {
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
-  private readonly fetcher: typeof fetch;
-
-  public constructor(options: KaenmaClientOptions) {
-    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
-    this.apiKey = options.apiKey;
-    this.fetcher = options.fetcher ?? fetch;
-  }
-
-  public readonly contacts = {
-    list: async (input: { cursor?: string; limit?: number; query?: string } = {}) => {
-      const query = new URLSearchParams();
-      if (input.cursor) query.set("cursor", input.cursor);
-      if (input.limit) query.set("limit", String(input.limit));
-      if (input.query) query.set("q", input.query);
-      const response = await this.request<Contact[]>(
-        `/contacts${query.size > 0 ? `?${query}` : ""}`,
-      );
-      return {
-        data: response.data,
-        ...(response.meta?.nextCursor ? { nextCursor: response.meta.nextCursor } : {}),
-      } satisfies Page<Contact>;
-    },
-    get: (id: string) => this.request<Contact>(`/contacts/${encodeURIComponent(id)}`),
-    create: (input: ContactCreate, idempotencyKey = crypto.randomUUID()) =>
-      this.request<Contact>("/contacts", {
-        method: "POST",
-        idempotencyKey,
-        body: input,
-      }),
-    update: (id: string, input: ContactUpdate) =>
-      this.request<Contact>(`/contacts/${encodeURIComponent(id)}`, {
-        method: "PATCH",
-        body: input,
-      }),
-    archive: (id: string) =>
-      this.request<{ archived: boolean }>(`/contacts/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      }),
-  };
-
-  public readonly segments = {
-    list: () => this.request<SegmentSummary[]>("/segments"),
-    preview: (filter: SegmentFilter) =>
-      this.request<Contact[]>("/segments/preview", { method: "POST", body: filter }),
-    create: (input: {
-      name: string;
-      slug: string;
-      kind: "static" | "dynamic";
-      filter?: SegmentFilter;
-    }) => this.request<{ id: string }>("/segments", { method: "POST", body: input }),
-  };
-
-  public readonly campaigns = {
-    list: () => this.request<CampaignSummary[]>("/campaigns"),
-    create: (definition: CampaignDefinition) =>
-      this.request<{ id: string; draftVersionId: string }>("/campaigns", {
-        method: "POST",
-        body: definition,
-      }),
-    getDraft: (id: string) =>
-      this.request<{ id: string; version: number; graph: CampaignDefinition }>(
-        `/campaigns/${encodeURIComponent(id)}/draft`,
-      ),
-    updateDraft: (id: string, definition: CampaignDefinition) =>
-      this.request<{ updated: boolean }>(`/campaigns/${encodeURIComponent(id)}/draft`, {
-        method: "PUT",
-        body: definition,
-      }),
-    publish: (id: string) =>
-      this.request<{ publishedVersionId: string; draftVersionId: string }>(
-        `/campaigns/${encodeURIComponent(id)}/publish`,
-        { method: "POST" },
-      ),
-    enroll: (
-      id: string,
-      contactId: string,
-      input: { sourceEventId?: string; idempotencyKey?: string } = {},
-    ) =>
-      this.request<{ enrollmentId: string; jobId: string }>(
-        `/campaigns/${encodeURIComponent(id)}/enroll`,
-        {
-          method: "POST",
-          idempotencyKey: input.idempotencyKey ?? crypto.randomUUID(),
-          body: {
-            contactId,
-            ...(input.sourceEventId ? { sourceEventId: input.sourceEventId } : {}),
-          },
-        },
-      ),
-  };
-
-  public readonly dashboard = {
-    get: () => this.request<DashboardData>("/dashboard"),
-  };
-
-  public readonly apiKeys = {
-    create: (input: { name: string; role: WorkspaceRole; expiresAt?: string }) =>
-      this.request<{ id: string; token: string; prefix: string }>("/api-keys", {
-        method: "POST",
-        body: input,
-      }),
-  };
-
-  private async request<T>(
-    path: string,
-    options: {
-      method?: string;
-      body?: unknown;
-      idempotencyKey?: string;
-    } = {},
-  ): Promise<ApiResponse<T>> {
-    const response = await this.fetcher(`${this.baseUrl}/api/v1${path}`, {
-      method: options.method ?? "GET",
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        Accept: "application/json",
-        ...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
-        ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
-      },
-      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-    });
-    const payload = (await response.json().catch(() => null)) as
-      | ApiResponse<T>
-      | {
-          error?: {
-            code?: string;
-            message?: string;
-            requestId?: string;
-          };
-        }
-      | null;
-    if (!response.ok) {
-      const error = payload && "error" in payload ? payload.error : undefined;
-      throw new KaenmaApiError(
-        error?.message ?? `Kaenma API returned ${response.status}`,
-        response.status,
-        error?.code ?? "request_failed",
-        error?.requestId,
-      );
-    }
-    if (!isRecord(payload) || !("data" in payload)) {
-      throw new KaenmaApiError(
-        "Kaenma API returned an invalid response",
-        response.status,
-        "invalid_response",
-      );
-    }
-    return payload as unknown as ApiResponse<T>;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+// Contract value/type re-exports so SDK consumers need only this package.
+export { contract } from "@kaenma/orpc";
+export type {
+  AssetSummary,
+  CampaignRow,
+  ContactListInput,
+  ContactListResult,
+  ContactSummary,
+  ContactTimelineEvent,
+  DataJob,
+  Dashboard,
+  DeadLetterRow,
+  ProjectRow,
+  SegmentRow,
+  SubscriptionTopicRow,
+  WebhookEndpointRow,
+} from "@kaenma/orpc";

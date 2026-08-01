@@ -1,7 +1,11 @@
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { uuidv7 } from "@kaenma/database";
+import { contract } from "@kaenma/orpc";
 
 import { sha256Hex } from "../src/crypto";
 
@@ -36,17 +40,14 @@ describe("Website center", () => {
          VALUES (?, ?, ?, 'Website test', ?, ?, 'owner', ?)`,
       ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
     ]);
-    const call = (path: string, init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
-      if (!headers.has("content-type")) headers.set("content-type", "application/json");
-      return exports.default.fetch(
-        new Request(`http://localhost:8787/api/v1${path}`, {
-          ...init,
-          headers,
-        }),
-      );
-    };
+    const link = new RPCLink({
+      url: "http://localhost:8787/api/rpc",
+      headers: { authorization: `Bearer ${token}` },
+      fetch: (request) => exports.default.fetch(request),
+    });
+    const client: ContractRouterClient<typeof contract> = createORPCClient(link);
+    // The hosted-form, embed, track and script endpoints are public and are not
+    // part of the oRPC contract; they stay plain fetches against the worker.
     const publicCall = (path: string, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       if (!headers.has("content-type")) headers.set("content-type", "application/json");
@@ -59,43 +60,32 @@ describe("Website center", () => {
       );
     };
 
-    expect(
-      (
-        await call("/site-tracking", {
-          method: "PUT",
-          body: JSON.stringify({
-            enabled: true,
-            allowedDomains: ["https://example.com/path", "campaign.example.com"],
-          }),
-        })
-      ).status,
-    ).toBe(200);
-    const trackingSettings = (await (await call("/site-tracking")).json()) as {
-      data: { enabled: boolean; allowedDomains: string[]; workspaceSlug: string };
-    };
-    expect(trackingSettings.data).toMatchObject({
+    await expect(
+      client.website.updateTracking({
+        enabled: true,
+        allowedDomains: ["https://example.com/path", "campaign.example.com"],
+      }),
+    ).resolves.toEqual({ saved: true });
+    const trackingSettings = await client.website.getTracking();
+    expect(trackingSettings).toMatchObject({
       enabled: true,
       allowedDomains: ["example.com", "campaign.example.com"],
       workspaceSlug,
     });
 
-    const formResponse = await call("/forms", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "Newsletter",
-        slug: "newsletter",
-        status: "published",
-        definition: {
-          style: "inline",
-          fields: [{ key: "email", type: "email", required: true }],
-        },
-        allowedDomains: ["example.com"],
-        turnstileEnabled: false,
-        successMessage: "登録しました。",
-      }),
+    const form = await client.website.createForm({
+      name: "Newsletter",
+      slug: "newsletter",
+      status: "published",
+      definition: {
+        style: "inline",
+        fields: [{ key: "email", type: "email", required: true }],
+      },
+      allowedDomains: ["example.com"],
+      turnstileEnabled: false,
+      successMessage: "登録しました。",
     });
-    expect(formResponse.status).toBe(201);
-    const form = (await formResponse.json()) as { data: { id: string } };
+    expect(form.id).toBeTruthy();
     const hostedForm = await publicCall(`/f/${workspaceSlug}/newsletter`, {
       headers: { origin: "" },
     });
@@ -115,12 +105,8 @@ describe("Website center", () => {
       }),
     });
     expect(formSubmit.status).toBe(202);
-    const listedForms = (await (await call("/forms")).json()) as {
-      data: Array<{ id: string; submission_count: number }>;
-    };
-    expect(listedForms.data).toEqual([
-      expect.objectContaining({ id: form.data.id, submission_count: 1 }),
-    ]);
+    const listedForms = await client.website.listForms();
+    expect(listedForms).toEqual([expect.objectContaining({ id: form.id, submissionCount: 1 })]);
 
     const content = {
       schemaVersion: 1,
@@ -134,59 +120,47 @@ describe("Website center", () => {
           html: "<h1>Welcome</h1><p>Join us.</p>",
         },
       ],
-    };
-    const pageResponse = await call("/pages", {
-      method: "POST",
-      body: JSON.stringify({
+    } as const;
+    const page = await client.website.createPage({
+      name: "Welcome page",
+      slug: "welcome",
+      status: "draft",
+      content,
+    });
+    expect(page.id).toBeTruthy();
+    await expect(
+      client.website.updatePage({
+        id: page.id,
         name: "Welcome page",
         slug: "welcome",
-        status: "draft",
+        status: "published",
         content,
       }),
-    });
-    expect(pageResponse.status).toBe(201);
-    const page = (await pageResponse.json()) as { data: { id: string } };
-    expect(
-      (
-        await call(`/pages/${page.data.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            name: "Welcome page",
-            slug: "welcome",
-            status: "published",
-            content,
-          }),
-        })
-      ).status,
-    ).toBe(200);
+    ).resolves.toMatchObject({ id: page.id });
     const hostedPage = await publicCall(`/p/${workspaceSlug}/welcome`, {
       headers: { origin: "" },
     });
     expect(hostedPage.status).toBe(200);
     expect(await hostedPage.text()).toContain("Welcome");
 
-    const contactResponse = await call("/contacts", {
-      method: "POST",
-      body: JSON.stringify({ email: "known@example.com" }),
+    const contact = await client.contacts.create({
+      email: "known@example.com",
+      customFields: {},
     });
-    expect(contactResponse.status).toBe(201);
+    expect(contact.id).toBeTruthy();
 
-    const messageResponse = await call("/site-messages", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "Pricing help",
-        status: "published",
-        headline: "Need help?",
-        body: "Talk with our team.",
-        ctaLabel: "Contact us",
-        ctaUrl: "https://example.com/contact",
-        pagePattern: "/pricing*",
-        startsAt: null,
-        endsAt: null,
-      }),
+    const message = await client.website.createMessage({
+      name: "Pricing help",
+      status: "published",
+      headline: "Need help?",
+      body: "Talk with our team.",
+      ctaLabel: "Contact us",
+      ctaUrl: "https://example.com/contact",
+      pagePattern: "/pricing*",
+      startsAt: null,
+      endsAt: null,
     });
-    expect(messageResponse.status).toBe(201);
-    const message = (await messageResponse.json()) as { data: { id: string } };
+    expect(message.id).toBeTruthy();
     const visitorId = crypto.randomUUID();
     const trackResponse = await publicCall(`/api/public/track/${workspaceSlug}`, {
       method: "POST",
@@ -209,33 +183,24 @@ describe("Website center", () => {
           `&url=${encodeURIComponent("https://example.com/pricing/pro")}`,
       )
     ).json()) as { data: Array<{ id: string }> };
-    expect(messages.data).toEqual([expect.objectContaining({ id: message.data.id })]);
+    expect(messages.data).toEqual([expect.objectContaining({ id: message.id })]);
     expect(
       (
-        await publicCall(`/api/public/site-messages/${workspaceSlug}/${message.data.id}/events`, {
+        await publicCall(`/api/public/site-messages/${workspaceSlug}/${message.id}/events`, {
           method: "POST",
           body: JSON.stringify({ visitorId, type: "impression" }),
         })
       ).status,
     ).toBe(202);
-    const siteMessages = (await (await call("/site-messages")).json()) as {
-      data: Array<{ id: string; impression_count: number }>;
-    };
-    expect(siteMessages.data).toEqual([
-      expect.objectContaining({ id: message.data.id, impression_count: 1 }),
-    ]);
+    const siteMessages = await client.website.listMessages();
+    expect(siteMessages).toEqual([expect.objectContaining({ id: message.id, impressionCount: 1 })]);
 
-    const tracking = (await (await call("/site-tracking")).json()) as {
-      data: {
-        summary: { pageViews: number; identifiedContacts: number };
-        topPages: Array<{ url: string; views: number }>;
-      };
-    };
-    expect(tracking.data.summary).toMatchObject({
+    const tracking = await client.website.getTracking();
+    expect(tracking.summary).toMatchObject({
       pageViews: 1,
       identifiedContacts: 1,
     });
-    expect(tracking.data.topPages).toEqual([
+    expect(tracking.topPages).toEqual([
       {
         url: "https://example.com/pricing/pro",
         views: 1,

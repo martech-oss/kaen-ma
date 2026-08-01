@@ -147,10 +147,10 @@ describe("accounts over oRPC", () => {
     });
   });
 
-  // The REST routes stay for the SDK, MCP server and OpenAPI document. They now
-  // delegate to the same service functions as the oRPC procedures, so they are
-  // checked here to catch the two surfaces drifting apart. Called directly
-  // rather than through a tunnel, which no longer exists.
+  // /api/v1 is the OpenAPIHandler rendering of the same procedures for the
+  // SDK, MCP server and OpenAPI document: same output DTOs as plain JSON (no
+  // envelope), typed error codes as the error body. Driving one operation over
+  // both surfaces catches them drifting apart.
   it("serves the same data over the REST routes", async () => {
     const { token, client } = await seedWorkspace("acctkeygggg7");
     const created = await client.accounts.create({ name: "Umbrella", domain: "umbrella.example" });
@@ -166,22 +166,19 @@ describe("accounts over oRPC", () => {
         }),
       );
 
-    const listed = await rest("/accounts?q=Umbrella");
+    const listed = await rest("/accounts?query=Umbrella");
     expect(listed.status).toBe(200);
-    await expect(listed.json()).resolves.toMatchObject({
-      data: [expect.objectContaining({ id: created.id, contactCount: 0 })],
-    });
+    await expect(listed.json()).resolves.toEqual(await client.accounts.list({ query: "Umbrella" }));
 
     const detail = await rest(`/accounts/${created.id}`);
     expect(detail.status).toBe(200);
-    await expect(detail.json()).resolves.toMatchObject({
-      data: { id: created.id, name: "Umbrella", contacts: [] },
-    });
+    await expect(detail.json()).resolves.toEqual(await client.accounts.get({ id: created.id }));
 
     const missing = await rest(`/accounts/${uuidv7()}`);
     expect(missing.status).toBe(404);
     await expect(missing.json()).resolves.toMatchObject({
-      error: { code: "account_not_found" },
+      code: "ACCOUNT_NOT_FOUND",
+      defined: true,
     });
 
     const conflict = await rest("/accounts", {
@@ -190,7 +187,8 @@ describe("accounts over oRPC", () => {
     });
     expect(conflict.status).toBe(409);
     await expect(conflict.json()).resolves.toMatchObject({
-      error: { code: "account_conflict" },
+      code: "ACCOUNT_CONFLICT",
+      defined: true,
     });
   });
 });

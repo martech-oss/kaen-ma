@@ -1,7 +1,11 @@
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { uuidv7 } from "@kaenma/database";
+import { contract } from "@kaenma/orpc";
 
 import { sha256Hex } from "../src/crypto";
 
@@ -41,152 +45,97 @@ describe("Deals CRM", () => {
       ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
     ]);
 
-    const call = (path: string, init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-      headers.set("authorization", `Bearer ${token}`);
-      headers.set("content-type", "application/json");
-      return exports.default.fetch(
-        new Request(`http://localhost:8787/api/v1${path}`, {
-          ...init,
-          headers,
-        }),
-      );
-    };
+    const link = new RPCLink({
+      url: "http://localhost:8787/api/rpc",
+      headers: { authorization: `Bearer ${token}` },
+      fetch: (request) => exports.default.fetch(request),
+    });
+    const client: ContractRouterClient<typeof contract> = createORPCClient(link);
 
-    const optionsResponse = await call("/deal-options");
-    expect(optionsResponse.status).toBe(200);
-    const options = (await optionsResponse.json()) as {
-      data: {
-        pipelines: Array<{
-          id: string;
-          isDefault: boolean;
-          stages: Array<{ id: string; name: string; position: number }>;
-        }>;
-        members: Array<{ id: string }>;
-      };
-    };
-    expect(options.data.pipelines).toHaveLength(1);
-    expect(options.data.pipelines[0]?.isDefault).toBe(true);
-    expect(options.data.pipelines[0]?.stages.map((stage) => stage.name)).toEqual([
+    const options = await client.deals.options();
+    expect(options.pipelines).toHaveLength(1);
+    expect(options.pipelines[0]?.isDefault).toBe(true);
+    expect(options.pipelines[0]?.stages.map((stage) => stage.name)).toEqual([
       "新規",
       "連絡済み",
       "提案",
       "交渉",
       "最終確認",
     ]);
-    expect(options.data.members).toEqual([expect.objectContaining({ id: userId })]);
+    expect(options.members).toEqual([expect.objectContaining({ id: userId })]);
 
-    const pipeline = options.data.pipelines[0]!;
+    const pipeline = options.pipelines[0]!;
     const firstStage = pipeline.stages[0]!;
     const secondStage = pipeline.stages[1]!;
-    const accountResponse = await call("/accounts", {
-      method: "POST",
-      body: JSON.stringify({ name: "Acme株式会社", domain: "acme.example" }),
+    const account = await client.accounts.create({
+      name: "Acme株式会社",
+      domain: "acme.example",
     });
-    expect(accountResponse.status).toBe(201);
-    const account = (await accountResponse.json()) as { data: { id: string } };
-    const contactResponse = await call("/contacts", {
-      method: "POST",
-      body: JSON.stringify({
-        email: "buyer@acme.example",
-        firstName: "花子",
-        lastName: "営業",
-      }),
+    const contact = await client.contacts.create({
+      email: "buyer@acme.example",
+      firstName: "花子",
+      lastName: "営業",
+      customFields: {},
     });
-    expect(contactResponse.status).toBe(201);
-    const contact = (await contactResponse.json()) as { data: { id: string } };
 
-    const createResponse = await call("/deals", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "Acme MA導入",
-        pipelineId: pipeline.id,
-        stageId: firstStage.id,
-        value: 1_500_000,
-        currency: "JPY",
-        ownerUserId: userId,
-        contactId: contact.data.id,
-        accountId: account.data.id,
-        expectedCloseDate: "2026-09-30",
-        description: "提案準備中",
-      }),
+    const created = await client.deals.create({
+      name: "Acme MA導入",
+      pipelineId: pipeline.id,
+      stageId: firstStage.id,
+      value: 1_500_000,
+      currency: "JPY",
+      ownerUserId: userId,
+      contactId: contact.id,
+      accountId: account.id,
+      expectedCloseDate: "2026-09-30",
+      description: "提案準備中",
     });
-    expect(createResponse.status).toBe(201);
-    const created = (await createResponse.json()) as {
-      data: { id: string; status: string; stageId: string; accountName: string };
-    };
-    expect(created.data).toMatchObject({
+    expect(created).toMatchObject({
       status: "open",
       stageId: firstStage.id,
       accountName: "Acme株式会社",
     });
 
-    const invalidMove = await call(`/deals/${created.data.id}/move`, {
-      method: "POST",
-      body: JSON.stringify({ stageId: uuidv7() }),
+    await expect(client.deals.move({ id: created.id, stageId: uuidv7() })).rejects.toMatchObject({
+      code: "INVALID_DEAL_STAGE",
+      status: 422,
     });
-    expect(invalidMove.status).toBe(422);
-    const moveResponse = await call(`/deals/${created.data.id}/move`, {
-      method: "POST",
-      body: JSON.stringify({ stageId: secondStage.id }),
+    await expect(
+      client.deals.move({ id: created.id, stageId: secondStage.id }),
+    ).resolves.toMatchObject({ stageId: secondStage.id, stageName: "連絡済み" });
+
+    const task = await client.deals.createTask({
+      dealId: created.id,
+      title: "提案内容を電話で確認",
+      type: "call",
+      dueAt: "2026-08-01T03:00:00.000Z",
+      assignedUserId: userId,
     });
-    expect(moveResponse.status).toBe(200);
-    expect(await moveResponse.json()).toMatchObject({
-      data: { stageId: secondStage.id, stageName: "連絡済み" },
+    expect(task).toMatchObject({ status: "open", type: "call" });
+    await expect(
+      client.deals.updateTask({ dealId: created.id, taskId: task.id, status: "completed" }),
+    ).resolves.toMatchObject({ status: "completed", completedAt: expect.any(String) });
+
+    await expect(client.deals.update({ id: created.id, status: "won" })).resolves.toMatchObject({
+      status: "won",
+      wonAt: expect.any(String),
+      lostAt: null,
     });
 
-    const taskResponse = await call(`/deals/${created.data.id}/tasks`, {
-      method: "POST",
-      body: JSON.stringify({
-        title: "提案内容を電話で確認",
-        type: "call",
-        dueAt: "2026-08-01T03:00:00.000Z",
-        assignedUserId: userId,
-      }),
-    });
-    expect(taskResponse.status).toBe(201);
-    const task = (await taskResponse.json()) as {
-      data: { id: string; status: string; type: string };
-    };
-    expect(task.data).toMatchObject({ status: "open", type: "call" });
-    const completeResponse = await call(`/deals/${created.data.id}/tasks/${task.data.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: "completed" }),
-    });
-    expect(completeResponse.status).toBe(200);
-    expect(await completeResponse.json()).toMatchObject({
-      data: { status: "completed", completedAt: expect.any(String) },
-    });
-
-    const wonResponse = await call(`/deals/${created.data.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: "won" }),
-    });
-    expect(wonResponse.status).toBe(200);
-    expect(await wonResponse.json()).toMatchObject({
-      data: { status: "won", wonAt: expect.any(String), lostAt: null },
-    });
-
-    const list = (await (await call(`/deals?pipelineId=${pipeline.id}&status=all`)).json()) as {
-      data: {
-        items: Array<{ id: string }>;
-        summary: { openCount: number; wonCount: number; wonValue: number };
-      };
-    };
-    expect(list.data.items).toEqual([expect.objectContaining({ id: created.data.id })]);
-    expect(list.data.summary).toMatchObject({
+    const list = await client.deals.list({ pipelineId: pipeline.id, status: "all" });
+    expect(list.items).toEqual([expect.objectContaining({ id: created.id })]);
+    expect(list.summary).toMatchObject({
       openCount: 0,
       wonCount: 1,
       wonValue: 1_500_000,
     });
 
-    const detail = (await (await call(`/deals/${created.data.id}`)).json()) as {
-      data: { tasks: Array<{ id: string; status: string }> };
-    };
-    expect(detail.data.tasks).toEqual([
-      expect.objectContaining({ id: task.data.id, status: "completed" }),
-    ]);
-    expect((await call(`/deals/${created.data.id}/archive`, { method: "POST" })).status).toBe(200);
-    expect((await call(`/deals/${created.data.id}`)).status).toBe(404);
+    const detail = await client.deals.get({ id: created.id });
+    expect(detail.tasks).toEqual([expect.objectContaining({ id: task.id, status: "completed" })]);
+    await expect(client.deals.archive({ id: created.id })).resolves.toEqual({ archived: true });
+    await expect(client.deals.get({ id: created.id })).rejects.toMatchObject({
+      code: "DEAL_NOT_FOUND",
+      status: 404,
+    });
   });
 });

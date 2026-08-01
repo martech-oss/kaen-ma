@@ -1,7 +1,11 @@
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { createDatabase, uuidv7 } from "@kaenma/database";
+import { contract } from "@kaenma/orpc";
 
 import { enrollInactiveContacts } from "../src/campaigns/enrollment";
 import { sha256Hex } from "../src/crypto";
@@ -12,55 +16,46 @@ declare module "cloudflare:workers" {
   }
 }
 
+type Client = ContractRouterClient<typeof contract>;
+
 describe("Automation flows", () => {
   it("enrolls a newly created contact into a published welcome flow", async () => {
-    const fixture = await createApiFixture("welcome");
-    const campaign = await fixture.call("/campaigns", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "Welcome flow",
-        description: "Welcome new contacts",
-        timezone: "Asia/Tokyo",
-        nodes: [
-          {
-            id: "source",
-            type: "source",
-            position: { x: 0, y: 0 },
-            config: { source: "contact_created", reentry: "once" },
-          },
-          {
-            id: "score",
-            type: "action",
-            position: { x: 200, y: 0 },
-            config: { action: "change_score", amount: 5 },
-          },
-        ],
-        edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
-      }),
+    const { client, workspaceId } = await createWorkspaceClient();
+    const campaign = await client.campaigns.create({
+      name: "Welcome flow",
+      description: "Welcome new contacts",
+      timezone: "Asia/Tokyo",
+      nodes: [
+        {
+          id: "source",
+          type: "source",
+          position: { x: 0, y: 0 },
+          config: { source: "contact_created", reentry: "once" },
+        },
+        {
+          id: "score",
+          type: "action",
+          position: { x: 200, y: 0 },
+          config: { action: "change_score", amount: 5 },
+        },
+      ],
+      edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
     });
-    expect(campaign.status).toBe(201);
-    const campaignBody = (await campaign.json()) as { data: { id: string } };
-    expect(
-      (
-        await fixture.call(`/campaigns/${campaignBody.data.id}/publish`, {
-          method: "POST",
-        })
-      ).status,
-    ).toBe(200);
+    expect(campaign.id).toBeTruthy();
+    const published = await client.campaigns.publish({ id: campaign.id });
+    expect(published.publishedVersionId).toBeTruthy();
 
-    const contactResponse = await fixture.call("/contacts", {
-      method: "POST",
-      body: JSON.stringify({ email: "welcome@example.com" }),
+    const contact = await client.contacts.create({
+      email: "welcome@example.com",
+      customFields: {},
     });
-    expect(contactResponse.status).toBe(201);
-    const contact = (await contactResponse.json()) as { data: { id: string } };
     const enrollment = await env.DB.prepare(
       `SELECT ce.status, ce.current_node_id, ce.source_event_id, cj.status AS job_status
        FROM campaign_enrollments ce
        JOIN campaign_jobs cj ON cj.enrollment_id = ce.id
        WHERE ce.workspace_id = ? AND ce.campaign_id = ? AND ce.contact_id = ?`,
     )
-      .bind(fixture.workspaceId, campaignBody.data.id, contact.data.id)
+      .bind(workspaceId, campaign.id, contact.id)
       .first<{
         status: string;
         current_node_id: string;
@@ -76,13 +71,12 @@ describe("Automation flows", () => {
   });
 
   it("supports repeatable cart events and once-only inactivity enrollment", async () => {
-    const fixture = await createApiFixture("behavior");
-    const contactResponse = await fixture.call("/contacts", {
-      method: "POST",
-      body: JSON.stringify({ email: "behavior@example.com" }),
+    const { client, workspaceId } = await createWorkspaceClient();
+    const contact = await client.contacts.create({
+      email: "behavior@example.com",
+      customFields: {},
     });
-    const contact = (await contactResponse.json()) as { data: { id: string } };
-    const cartCampaignId = await createAndPublishSingleActionFlow(fixture.call, {
+    const cartCampaignId = await createAndPublishSingleActionFlow(client, {
       name: "Cart flow",
       source: {
         source: "api_event",
@@ -92,25 +86,22 @@ describe("Automation flows", () => {
     });
 
     for (let index = 0; index < 2; index += 1) {
-      const response = await fixture.call(`/contacts/${contact.data.id}/events`, {
-        method: "POST",
-        body: JSON.stringify({
-          eventName: "cart_abandoned",
-          properties: { cartId: `cart-${index}` },
-        }),
+      const recorded = await client.contacts.recordEvent({
+        id: contact.id,
+        eventName: "cart_abandoned",
+        properties: { cartId: `cart-${index}` },
       });
-      expect(response.status).toBe(202);
-      expect(await response.json()).toMatchObject({ data: { enrollmentCount: 1 } });
+      expect(recorded).toMatchObject({ enrollmentCount: 1 });
     }
     const cartEnrollments = await env.DB.prepare(
       `SELECT COUNT(*) AS count FROM campaign_enrollments
        WHERE workspace_id = ? AND campaign_id = ? AND contact_id = ?`,
     )
-      .bind(fixture.workspaceId, cartCampaignId, contact.data.id)
+      .bind(workspaceId, cartCampaignId, contact.id)
       .first<{ count: number }>();
     expect(cartEnrollments?.count).toBe(2);
 
-    const inactivityCampaignId = await createAndPublishSingleActionFlow(fixture.call, {
+    const inactivityCampaignId = await createAndPublishSingleActionFlow(client, {
       name: "Re-engagement flow",
       source: { source: "contact_inactive", days: 30, reentry: "once" },
     });
@@ -118,15 +109,10 @@ describe("Automation flows", () => {
       `UPDATE contacts SET created_at = ?, updated_at = ?
        WHERE workspace_id = ? AND id = ?`,
     )
-      .bind(
-        "2025-01-01T00:00:00.000Z",
-        "2025-01-01T00:00:00.000Z",
-        fixture.workspaceId,
-        contact.data.id,
-      )
+      .bind("2025-01-01T00:00:00.000Z", "2025-01-01T00:00:00.000Z", workspaceId, contact.id)
       .run();
     await env.DB.prepare("DELETE FROM contact_events WHERE workspace_id = ? AND contact_id = ?")
-      .bind(fixture.workspaceId, contact.data.id)
+      .bind(workspaceId, contact.id)
       .run();
 
     expect(
@@ -139,14 +125,14 @@ describe("Automation flows", () => {
       `SELECT COUNT(*) AS count FROM campaign_enrollments
        WHERE workspace_id = ? AND campaign_id = ? AND contact_id = ?`,
     )
-      .bind(fixture.workspaceId, inactivityCampaignId, contact.data.id)
+      .bind(workspaceId, inactivityCampaignId, contact.id)
       .first<{ count: number }>();
     expect(inactivityEnrollments?.count).toBe(1);
   });
 });
 
 async function createAndPublishSingleActionFlow(
-  call: (path: string, init?: RequestInit) => Promise<Response>,
+  client: Client,
   input: {
     name: string;
     source:
@@ -154,49 +140,40 @@ async function createAndPublishSingleActionFlow(
       | { source: "contact_inactive"; days: number; reentry: "once" };
   },
 ): Promise<string> {
-  const response = await call("/campaigns", {
-    method: "POST",
-    body: JSON.stringify({
-      name: input.name,
-      description: "",
-      timezone: "UTC",
-      nodes: [
-        {
-          id: "source",
-          type: "source",
-          position: { x: 0, y: 0 },
-          config: input.source,
-        },
-        {
-          id: "score",
-          type: "action",
-          position: { x: 200, y: 0 },
-          config: { action: "change_score", amount: 1 },
-        },
-      ],
-      edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
-    }),
+  const created = await client.campaigns.create({
+    name: input.name,
+    description: "",
+    timezone: "UTC",
+    nodes: [
+      {
+        id: "source",
+        type: "source",
+        position: { x: 0, y: 0 },
+        config: input.source,
+      },
+      {
+        id: "score",
+        type: "action",
+        position: { x: 200, y: 0 },
+        config: { action: "change_score", amount: 1 },
+      },
+    ],
+    edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
   });
-  expect(response.status).toBe(201);
-  const body = (await response.json()) as { data: { id: string } };
-  expect((await call(`/campaigns/${body.data.id}/publish`, { method: "POST" })).status).toBe(200);
-  return body.data.id;
+  expect(created.id).toBeTruthy();
+  const published = await client.campaigns.publish({ id: created.id });
+  expect(published.publishedVersionId).toBeTruthy();
+  return created.id;
 }
 
-async function createApiFixture(label: string): Promise<{
-  workspaceId: string;
-  call: (path: string, init?: RequestInit) => Promise<Response>;
-}> {
+async function createWorkspaceClient(): Promise<{ client: Client; workspaceId: string }> {
   const workspaceId = uuidv7();
   const userId = uuidv7();
-  const apiKeyId = uuidv7();
-  const prefix = `${label}flow01`.slice(0, 12).padEnd(12, "x");
+  const prefix = uuidv7().replaceAll("-", "").slice(0, 12);
   const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
-  const now = new Date().toISOString();
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO user
-       (id, name, email, email_verified, created_at, updated_at)
+      `INSERT INTO user (id, name, email, email_verified, created_at, updated_at)
        VALUES (?, 'Automation Owner', ?, 1, ?, ?)`,
     ).bind(userId, `${userId}@example.com`, Date.now(), Date.now()),
     env.DB.prepare(
@@ -207,20 +184,19 @@ async function createApiFixture(label: string): Promise<{
       `INSERT INTO api_keys
        (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, created_at)
        VALUES (?, ?, ?, 'Automation test', ?, ?, 'owner', ?)`,
-    ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
+    ).bind(
+      uuidv7(),
+      workspaceId,
+      userId,
+      prefix,
+      await sha256Hex(token),
+      new Date().toISOString(),
+    ),
   ]);
-  return {
-    workspaceId,
-    call: (path, init) => {
-      const headers = new Headers(init?.headers);
-      headers.set("authorization", `Bearer ${token}`);
-      headers.set("content-type", "application/json");
-      return exports.default.fetch(
-        new Request(`http://localhost:8787/api/v1${path}`, {
-          ...init,
-          headers,
-        }),
-      );
-    },
-  };
+  const link = new RPCLink({
+    url: "http://localhost:8787/api/rpc",
+    headers: { authorization: `Bearer ${token}` },
+    fetch: (request) => exports.default.fetch(request),
+  });
+  return { client: createORPCClient(link), workspaceId };
 }

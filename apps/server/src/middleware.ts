@@ -4,7 +4,6 @@ import { timingSafeEqual } from "@kaenma/channels";
 import { createDatabase, resolveMemberContext, type KaenmaDatabase } from "@kaenma/database";
 import type { WorkspaceContext, WorkspaceRole } from "@kaenma/shared";
 
-import { hasWorkspaceRole } from "./auth/authorization";
 import { createAuth } from "./auth/service";
 import { sha256Hex } from "./crypto";
 import type { AppEnvironment, SessionValue } from "./env";
@@ -49,26 +48,6 @@ export const requestContext = createMiddleware<AppEnvironment>(async (context, n
       "Content-Security-Policy",
       "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
     );
-  }
-});
-
-export const requireWorkspace = createMiddleware<AppEnvironment>(async (context, next) => {
-  try {
-    const access = await resolveWorkspaceAccess({
-      database: context.get("database"),
-      env: context.env,
-      headers: context.req.raw.headers,
-      method: context.req.method,
-      executionContext: context.executionCtx,
-    });
-    context.set("workspace", access.workspace);
-    context.set("session", access.session);
-    await next();
-  } catch (error) {
-    if (error instanceof WorkspaceAccessError) {
-      return apiError(context, error.status, error.code, error.message);
-    }
-    throw error;
   }
 });
 
@@ -127,16 +106,6 @@ export async function resolveWorkspaceAccess({
     );
   }
   return { workspace, session };
-}
-
-export function requireRole(minimum: WorkspaceRole) {
-  return createMiddleware<AppEnvironment>(async (context, next) => {
-    const workspace = context.get("workspace");
-    if (!hasWorkspaceRole(workspace.role, minimum)) {
-      return apiError(context, 403, "forbidden", "この操作を行う権限がありません");
-    }
-    await next();
-  });
 }
 
 export function apiError(

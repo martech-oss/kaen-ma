@@ -3,7 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod";
 
-import { KaenmaClient } from "@kaenma/sdk";
+import { createKaenmaClient } from "@kaenma/sdk";
 
 const baseUrl = process.env["KAENMA_URL"];
 const apiKey = process.env["KAENMA_API_KEY"];
@@ -12,7 +12,7 @@ if (!baseUrl || !apiKey) {
   process.exit(1);
 }
 
-const client = new KaenmaClient({ baseUrl, apiKey });
+const client = createKaenmaClient({ baseUrl, apiKey });
 const server = new McpServer({
   name: "kaenma",
   version: "0.1.0",
@@ -34,7 +34,10 @@ server.registerTool(
     },
   },
   async ({ query, limit }) => {
-    const result = await client.contacts.list({ query, limit });
+    const result = await client.contacts.list({
+      ...(query ? { query } : {}),
+      limit,
+    });
     return jsonResult(result);
   },
 );
@@ -46,7 +49,7 @@ server.registerTool(
     description: "Read aggregate contact, campaign, and delivery health.",
     inputSchema: {},
   },
-  async () => jsonResult((await client.dashboard.get()).data),
+  async () => jsonResult(await client.operations.dashboard()),
 );
 
 server.registerTool(
@@ -56,7 +59,7 @@ server.registerTool(
     description: "List campaigns and their current status. This tool is read-only.",
     inputSchema: {},
   },
-  async () => jsonResult((await client.campaigns.list()).data),
+  async () => jsonResult(await client.campaigns.list()),
 );
 
 server.registerTool(
@@ -66,7 +69,7 @@ server.registerTool(
     description: "Read the editable campaign graph.",
     inputSchema: { campaignId: z.string().min(1) },
   },
-  async ({ campaignId }) => jsonResult((await client.campaigns.getDraft(campaignId)).data),
+  async ({ campaignId }) => jsonResult(await client.campaigns.getDraft({ id: campaignId })),
 );
 
 server.registerTool(
@@ -82,8 +85,8 @@ server.registerTool(
   },
   async ({ campaignId, contactId }) => {
     const [campaign, contact] = await Promise.all([
-      client.campaigns.getDraft(campaignId),
-      client.contacts.get(contactId),
+      client.campaigns.getDraft({ id: campaignId }),
+      client.contacts.get({ id: contactId }),
     ]);
     const confirmationToken = crypto.randomUUID();
     pendingConfirmations.set(confirmationToken, {
@@ -98,11 +101,11 @@ server.registerTool(
         "This enrollment can trigger real email or webhook delivery. Call confirm_campaign_enrollment with confirmation exactly CONFIRM SEND.",
       campaign: {
         id: campaignId,
-        name: campaign.data.graph.name,
+        name: campaign.graph.name,
       },
       contact: {
-        id: contact.data.id,
-        email: contact.data.email,
+        id: contact.id,
+        email: contact.email,
       },
     });
   },
@@ -128,11 +131,12 @@ server.registerTool(
         isError: true,
       };
     }
-    const result = await client.campaigns.enroll(pending.campaignId, pending.contactId, {
-      idempotencyKey: confirmationToken,
+    const result = await client.campaigns.enroll({
+      id: pending.campaignId,
+      contactId: pending.contactId,
       sourceEventId: confirmationToken,
     });
-    return jsonResult(result.data);
+    return jsonResult(result);
   },
 );
 

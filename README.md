@@ -315,15 +315,18 @@ email,external_id,first_name,last_name,phone,stage
 
 その他の列はCustom Fieldとして保存されます。ExportはCSV数式インジェクションを避けるため、`=`, `+`, `-`, `@`から始まる値をエスケープします。
 
-## REST API
+## API
 
-APIのベースパスは `/api/v1` です。
-管理画面のBetter Auth以外の通信はoRPCの`/api/rpc`を使用します。
-Workspace・Contactには専用の型付きprocedureを使用し、その他の管理画面APIも
-oRPC adapterからWorker内の既存業務handlerを呼び出します。
-SDK・MCP・外部連携向けのREST APIは`/api/v1`で互換性を維持します。
-管理画面の取得・更新状態はTanStack Queryで管理し、oRPC contractからquery keyと
-query/mutation optionsを生成します。
+APIはoRPC contract(`packages/orpc`)を単一の正本として、同じprocedureを2つの入口で提供します。
+
+- `/api/rpc`: 管理画面用のRPCエンドポイント(TanStack Queryとの統合に使用)
+- `/api/v1`: SDK・MCP・外部連携用のREST(OpenAPI)エンドポイント。contractの`.route()`メタデータから提供
+
+手書きのRESTハンドラは存在しません。エンドポイントの追加はcontractへのprocedure追加だけで、
+両方の入口とOpenAPIドキュメント、SDKの型に同時に反映されます。
+
+レスポンスはcamelCaseのDTOをそのまま返します(`{data: ...}`エンベロープはありません)。
+エラーは`{defined, code, status, message, data}`のJSONで、contractに宣言されたコードを返します。
 
 OpenAPI:
 
@@ -377,10 +380,13 @@ APIではbodyやqueryの`workspace_id`を信用しません。Cookie Sessionま�
 
 ## TypeScript SDK
 
-```ts
-import { KaenmaClient } from "@kaenma/sdk";
+SDKはoRPC contractから型付けされ、`/api/v1`(OpenAPI)経由で呼び出します。
+サーバーと型がずれることはありません。
 
-const kaenma = new KaenmaClient({
+```ts
+import { createKaenmaClient } from "@kaenma/sdk";
+
+const kaenma = createKaenmaClient({
   baseUrl: "https://ma.example.com",
   apiKey: process.env.KAENMA_API_KEY!,
 });
@@ -397,6 +403,9 @@ await kaenma.contacts.create({
     plan: "pro",
   },
 });
+
+// contractに宣言されたエラーは型付きで判別できます
+import { isDefinedError } from "@kaenma/sdk";
 ```
 
 APIキーはWorkspace限定で、D1にはSHA-256ハッシュだけを保存します。平文キーは作成時に一度だけ表示されます。

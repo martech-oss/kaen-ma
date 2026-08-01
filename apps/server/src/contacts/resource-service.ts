@@ -18,7 +18,7 @@ import type { SegmentFilter } from "@kaenma/shared/segments";
 
 import { recordContactEvent } from "../events/service";
 import { resourceSlug } from "../http/helpers";
-import { updateSegmentMemberCount } from "../segments/routes";
+import { updateSegmentMemberCount } from "../segments/membership-service";
 import {
   nullablePrimitiveString,
   numericValue,

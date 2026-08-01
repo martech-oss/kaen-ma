@@ -1,33 +1,40 @@
 import { describe, expect, it } from "vitest";
 
-import { KaenmaClient } from "./index";
+import { createKaenmaClient } from "./index";
 
-describe("KaenmaClient", () => {
-  it("sends a workspace-scoped bearer token", async () => {
+describe("createKaenmaClient", () => {
+  it("sends a workspace-scoped bearer token to /api/v1", async () => {
     let authorization = "";
-    const client = new KaenmaClient({
+    let url = "";
+    const client = createKaenmaClient({
       baseUrl: "https://kaenma.example",
       apiKey: "kaenma_abcdefghijkl_secret-secret-secret-secret",
-      fetcher: async (_input, init) => {
-        authorization = new Headers(init?.headers).get("authorization") ?? "";
-        return Response.json({ data: [] });
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        authorization = request.headers.get("authorization") ?? "";
+        url = request.url;
+        return Response.json([]);
       },
     });
-    await client.contacts.list();
-    expect(authorization).toContain("kaenma_");
+    await client.segments.list();
+    expect(authorization).toBe("Bearer kaenma_abcdefghijkl_secret-secret-secret-secret");
+    expect(url).toBe("https://kaenma.example/api/v1/segments");
   });
 
-  it("rejects a successful response without an API envelope", async () => {
-    const client = new KaenmaClient({
+  it("surfaces contract-defined errors as typed ORPCErrors", async () => {
+    const client = createKaenmaClient({
       baseUrl: "https://kaenma.example",
-      apiKey: "kaenma_test_key",
-      fetcher: async () => Response.json(null),
+      apiKey: "kaenma_abcdefghijkl_secret-secret-secret-secret",
+      fetch: async () =>
+        Response.json(
+          { defined: true, code: "UNAUTHORIZED", status: 401, message: "ログインが必要です" },
+          { status: 401 },
+        ),
     });
-
-    await expect(client.dashboard.get()).rejects.toMatchObject({
-      name: "KaenmaApiError",
-      code: "invalid_response",
-      status: 200,
+    await expect(client.workspace.get()).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      status: 401,
+      defined: true,
     });
   });
 });

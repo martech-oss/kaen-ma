@@ -1,7 +1,11 @@
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { ContactRepository, reserveIdempotencyKey, uuidv7 } from "@kaenma/database";
+import { contract } from "@kaenma/orpc";
 
 import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
 import { sha256Hex } from "../src/crypto";
@@ -204,132 +208,82 @@ describe("Kaenma Worker", () => {
          VALUES (?, ?, ?, 'Contacts test', ?, ?, 'owner', ?)`,
       ).bind(apiKeyId, workspaceId, userId, prefix, await sha256Hex(token), now),
     ]);
-    const call = (path: string, init?: RequestInit) => {
-      const headers = new Headers(init?.headers);
-      if (!headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
-      if (!headers.has("content-type")) headers.set("content-type", "application/json");
-      return exports.default.fetch(
-        new Request(`http://localhost:8787/api/v1${path}`, {
-          ...init,
-          headers,
-        }),
-      );
-    };
+    const link = new RPCLink({
+      url: "http://localhost:8787/api/rpc",
+      headers: { authorization: `Bearer ${token}` },
+      fetch: (request) => exports.default.fetch(request),
+    });
+    const client: ContractRouterClient<typeof contract> = createORPCClient(link);
 
-    const tagResponse = await call("/tags", {
-      method: "POST",
-      body: JSON.stringify({ name: "VIP", color: "#6366f1" }),
+    const tag = await client.contactResources.createTag({ name: "VIP", color: "#6366f1" });
+    expect(tag.id).toBeTruthy();
+    const list = await client.contactResources.createList({
+      name: "Customers",
+      description: "Paid customers",
     });
-    expect(tagResponse.status).toBe(201);
-    const tag = (await tagResponse.json()) as { data: { id: string; slug: string } };
-    const listResponse = await call("/contact-lists", {
-      method: "POST",
-      body: JSON.stringify({ name: "Customers", description: "Paid customers" }),
-    });
-    expect(listResponse.status).toBe(201);
-    const list = (await listResponse.json()) as { data: { id: string; slug: string } };
-    const accountResponse = await call("/accounts", {
-      method: "POST",
-      body: JSON.stringify({ name: "Acme", domain: "acme.example" }),
-    });
-    expect(accountResponse.status).toBe(201);
-    const account = (await accountResponse.json()) as {
-      data: { id: string; name: string };
-    };
+    expect(list.id).toBeTruthy();
+    const account = await client.accounts.create({ name: "Acme", domain: "acme.example" });
+    expect(account.name).toBe("Acme");
 
-    const contactResponse = await call("/contacts", {
-      method: "POST",
-      body: JSON.stringify({
-        email: "api-contact@example.com",
-        firstName: "API",
-        stage: "customer",
+    const contact = await client.contacts.create({
+      email: "api-contact@example.com",
+      firstName: "API",
+      stage: "customer",
+      customFields: {},
+    });
+    await expect(
+      client.contactResources.addTag({ contactId: contact.id, resourceId: tag.id }),
+    ).resolves.toEqual({ assigned: true });
+    await expect(
+      client.contactResources.addList({ contactId: contact.id, resourceId: list.id }),
+    ).resolves.toEqual({ assigned: true });
+    await expect(
+      client.accounts.assignContact({
+        id: account.id,
+        contactId: contact.id,
+        title: "Marketing Lead",
+        isPrimary: true,
       }),
+    ).resolves.toEqual({ assigned: true });
+    const scored = await client.contactResources.adjustScore({
+      contactId: contact.id,
+      delta: 75,
+      reason: "Qualified lead",
     });
-    expect(contactResponse.status).toBe(201);
-    const contact = (await contactResponse.json()) as { data: { id: string } };
-    expect(
-      (
-        await call(`/contacts/${contact.data.id}/tags`, {
-          method: "POST",
-          body: JSON.stringify({ tagId: tag.data.id }),
-        })
-      ).status,
-    ).toBe(201);
-    expect(
-      (
-        await call(`/contacts/${contact.data.id}/lists`, {
-          method: "POST",
-          body: JSON.stringify({ listId: list.data.id }),
-        })
-      ).status,
-    ).toBe(201);
-    expect(
-      (
-        await call(`/accounts/${account.data.id}/contacts`, {
-          method: "POST",
-          body: JSON.stringify({
-            contactId: contact.data.id,
-            title: "Marketing Lead",
-            isPrimary: true,
-          }),
-        })
-      ).status,
-    ).toBe(201);
-    expect(
-      (
-        await call(`/contacts/${contact.data.id}/score`, {
-          method: "POST",
-          body: JSON.stringify({ delta: 75, reason: "Qualified lead" }),
-        })
-      ).status,
-    ).toBe(200);
+    expect(scored.score).toBe(75);
 
-    const segmentResponse = await call("/segments", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "Tokyo VIP",
-        slug: "tokyo-vip",
-        kind: "dynamic",
-        filter: {
-          kind: "group",
-          combinator: "and",
-          children: [
-            { kind: "condition", field: "tag", operator: "eq", value: tag.data.slug },
-            { kind: "condition", field: "list", operator: "eq", value: list.data.slug },
-            { kind: "condition", field: "score", operator: "gte", value: 50 },
-          ],
-        },
-      }),
+    const segment = await client.segments.create({
+      name: "Tokyo VIP",
+      slug: "tokyo-vip",
+      kind: "dynamic",
+      filter: {
+        kind: "group",
+        combinator: "and",
+        children: [
+          { kind: "condition", field: "tag", operator: "eq", value: tag.slug },
+          { kind: "condition", field: "list", operator: "eq", value: list.slug },
+          { kind: "condition", field: "score", operator: "gte", value: 50 },
+        ],
+      },
     });
-    expect(segmentResponse.status).toBe(201);
-    const segment = (await segmentResponse.json()) as { data: { id: string } };
+    expect(segment.id).toBeTruthy();
 
-    const variableResponse = await call("/message-variables", {
-      method: "POST",
-      body: JSON.stringify({
+    const variable = await client.emails.createVariable({
+      key: "brand_name",
+      name: "Brand name",
+      value: "Kaenma",
+      description: "Shared brand label",
+    });
+    expect(variable.id).toBeTruthy();
+    await expect(
+      client.emails.updateVariable({
+        id: variable.id,
         key: "brand_name",
         name: "Brand name",
-        value: "Kaenma",
-        description: "Shared brand label",
+        value: "Kaenma MA",
+        description: "Updated shared brand label",
       }),
-    });
-    expect(variableResponse.status).toBe(201);
-    const variable = (await variableResponse.json()) as {
-      data: { id: string };
-    };
-    expect(
-      (
-        await call(`/message-variables/${variable.data.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            key: "brand_name",
-            name: "Brand name",
-            value: "Kaenma MA",
-            description: "Updated shared brand label",
-          }),
-        })
-      ).status,
-    ).toBe(200);
+    ).resolves.toEqual({ updated: true });
 
     const templateId = uuidv7();
     await env.DB.prepare(
@@ -355,167 +309,97 @@ describe("Kaenma Worker", () => {
         now,
       )
       .run();
-    const templateDetailResponse = await call(`/email-templates/${templateId}`);
-    expect(templateDetailResponse.status).toBe(200);
-    const templateDetail = (await templateDetailResponse.json()) as {
-      data: {
-        resend_alias: string;
-        subject: string;
-        remote_status: string;
-        sendable: boolean;
-      };
-    };
-    expect(templateDetail.data).toMatchObject({
-      resend_alias: "welcome",
+    const templates = await client.emails.listTemplates({ archived: false });
+    expect(templates.find((template) => template.id === templateId)).toMatchObject({
+      resendAlias: "welcome",
       subject: "{{{MESSAGE_BRAND_NAME}}} update",
-      remote_status: "published",
+      remoteStatus: "published",
       sendable: true,
     });
 
-    const broadcastResponse = await call("/broadcasts", {
-      method: "POST",
-      body: JSON.stringify({
-        name: "August update",
-        segmentId: segment.data.id,
+    const broadcast = await client.emails.createCampaign({
+      name: "August update",
+      segmentId: segment.id,
+      templateId,
+      topicId: null,
+      scheduledAt: null,
+    });
+    await expect(
+      client.emails.updateCampaign({
+        id: broadcast.id,
+        name: "August update edited",
+        segmentId: segment.id,
         templateId,
         topicId: null,
         scheduledAt: null,
       }),
-    });
-    expect(broadcastResponse.status).toBe(201);
-    const broadcast = (await broadcastResponse.json()) as {
-      data: { id: string };
-    };
-    expect(
-      (
-        await call(`/broadcasts/${broadcast.data.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({
-            name: "August update edited",
-            segmentId: segment.data.id,
-            templateId,
-            topicId: null,
-            scheduledAt: null,
-          }),
-        })
-      ).status,
-    ).toBe(200);
-    const broadcastsResponse = await call("/broadcasts");
-    expect(broadcastsResponse.status).toBe(200);
-    const broadcasts = (await broadcastsResponse.json()) as {
-      data: Array<{ id: string; name: string; segment_name: string }>;
-    };
-    expect(broadcasts.data).toEqual([
+    ).resolves.toEqual({ updated: true });
+    const broadcasts = await client.emails.listCampaigns({ archived: false });
+    expect(broadcasts).toEqual([
       expect.objectContaining({
-        id: broadcast.data.id,
+        id: broadcast.id,
         name: "August update edited",
-        segment_name: "Tokyo VIP",
+        segmentName: "Tokyo VIP",
       }),
     ]);
-    expect(
-      (
-        await call(`/broadcasts/${broadcast.data.id}/archive`, {
-          method: "POST",
-        })
-      ).status,
-    ).toBe(200);
-    const archivedBroadcasts = (await (await call("/broadcasts?archived=true")).json()) as {
-      data: Array<{ id: string }>;
-    };
-    expect(archivedBroadcasts.data).toEqual([expect.objectContaining({ id: broadcast.data.id })]);
-    expect(
-      (
-        await call(`/email-templates/${templateId}/archive`, {
-          method: "POST",
-        })
-      ).status,
-    ).toBe(200);
-    expect(
-      (
-        await call(`/message-variables/${variable.data.id}/archive`, {
-          method: "POST",
-        })
-      ).status,
-    ).toBe(200);
-
-    const filteredResponse = await call(
-      `/contacts?tagId=${tag.data.id}&listId=${list.data.id}` +
-        `&accountId=${account.data.id}&segmentId=${segment.data.id}&scoreMin=50`,
-    );
-    expect(filteredResponse.status).toBe(200);
-    const filtered = (await filteredResponse.json()) as {
-      data: Array<{
-        id: string;
-        tags: unknown[];
-        lists: unknown[];
-        accounts: unknown[];
-      }>;
-      meta: { total: number };
-    };
-    expect(filtered.meta.total).toBe(1);
-    expect(filtered.data[0]).toMatchObject({
-      id: contact.data.id,
-      tags: [expect.objectContaining({ id: tag.data.id })],
-      lists: [expect.objectContaining({ id: list.data.id })],
-      accounts: [expect.objectContaining({ id: account.data.id })],
+    await expect(client.emails.archiveCampaign({ id: broadcast.id })).resolves.toEqual({
+      archived: true,
+    });
+    const archivedBroadcasts = await client.emails.listCampaigns({ archived: true });
+    expect(archivedBroadcasts).toEqual([expect.objectContaining({ id: broadcast.id })]);
+    await expect(client.emails.archiveTemplate({ id: templateId })).resolves.toEqual({
+      archived: true,
+    });
+    await expect(client.emails.archiveVariable({ id: variable.id })).resolves.toEqual({
+      archived: true,
     });
 
-    const profileResponse = await call(`/contacts/${contact.data.id}/profile`);
-    expect(profileResponse.status).toBe(200);
-    const profile = (await profileResponse.json()) as {
-      data: {
-        contact: { score: number };
-        tags: unknown[];
-        lists: unknown[];
-        accounts: unknown[];
-        scoreEvents: unknown[];
-      };
-    };
-    expect(profile.data.contact.score).toBe(75);
-    expect(profile.data.tags).toHaveLength(1);
-    expect(profile.data.lists).toHaveLength(1);
-    expect(profile.data.accounts).toHaveLength(1);
-    expect(profile.data.scoreEvents).toHaveLength(1);
+    const filtered = await client.contacts.list({
+      tagId: tag.id,
+      listId: list.id,
+      accountId: account.id,
+      segmentId: segment.id,
+      scoreMin: 50,
+    });
+    expect(filtered.total).toBe(1);
+    expect(filtered.items[0]).toMatchObject({
+      id: contact.id,
+      tags: [expect.objectContaining({ id: tag.id })],
+      lists: [expect.objectContaining({ id: list.id })],
+      accounts: [expect.objectContaining({ id: account.id })],
+    });
 
-    const accountDetailResponse = await call(`/accounts/${account.data.id}`);
-    expect(accountDetailResponse.status).toBe(200);
-    const accountDetail = (await accountDetailResponse.json()) as {
-      data: { name: string; contacts: Array<{ id: string; title: string }> };
-    };
-    expect(accountDetail.data.name).toBe("Acme");
-    expect(accountDetail.data.contacts).toEqual([
+    const profile = await client.contactResources.profile({ contactId: contact.id });
+    expect(profile.contact.score).toBe(75);
+    expect(profile.tags).toHaveLength(1);
+    expect(profile.lists).toHaveLength(1);
+    expect(profile.accounts).toHaveLength(1);
+    expect(profile.scoreEvents).toHaveLength(1);
+
+    const accountDetail = await client.accounts.get({ id: account.id });
+    expect(accountDetail.name).toBe("Acme");
+    expect(accountDetail.contacts).toEqual([
       expect.objectContaining({
-        id: contact.data.id,
+        id: contact.id,
         title: "Marketing Lead",
       }),
     ]);
 
-    expect((await call(`/contacts/${contact.data.id}`, { method: "DELETE" })).status).toBe(200);
-    expect(
-      (
-        await call(`/contacts/${contact.data.id}`, {
-          method: "PATCH",
-          body: JSON.stringify({ firstName: "Blocked" }),
-        })
-      ).status,
-    ).toBe(409);
-    expect(
-      (
-        await call(`/contacts/${contact.data.id}/tags/${tag.data.id}`, {
-          method: "DELETE",
-        })
-      ).status,
-    ).toBe(409);
-    expect((await call(`/contacts/${contact.data.id}/restore`, { method: "POST" })).status).toBe(
-      200,
-    );
-    expect(
-      (
-        await call(`/contacts/${contact.data.id}/tags/${tag.data.id}`, {
-          method: "DELETE",
-        })
-      ).status,
-    ).toBe(200);
+    await expect(client.contacts.archive({ id: contact.id })).resolves.toEqual({
+      archived: true,
+    });
+    await expect(
+      client.contacts.update({ id: contact.id, firstName: "Blocked" }),
+    ).rejects.toMatchObject({ code: "CONTACT_ARCHIVED", status: 409 });
+    await expect(
+      client.contactResources.removeTag({ contactId: contact.id, resourceId: tag.id }),
+    ).rejects.toMatchObject({ code: "RELATION_REJECTED", status: 409 });
+    await expect(client.contactResources.restore({ contactId: contact.id })).resolves.toEqual({
+      restored: true,
+    });
+    await expect(
+      client.contactResources.removeTag({ contactId: contact.id, resourceId: tag.id }),
+    ).resolves.toEqual({ removed: true });
   });
 
   it("reserves a delivery idempotency key only once", async () => {

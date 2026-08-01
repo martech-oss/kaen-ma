@@ -8,7 +8,7 @@ import { isRecord } from "../values";
 import { getCampaignAnalytics } from "./analytics-service";
 import { enrollContactManually } from "./enrollment";
 import { listCampaigns, normalizeCampaignStatus } from "./list-service";
-import { campaignTrigger } from "./routes";
+import { campaignTrigger } from "./triggers";
 
 export const listCampaignsProcedure = authed.campaigns.list.handler(async ({ context }) => {
   return listCampaigns(context.database, context.workspace.workspaceId);

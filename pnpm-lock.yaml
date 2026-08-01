@@ -153,9 +153,15 @@ importers:
       '@kaenma/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@orpc/openapi':
+        specifier: 1.14.13
+        version: 1.14.13(ws@8.21.0)
       '@orpc/server':
         specifier: ^1.14.13
         version: 1.14.13(ws@8.21.0)
+      '@orpc/zod':
+        specifier: 1.14.13
+        version: 1.14.13(@orpc/contract@1.14.13)(@orpc/server@1.14.13(ws@8.21.0))(ws@8.21.0)(zod@4.4.3)
       better-auth:
         specifier: ^1.6.25
         version: 1.6.25(@cloudflare/workers-types@5.20260728.1)(@tanstack/react-start@1.168.32(esbuild@0.28.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rollup@4.62.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0)))(better-sqlite3@13.0.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@cloudflare/workers-types@5.20260728.1)(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.1)(kysely@0.29.4))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(vitest@4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0)))
@@ -348,9 +354,21 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@kaenma/orpc':
+        specifier: workspace:*
+        version: link:../orpc
       '@kaenma/shared':
         specifier: workspace:*
         version: link:../shared
+      '@orpc/client':
+        specifier: 1.14.13
+        version: 1.14.13
+      '@orpc/contract':
+        specifier: 1.14.13
+        version: 1.14.13
+      '@orpc/openapi-client':
+        specifier: 1.14.13
+        version: 1.14.13
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -361,9 +379,6 @@ importers:
 
   packages/shared:
     dependencies:
-      '@asteasolutions/zod-to-openapi':
-        specifier: ^9.1.0
-        version: 9.1.0(zod@4.4.3)
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -376,11 +391,6 @@ importers:
         version: 4.1.10(@types/node@24.13.3)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.1)(yaml@2.9.0))
 
 packages:
-
-  '@asteasolutions/zod-to-openapi@9.1.0':
-    resolution: {integrity: sha512-pLMeRgRYS7/vZIgAAkOe2P6+XGTifR1MT9pqDoxZ11EmcJJ+DPmdPqLN8ZZF4U8R9KHCCQCS9c2wtuE8wSrfkw==}
-    peerDependencies:
-      zod: ^4.0.0
 
   '@babel/code-frame@7.27.1':
     resolution: {integrity: sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg==}
@@ -1448,6 +1458,15 @@ packages:
   '@orpc/interop@1.14.13':
     resolution: {integrity: sha512-5fw58f9xK6thcMMXX8aG3LFzKsfObZwHTyrt7/8jDIKHWUFalqIhs5kuEICmx7D+PbEWnlcdFt31oxN1vkSGFw==}
 
+  '@orpc/json-schema@1.14.13':
+    resolution: {integrity: sha512-DZOARoSCRBaVso9DDeO+9hJ5Hqae8mYiDdk0m6IcRkgpyLvmAelnv3zjTJnsMSbpub1ZjvjpuSF2HBxIF/8Skg==}
+
+  '@orpc/openapi-client@1.14.13':
+    resolution: {integrity: sha512-QDdjD/eSudscLkPsZp4w3TlhEvjt6W0GTgqc7yPTjA4DS7NO86uKX4tRxf39VQ0kr+OE/8obJmNtXXxUnBwYLw==}
+
+  '@orpc/openapi@1.14.13':
+    resolution: {integrity: sha512-LU6hGEgxsUzYup/oDxirzoTR+zVJmvaqqmhTJtce67V8XNjsQO0prrgaC/N1s77l43qz8eHiPpqYxm8HQCUgUA==}
+
   '@orpc/server@1.14.13':
     resolution: {integrity: sha512-4By45qm9Rzm/aWxJ7FZ3VKRFgbgNe2AzWqKrZOaQGl3wF/+nva58Srh3wWeHN1jqqEVE3Sz533IASkaUtfozMQ==}
     peerDependencies:
@@ -1495,6 +1514,13 @@ packages:
     peerDependencies:
       '@orpc/client': 1.14.13
       '@tanstack/query-core': '>=5.80.2'
+
+  '@orpc/zod@1.14.13':
+    resolution: {integrity: sha512-jNuOXX2aElzgUdCTyp6dF+sFwPFVI5wegdZUPQ/5KtiQIKXuvNMAPaUJRMawKHuH61wcYCfO1X/K3LMm08L1xw==}
+    peerDependencies:
+      '@orpc/contract': 1.14.13
+      '@orpc/server': 1.14.13
+      zod: '>=3.25.0'
 
   '@oxfmt/binding-android-arm-eabi@0.61.0':
     resolution: {integrity: sha512-BaS+1OVvg9sr+Xav0+KdWedQRcAzrdoEcwMZeqoc2F6ieC1s/t5eM35YQoRPQ7vAqkZ+p3tbQb1r9I9mrV5oGA==}
@@ -3071,6 +3097,10 @@ packages:
   escape-html@1.0.3:
     resolution: {integrity: sha512-NiSupZ4OeuGwr68lGIeym/ksIZMJodUGOSCZ/FSnTxcrekbvqrgdUxlJOMpijaKZVjAJrWrGs/6Jy8OMuyj9ow==}
 
+  escape-string-regexp@5.0.0:
+    resolution: {integrity: sha512-/veY75JbMK4j1yjvuUxuVsiS/hr/4iHs9FTT6cgTexxdE0Ly/glccBAkloH/DofkjRbZU3bnoj38mOmhkZ0lHw==}
+    engines: {node: '>=12'}
+
   esprima@4.0.1:
     resolution: {integrity: sha512-eGuFFw7Upda+g4p+QHvnW0RyTX/SVeJBDM/gCtMARO0cLuT2HcEKnTPvhjV6aGeqrCB/sbNop0Kszm0jsaWU4A==}
     engines: {node: '>=4'}
@@ -3716,9 +3746,6 @@ packages:
 
   openapi-types@12.1.3:
     resolution: {integrity: sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw==}
-
-  openapi3-ts@4.6.0:
-    resolution: {integrity: sha512-a4sfn6L2sIShhtzJqmjGrARvxAW/3F2BJDdyRVvNF9VhAsZSh5hSyI3a9TNvmzBxXmq66nY5LNT5bQcBxYAZZg==}
 
   ora@8.2.0:
     resolution: {integrity: sha512-weP+BZ8MVNnlCm8c0Qdc1WSWq4Qn7I+9CJGm7Qali6g44e/PUzbjNqJX5NJ9ljlNMosfJvg1fKEGILklK9cwnw==}
@@ -4435,6 +4462,9 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  wildcard-match@5.1.4:
+    resolution: {integrity: sha512-wldeCaczs8XXq7hj+5d/F38JE2r7EXgb6WQDM84RVwxy81T/sxB5e9+uZLK9Q9oNz1mlvjut+QtvgaOQFPVq/g==}
+
   workerd@1.20260722.1:
     resolution: {integrity: sha512-NycKuc1x2onvsRfGGpM093vRlLFU2zHDAM0+APpccfg4+gZxDGCH27RmdDvkeBuoZyYqgLo3oAfF6re4mvC3vQ==}
     engines: {node: '>=16'}
@@ -4532,11 +4562,6 @@ packages:
         optional: true
 
 snapshots:
-
-  '@asteasolutions/zod-to-openapi@9.1.0(zod@4.4.3)':
-    dependencies:
-      openapi3-ts: 4.6.0
-      zod: 4.4.3
 
   '@babel/code-frame@7.27.1':
     dependencies:
@@ -5420,6 +5445,46 @@ snapshots:
 
   '@orpc/interop@1.14.13': {}
 
+  '@orpc/json-schema@1.14.13(ws@8.21.0)':
+    dependencies:
+      '@orpc/contract': 1.14.13
+      '@orpc/interop': 1.14.13
+      '@orpc/openapi': 1.14.13(ws@8.21.0)
+      '@orpc/server': 1.14.13(ws@8.21.0)
+      '@orpc/shared': 1.14.13
+      json-schema-typed: 8.0.2
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - crossws
+      - fastify
+      - ws
+
+  '@orpc/openapi-client@1.14.13':
+    dependencies:
+      '@orpc/client': 1.14.13
+      '@orpc/contract': 1.14.13
+      '@orpc/shared': 1.14.13
+      '@orpc/standard-server': 1.14.13
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+
+  '@orpc/openapi@1.14.13(ws@8.21.0)':
+    dependencies:
+      '@orpc/client': 1.14.13
+      '@orpc/contract': 1.14.13
+      '@orpc/interop': 1.14.13
+      '@orpc/openapi-client': 1.14.13
+      '@orpc/server': 1.14.13(ws@8.21.0)
+      '@orpc/shared': 1.14.13
+      '@orpc/standard-server': 1.14.13
+      json-schema-typed: 8.0.2
+      rou3: 0.7.12
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - crossws
+      - fastify
+      - ws
+
   '@orpc/server@1.14.13(ws@8.21.0)':
     dependencies:
       '@orpc/client': 1.14.13
@@ -5496,6 +5561,22 @@ snapshots:
       '@tanstack/query-core': 5.101.4
     transitivePeerDependencies:
       - '@opentelemetry/api'
+
+  '@orpc/zod@1.14.13(@orpc/contract@1.14.13)(@orpc/server@1.14.13(ws@8.21.0))(ws@8.21.0)(zod@4.4.3)':
+    dependencies:
+      '@orpc/contract': 1.14.13
+      '@orpc/json-schema': 1.14.13(ws@8.21.0)
+      '@orpc/openapi': 1.14.13(ws@8.21.0)
+      '@orpc/server': 1.14.13(ws@8.21.0)
+      '@orpc/shared': 1.14.13
+      escape-string-regexp: 5.0.0
+      wildcard-match: 5.1.4
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - crossws
+      - fastify
+      - ws
 
   '@oxfmt/binding-android-arm-eabi@0.61.0':
     optional: true
@@ -6812,6 +6893,8 @@ snapshots:
 
   escape-html@1.0.3: {}
 
+  escape-string-regexp@5.0.0: {}
+
   esprima@4.0.1: {}
 
   estree-walker@3.0.3:
@@ -7383,10 +7466,6 @@ snapshots:
       is-wsl: 2.2.0
 
   openapi-types@12.1.3: {}
-
-  openapi3-ts@4.6.0:
-    dependencies:
-      yaml: 2.9.0
 
   ora@8.2.0:
     dependencies:
@@ -8146,6 +8225,8 @@ snapshots:
       siginfo: 2.0.0
       stackback: 0.0.2
 
+  wildcard-match@5.1.4: {}
+
   workerd@1.20260722.1:
     optionalDependencies:
       '@cloudflare/workerd-darwin-64': 1.20260722.1
@@ -8206,7 +8287,8 @@ snapshots:
 
   yallist@3.1.1: {}
 
-  yaml@2.9.0: {}
+  yaml@2.9.0:
+    optional: true
 
   yocto-spinner@1.2.2:
     dependencies:

@@ -10,9 +10,28 @@ import type {
   SubscriptionTopicOption,
 } from "@kaenma/shared/emails";
 
-import { hasValidBroadcastResources } from "../broadcasts/routes";
 import type { RuntimeEnv } from "../env";
 import { nullablePrimitiveString, numericValue, primitiveString } from "../values";
+
+export async function hasValidBroadcastResources(
+  database: KaenmaDatabase,
+  workspaceId: string,
+  segmentId: string,
+  templateId: string,
+): Promise<boolean> {
+  const valid = await database
+    .prepare(
+      `SELECT s.id
+       FROM segments s JOIN email_templates et
+         ON et.id = ? AND et.workspace_id = s.workspace_id
+       WHERE s.workspace_id = ? AND s.id = ? AND et.purpose = 'marketing'
+         AND et.archived_at IS NULL AND et.remote_status = 'published'
+         AND et.sync_error IS NULL`,
+    )
+    .bind(templateId, workspaceId, segmentId)
+    .first();
+  return valid !== null;
+}
 
 export * from "./template-service";
 

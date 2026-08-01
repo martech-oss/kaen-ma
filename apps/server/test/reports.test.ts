@@ -1,7 +1,11 @@
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 import { uuidv7 } from "@kaenma/database";
+import { contract } from "@kaenma/orpc";
 
 import { sha256Hex } from "../src/crypto";
 
@@ -186,15 +190,15 @@ describe("Reporting", () => {
       ).bind(uuidv7(), workspaceId, at, at),
     ]);
 
-    const call = (path: string) =>
-      exports.default.fetch(
-        new Request(`http://localhost:8787/api/v1${path}`, {
-          headers: { authorization: `Bearer ${token}` },
-        }),
-      );
-    const query = "?from=2026-07-01&to=2026-07-31";
+    const link = new RPCLink({
+      url: "http://localhost:8787/api/rpc",
+      headers: { authorization: `Bearer ${token}` },
+      fetch: (request) => exports.default.fetch(request),
+    });
+    const client: ContractRouterClient<typeof contract> = createORPCClient(link);
+    const range = { from: "2026-07-01", to: "2026-07-31" };
 
-    const contacts = await reportJson(call, `/reports/contacts${query}`);
+    const contacts = await client.reports.contacts(range);
     expect(contacts).toMatchObject({
       category: "contacts",
       summary: {
@@ -205,7 +209,7 @@ describe("Reporting", () => {
       },
     });
 
-    const automations = await reportJson(call, `/reports/automations${query}`);
+    const automations = await client.reports.automations(range);
     expect(automations).toMatchObject({
       category: "automations",
       summary: {
@@ -218,7 +222,7 @@ describe("Reporting", () => {
       },
     });
 
-    const emails = await reportJson(call, `/reports/emails${query}`);
+    const emails = await client.reports.emails(range);
     expect(emails).toMatchObject({
       category: "emails",
       summary: {
@@ -231,7 +235,7 @@ describe("Reporting", () => {
       },
     });
 
-    const deals = await reportJson(call, `/reports/deals${query}&currency=JPY`);
+    const deals = await client.reports.deals({ ...range, currency: "JPY" });
     expect(deals).toMatchObject({
       category: "deals",
       currency: "JPY",
@@ -245,7 +249,7 @@ describe("Reporting", () => {
       },
     });
 
-    const site = await reportJson(call, `/reports/site${query}`);
+    const site = await client.reports.site(range);
     expect(site).toMatchObject({
       category: "site",
       summary: {
@@ -259,16 +263,10 @@ describe("Reporting", () => {
       },
     });
 
-    expect((await call("/reports/contacts?from=2025-01-01&to=2026-07-31")).status).toBe(422);
+    // The range refine (366-day cap) rejects during input validation; the
+    // REST route surfaced this as 422 while oRPC reports BAD_REQUEST.
+    await expect(
+      client.reports.contacts({ from: "2025-01-01", to: "2026-07-31" }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });
-
-async function reportJson(
-  call: (path: string) => Promise<Response>,
-  path: string,
-): Promise<Record<string, unknown>> {
-  const response = await call(path);
-  expect(response.status).toBe(200);
-  const payload = (await response.json()) as { data: Record<string, unknown> };
-  return payload.data;
-}
