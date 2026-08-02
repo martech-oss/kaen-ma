@@ -21,6 +21,7 @@ import {
   type DealTaskCreate,
   type DealTaskType,
 } from "@/features/deals/deal-api";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatMonthDayTime, toDateTimeLocal } from "@/lib/format";
 import { getFormString } from "@/lib/utils";
 
@@ -47,8 +48,7 @@ export function DealForm({
     "";
   const [pipelineId, setPipelineId] = useState(firstPipelineId);
   const [stageId, setStageId] = useState(deal?.stageId ?? "");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("商談を保存できませんでした");
   const stages = useMemo(
     () => options.pipelines.find((pipeline) => pipeline.id === pipelineId)?.stages ?? [],
     [options.pipelines, pipelineId],
@@ -60,10 +60,8 @@ export function DealForm({
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      await onSubmit({
+    await run(() =>
+      onSubmit({
         name: getFormString(form, "name").trim(),
         pipelineId,
         stageId: selectedStageId,
@@ -75,12 +73,8 @@ export function DealForm({
         companyId: getFormString(form, "companyId") || null,
         expectedCloseDate: getFormString(form, "expectedCloseDate") || null,
         description: getFormString(form, "description").trim(),
-      });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "商談を保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+      }),
+    );
   }
 
   return (
@@ -206,28 +200,21 @@ export function DealTaskForm({
   submitLabel: string;
   onSubmit: (values: DealTaskCreate) => Promise<void>;
 }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("タスクを保存できませんでした");
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      const dueAt = getFormString(form, "dueAt");
-      await onSubmit({
+    const dueAt = getFormString(form, "dueAt");
+    await run(() =>
+      onSubmit({
         title: getFormString(form, "title").trim(),
         type: getFormString(form, "type") as DealTaskType,
         notes: getFormString(form, "notes").trim(),
         dueAt: dueAt ? new Date(dueAt).toISOString() : null,
         assignedUserId: getFormString(form, "assignedUserId") || null,
-      });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "タスクを保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+      }),
+    );
   }
 
   return (

@@ -13,7 +13,8 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { AppDialog, EmptyState, PageLayout } from "@/components/app-ui";
+import { PageLayout } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,19 +27,11 @@ import {
 } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   companiesQueryOptions,
   companyContactOptionsQueryOptions,
   companyQueryOptions,
   type CompanyContactDto,
+  type CompanySummary,
 } from "@/features/companies/company-api";
 import { formatDate } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
@@ -68,6 +61,45 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
     }, 180);
     return () => window.clearTimeout(timer);
   }, [initialQuery, navigate, query]);
+
+  const columns: DataTableColumn<CompanySummary>[] = [
+    {
+      key: "name",
+      header: "会社名",
+      cell: (company) => (
+        <Button
+          variant="link"
+          className="h-auto p-0"
+          nativeButton={false}
+          render={<Link to="/contacts/companies/$id" params={{ id: company.id }} />}
+        >
+          {company.name}
+        </Button>
+      ),
+      headClassName: "px-4",
+      cellClassName: "px-4 font-medium",
+    },
+    {
+      key: "domain",
+      header: "ドメイン",
+      cell: (company) => company.domain ?? "未設定",
+      cellClassName: "text-muted-foreground",
+    },
+    {
+      key: "contactCount",
+      header: "連絡先",
+      cell: (company) => (
+        <Badge variant="secondary">{Number(company.contactCount).toLocaleString()}人</Badge>
+      ),
+    },
+    {
+      key: "updatedAt",
+      header: "更新日",
+      cell: (company) => formatDate(company.updatedAt),
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right text-muted-foreground",
+    },
+  ];
 
   return (
     <PageLayout
@@ -101,85 +133,45 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
           </CardAction>
         </CardHeader>
         <CardContent className="px-0">
-          <Table>
-            <TableCaption className="sr-only">会社一覧</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-4">会社名</TableHead>
-                <TableHead>ドメイン</TableHead>
-                <TableHead>連絡先</TableHead>
-                <TableHead className="px-4 text-right">更新日</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {companies.map((company) => (
-                <TableRow key={company.id}>
-                  <TableCell className="px-4 font-medium">
-                    <Button
-                      variant="link"
-                      className="h-auto p-0"
-                      nativeButton={false}
-                      render={<Link to="/contacts/companies/$id" params={{ id: company.id }} />}
-                    >
-                      {company.name}
-                    </Button>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {company.domain ?? "未設定"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      {Number(company.contactCount).toLocaleString()}人
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="px-4 text-right text-muted-foreground">
-                    {formatDate(company.updatedAt)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {companies.length === 0 ? (
-            <EmptyState
-              compact
-              title={query ? "条件に一致する会社がありません" : "会社がまだありません"}
-              description={
-                query
-                  ? "検索条件を変更してください。"
-                  : "最初の会社を作成し、連絡先を会社単位で整理しましょう。"
-              }
-              action={
-                query ? undefined : (
-                  <Button variant="outline" onClick={() => setShowCreate(true)}>
-                    <Building2 data-icon="inline-start" />
-                    会社を作成
-                  </Button>
-                )
-              }
-            />
-          ) : null}
+          <DataTable
+            columns={columns}
+            rows={companies}
+            rowKey={(company) => company.id}
+            caption="会社一覧"
+            emptyTitle={query ? "条件に一致する会社がありません" : "会社がまだありません"}
+            emptyDescription={
+              query
+                ? "検索条件を変更してください。"
+                : "最初の会社を作成し、連絡先を会社単位で整理しましょう。"
+            }
+            emptyAction={
+              query ? undefined : (
+                <Button variant="outline" onClick={() => setShowCreate(true)}>
+                  <Building2 data-icon="inline-start" />
+                  会社を作成
+                </Button>
+              )
+            }
+          />
         </CardContent>
       </Card>
-      <AppDialog
+      <CompanyForm
         open={showCreate}
         onOpenChange={setShowCreate}
         title="会社を作成"
         description="会社名とメールドメインを登録します。"
-      >
-        <CompanyForm
-          submitLabel="作成"
-          onSubmit={async (values) => {
-            const company = await createCompany.mutateAsync(values);
-            await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
-            toast.success("会社を作成しました");
-            setShowCreate(false);
-            await navigate({
-              to: "/contacts/companies/$id",
-              params: { id: company.id },
-            });
-          }}
-        />
-      </AppDialog>
+        submitLabel="作成"
+        onSubmit={async (values) => {
+          const company = await createCompany.mutateAsync(values);
+          await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+          toast.success("会社を作成しました");
+          setShowCreate(false);
+          await navigate({
+            to: "/contacts/companies/$id",
+            params: { id: company.id },
+          });
+        }}
+      />
     </PageLayout>
   );
 }
@@ -195,6 +187,74 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
   const assignContact = useMutation(orpcQuery.companies.assignContact.mutationOptions());
 
   const assignedIds = new Set(company.contacts.map((contact) => contact.id));
+
+  const columns: DataTableColumn<CompanyContactDto>[] = [
+    {
+      key: "contact",
+      header: "連絡先",
+      cell: (contact) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium">
+            {contactName(contact)}
+            {contact.isPrimary ? (
+              <Badge variant="outline" className="ml-2">
+                主担当
+              </Badge>
+            ) : null}
+          </span>
+          <span className="text-xs text-muted-foreground">{contact.email ?? "メール未設定"}</span>
+        </div>
+      ),
+      headClassName: "px-4",
+      cellClassName: "px-4",
+    },
+    {
+      key: "title",
+      header: "役職",
+      cell: (contact) => contact.title ?? "未設定",
+      cellClassName: "text-muted-foreground",
+    },
+    {
+      key: "stage",
+      header: "ステージ",
+      cell: (contact) => <Badge variant="secondary">{contact.stage}</Badge>,
+    },
+    {
+      key: "score",
+      header: "スコア",
+      cell: (contact) => contact.score,
+      cellClassName: "tabular-nums",
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cell: (contact) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            void removeContact
+              .mutateAsync({ id: company.id, contactId: contact.id })
+              .then(async () => {
+                toast.success("会社との関連を解除しました");
+                await queryClient.invalidateQueries({
+                  queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+                });
+                await queryClient.invalidateQueries({
+                  queryKey: orpcQuery.companies.list.key(),
+                });
+              });
+          }}
+        >
+          <UserMinus data-icon="inline-start" />
+          解除
+        </Button>
+      ),
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right",
+    },
+  ];
+
   return (
     <PageLayout
       title={company.name}
@@ -261,127 +321,60 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
           </CardAction>
         </CardHeader>
         <CardContent className="px-0">
-          <Table>
-            <TableCaption className="sr-only">{company.name}に所属する連絡先</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-4">連絡先</TableHead>
-                <TableHead>役職</TableHead>
-                <TableHead>ステージ</TableHead>
-                <TableHead>スコア</TableHead>
-                <TableHead className="px-4 text-right">操作</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {company.contacts.map((contact) => (
-                <TableRow key={contact.id}>
-                  <TableCell className="px-4">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-medium">
-                        {contactName(contact)}
-                        {contact.isPrimary ? (
-                          <Badge variant="outline" className="ml-2">
-                            主担当
-                          </Badge>
-                        ) : null}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {contact.email ?? "メール未設定"}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {contact.title ?? "未設定"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">{contact.stage}</Badge>
-                  </TableCell>
-                  <TableCell className="tabular-nums">{contact.score}</TableCell>
-                  <TableCell className="px-4 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        void removeContact
-                          .mutateAsync({ id: company.id, contactId: contact.id })
-                          .then(async () => {
-                            toast.success("会社との関連を解除しました");
-                            await queryClient.invalidateQueries({
-                              queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
-                            });
-                            await queryClient.invalidateQueries({
-                              queryKey: orpcQuery.companies.list.key(),
-                            });
-                          });
-                      }}
-                    >
-                      <UserMinus data-icon="inline-start" />
-                      解除
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {company.contacts.length === 0 ? (
-            <EmptyState
-              compact
-              title="所属する連絡先がありません"
-              description="既存の連絡先をこの会社へ関連付けてください。"
-              action={
-                <Button variant="outline" onClick={() => setShowAddContact(true)}>
-                  <UsersRound data-icon="inline-start" />
-                  連絡先を追加
-                </Button>
-              }
-            />
-          ) : null}
+          <DataTable
+            columns={columns}
+            rows={company.contacts}
+            rowKey={(contact) => contact.id}
+            caption={`${company.name}に所属する連絡先`}
+            emptyTitle="所属する連絡先がありません"
+            emptyDescription="既存の連絡先をこの会社へ関連付けてください。"
+            emptyAction={
+              <Button variant="outline" onClick={() => setShowAddContact(true)}>
+                <UsersRound data-icon="inline-start" />
+                連絡先を追加
+              </Button>
+            }
+          />
         </CardContent>
       </Card>
-      <AppDialog
+      <CompanyForm
         open={showEdit}
         onOpenChange={setShowEdit}
         title="会社を編集"
         description="会社名とドメインを更新します。"
-      >
-        <CompanyForm
-          initialName={company.name}
-          initialDomain={company.domain ?? ""}
-          submitLabel="変更を保存"
-          onSubmit={async (values) => {
-            await updateCompany.mutateAsync({
-              id: company.id,
-              name: values.name,
-              domain: values.domain || null,
-            });
-            await queryClient.invalidateQueries({
-              queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
-            });
-            await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
-            toast.success("会社を更新しました");
-            setShowEdit(false);
-          }}
-        />
-      </AppDialog>
-      <AppDialog
+        initialName={company.name}
+        initialDomain={company.domain ?? ""}
+        submitLabel="変更を保存"
+        onSubmit={async (values) => {
+          await updateCompany.mutateAsync({
+            id: company.id,
+            name: values.name,
+            domain: values.domain || null,
+          });
+          await queryClient.invalidateQueries({
+            queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+          });
+          await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+          toast.success("会社を更新しました");
+          setShowEdit(false);
+        }}
+      />
+      <AddCompanyContactForm
         open={showAddContact}
         onOpenChange={setShowAddContact}
         title="連絡先を追加"
         description={`${company.name}へ既存の連絡先を関連付けます。`}
-      >
-        <AddCompanyContactForm
-          contacts={contactOptions.items.filter((contact) => !assignedIds.has(contact.id))}
-          onSubmit={async (values) => {
-            await assignContact.mutateAsync({ id: company.id, ...values });
-            await queryClient.invalidateQueries({
-              queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
-            });
-            await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
-            toast.success("連絡先を会社へ追加しました");
-            setShowAddContact(false);
-          }}
-        />
-      </AppDialog>
+        contacts={contactOptions.items.filter((contact) => !assignedIds.has(contact.id))}
+        onSubmit={async (values) => {
+          await assignContact.mutateAsync({ id: company.id, ...values });
+          await queryClient.invalidateQueries({
+            queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+          });
+          await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+          toast.success("連絡先を会社へ追加しました");
+          setShowAddContact(false);
+        }}
+      />
     </PageLayout>
   );
 }

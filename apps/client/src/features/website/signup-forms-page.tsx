@@ -4,17 +4,15 @@ import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
-  AppDialog,
   ArchiveConfirm,
-  EmptyState,
-  ErrorAlert,
+  FormDialog,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
   FormTextarea,
-  LoadingButton,
   PageLayout,
 } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -30,19 +28,12 @@ import {
 } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   signupFormsQueryOptions,
   type SignupFormDefinition,
   type SignupFormRow,
 } from "@/features/website/website-api";
 import { CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
@@ -71,6 +62,90 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
     }
   }
 
+  const columns: DataTableColumn<SignupFormRow>[] = [
+    {
+      key: "name",
+      header: "名前",
+      cell: (item) => (
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">{item.name}</span>
+          <span className="text-xs text-muted-foreground">
+            /{item.slug} · v{item.version}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "状態",
+      cell: (item) => <PublishStatusBadge status={item.status} />,
+    },
+    {
+      key: "style",
+      header: "形式",
+      cell: (item) => formStyleLabel(item.definition.style),
+    },
+    {
+      key: "submissions",
+      header: "送信",
+      cell: (item) => item.submissionCount.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "updatedAt",
+      header: "更新日時",
+      cell: (item) => formatDateTime(item.updatedAt),
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cell: (item) => {
+        const publicUrl = `${window.location.origin}/f/${workspaceSlug}/${item.slug}`;
+        const embedCode = `<script async src="${window.location.origin}/api/public/forms/${workspaceSlug}/${item.slug}/embed.js"></script>`;
+        return (
+          <div className="flex justify-end gap-1">
+            <CopyButton value={embedCode} label="埋め込み" />
+            {item.status === "published" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                render={
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${item.name}を表示`}
+                  />
+                }
+              >
+                <ExternalLink data-icon="inline-start" />
+                表示
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`${item.name}を編集`}
+              onClick={() => {
+                setEditing(item);
+                setDialogOpen(true);
+              }}
+            >
+              <Pencil />
+            </Button>
+            <ArchiveConfirm
+              label={item.name}
+              description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
+              onConfirm={() => archive(item)}
+            />
+          </div>
+        );
+      },
+      headClassName: "text-right",
+    },
+  ];
+
   return (
     <PageLayout
       title="サインアップフォーム"
@@ -87,107 +162,30 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
       }
     >
       <FormSummary items={items} />
-      {items.length === 0 ? (
-        <EmptyState
-          title="サインアップフォームがありません"
-          description="最初のフォームを作成すると、公開URLから連絡先を獲得できます。"
-        />
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>フォーム一覧</CardTitle>
-            <CardDescription>公開状態、フォーム形式、送信数を確認できます。</CardDescription>
-          </CardHeader>
-          <CardContent className="px-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>名前</TableHead>
-                  <TableHead>状態</TableHead>
-                  <TableHead>形式</TableHead>
-                  <TableHead className="text-right">送信</TableHead>
-                  <TableHead>更新日時</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => {
-                  const publicUrl = `${window.location.origin}/f/${workspaceSlug}/${item.slug}`;
-                  const embedCode = `<script async src="${window.location.origin}/api/public/forms/${workspaceSlug}/${item.slug}/embed.js"></script>`;
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium">{item.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            /{item.slug} · v{item.version}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <PublishStatusBadge status={item.status} />
-                      </TableCell>
-                      <TableCell>{formStyleLabel(item.definition.style)}</TableCell>
-                      <TableCell className="text-right">
-                        {item.submissionCount.toLocaleString()}
-                      </TableCell>
-                      <TableCell>{formatDateTime(item.updatedAt)}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <CopyButton value={embedCode} label="埋め込み" />
-                          {item.status === "published" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              render={
-                                <a
-                                  href={publicUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  aria-label={`${item.name}を表示`}
-                                />
-                              }
-                            >
-                              <ExternalLink data-icon="inline-start" />
-                              表示
-                            </Button>
-                          ) : null}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            aria-label={`${item.name}を編集`}
-                            onClick={() => {
-                              setEditing(item);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil />
-                          </Button>
-                          <ArchiveConfirm
-                            label={item.name}
-                            description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
-                            onConfirm={() => archive(item)}
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>フォーム一覧</CardTitle>
+          <CardDescription>公開状態、フォーム形式、送信数を確認できます。</CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          <DataTable
+            columns={columns}
+            rows={items}
+            rowKey={(item) => item.id}
+            caption="フォーム一覧"
+            emptyTitle="サインアップフォームがありません"
+            emptyDescription="最初のフォームを作成すると、公開URLから連絡先を獲得できます。"
+          />
+        </CardContent>
+      </Card>
 
-      <AppDialog
+      <SignupFormEditor
+        key={editing?.id ?? "new"}
+        item={editing}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        title={editing ? "フォームを編集" : "フォームを作成"}
-        description="メールアドレスはすべてのフォームで必須です。"
-        className="sm:max-w-2xl"
-      >
-        <SignupFormEditor key={editing?.id ?? "new"} item={editing} onSaved={refresh} />
-      </AppDialog>
+        onSaved={refresh}
+      />
     </PageLayout>
   );
 }
@@ -234,17 +232,20 @@ function FormSummary({ items }: { items: SignupFormRow[] }): ReactNode {
 
 function SignupFormEditor({
   item,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   item: SignupFormRow | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }): ReactNode {
   const initialFields = useMemo(
     () => new Set(item?.definition.fields?.map((field) => field.key) ?? []),
     [item],
   );
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("保存できませんでした");
   const [turnstileEnabled, setTurnstileEnabled] = useState(item?.turnstileEnabled ?? true);
   const [optionalFields, setOptionalFields] = useState(
     new Set(
@@ -286,128 +287,126 @@ function SignupFormEditor({
       .split(/[\n,]+/)
       .map((value) => value.trim())
       .filter(Boolean);
-    setBusy(true);
-    setError("");
-    try {
-      const payload = {
-        name,
-        slug: getFormString(formData, "slug").trim() || slugify(name),
-        status: getFormString(formData, "status") === "published" ? "published" : "draft",
-        definition: { style: readFormStyle(formData), fields },
-        allowedDomains,
-        turnstileEnabled,
-        successMessage: getFormString(formData, "successMessage"),
-      } as const;
+    const payload = {
+      name,
+      slug: getFormString(formData, "slug").trim() || slugify(name),
+      status: getFormString(formData, "status") === "published" ? "published" : "draft",
+      definition: { style: readFormStyle(formData), fields },
+      allowedDomains,
+      turnstileEnabled,
+      successMessage: getFormString(formData, "successMessage"),
+    } as const;
+    await run(async () => {
       await (item
         ? updateForm.mutateAsync({ id: item.id, ...payload })
         : createForm.mutateAsync(payload));
       toast.success(item ? "フォームを更新しました" : "フォームを作成しました");
       await onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
-    <form onSubmit={(event) => void submit(event)}>
-      <FieldGroup>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput
-            label="名前"
-            name="name"
-            defaultValue={item?.name}
-            placeholder="ニュースレター登録"
-            required
-          />
-          <FormInput
-            label="スラッグ"
-            name="slug"
-            defaultValue={item?.slug}
-            description="未入力なら名前から自動生成します。"
-            placeholder="newsletter"
-          />
-          <FormNativeSelect
-            label="フォーム形式"
-            name="style"
-            defaultValue={item?.definition.style ?? "inline"}
-          >
-            <FormSelectOption value="inline">インライン</FormSelectOption>
-            <FormSelectOption value="floating-bar">フローティングバー</FormSelectOption>
-            <FormSelectOption value="floating-box">フローティングボックス</FormSelectOption>
-            <FormSelectOption value="modal">モーダル</FormSelectOption>
-          </FormNativeSelect>
-          <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
-            <FormSelectOption value="draft">下書き</FormSelectOption>
-            <FormSelectOption value="published">公開</FormSelectOption>
-          </FormNativeSelect>
-        </div>
-
-        <FieldSet>
-          <FieldLegend variant="label">取得する項目</FieldLegend>
-          <FieldDescription>
-            メールアドレスは必須です。コード定義済みの標準項目だけを追加できます。
-          </FieldDescription>
-          <FieldGroup className="gap-3 sm:grid sm:grid-cols-2">
-            <Field orientation="horizontal" data-disabled>
-              <Checkbox id="field-email" checked disabled />
-              <FieldLabel htmlFor="field-email">メールアドレス（必須）</FieldLabel>
-            </Field>
-            {(
-              [
-                ["firstName", "名"],
-                ["lastName", "姓"],
-                ["phone", "電話番号"],
-              ] as const
-            ).map(([key, label]) => (
-              <Field key={key} orientation="horizontal">
-                <Checkbox
-                  id={`field-${key}`}
-                  checked={optionalFields.has(key)}
-                  onCheckedChange={(checked) => toggleField(key, Boolean(checked))}
-                />
-                <FieldLabel htmlFor={`field-${key}`}>{label}</FieldLabel>
-              </Field>
-            ))}
-          </FieldGroup>
-        </FieldSet>
-
-        <FormTextarea
-          label="許可ドメイン"
-          name="allowedDomains"
-          defaultValue={item?.allowedDomains.join("\n")}
-          description="1行に1ドメイン。空欄ならすべてのドメインから送信できます。"
-          placeholder={"example.com\ncampaign.example.com"}
-          rows={3}
-        />
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={item ? "フォームを編集" : "フォームを作成"}
+      description="メールアドレスはすべてのフォームで必須です。"
+      className="sm:max-w-2xl"
+      onSubmit={(event) => void submit(event)}
+      busy={busy}
+      error={error}
+      submitLabel={item ? "変更を保存" : "フォームを作成"}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormInput
-          label="送信完了メッセージ"
-          name="successMessage"
-          defaultValue={item?.successMessage ?? "ありがとうございます。"}
+          label="名前"
+          name="name"
+          defaultValue={item?.name}
+          placeholder="ニュースレター登録"
           required
         />
-        <Field orientation="horizontal">
-          <Switch
-            id="form-turnstile"
-            checked={turnstileEnabled}
-            onCheckedChange={setTurnstileEnabled}
-          />
-          <FieldContent>
-            <FieldLabel htmlFor="form-turnstile">
-              <FieldTitle>Turnstileによるbot対策</FieldTitle>
-              <FieldDescription>
-                WorkerにTurnstileシークレットが設定されている場合に検証します。
-              </FieldDescription>
-            </FieldLabel>
-          </FieldContent>
-        </Field>
-        {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <LoadingButton busy={busy} type="submit" className="w-full">
-          {item ? "変更を保存" : "フォームを作成"}
-        </LoadingButton>
-      </FieldGroup>
-    </form>
+        <FormInput
+          label="スラッグ"
+          name="slug"
+          defaultValue={item?.slug}
+          description="未入力なら名前から自動生成します。"
+          placeholder="newsletter"
+        />
+        <FormNativeSelect
+          label="フォーム形式"
+          name="style"
+          defaultValue={item?.definition.style ?? "inline"}
+        >
+          <FormSelectOption value="inline">インライン</FormSelectOption>
+          <FormSelectOption value="floating-bar">フローティングバー</FormSelectOption>
+          <FormSelectOption value="floating-box">フローティングボックス</FormSelectOption>
+          <FormSelectOption value="modal">モーダル</FormSelectOption>
+        </FormNativeSelect>
+        <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
+          <FormSelectOption value="draft">下書き</FormSelectOption>
+          <FormSelectOption value="published">公開</FormSelectOption>
+        </FormNativeSelect>
+      </div>
+
+      <FieldSet>
+        <FieldLegend variant="label">取得する項目</FieldLegend>
+        <FieldDescription>
+          メールアドレスは必須です。コード定義済みの標準項目だけを追加できます。
+        </FieldDescription>
+        <FieldGroup className="gap-3 sm:grid sm:grid-cols-2">
+          <Field orientation="horizontal" data-disabled>
+            <Checkbox id="field-email" checked disabled />
+            <FieldLabel htmlFor="field-email">メールアドレス（必須）</FieldLabel>
+          </Field>
+          {(
+            [
+              ["firstName", "名"],
+              ["lastName", "姓"],
+              ["phone", "電話番号"],
+            ] as const
+          ).map(([key, label]) => (
+            <Field key={key} orientation="horizontal">
+              <Checkbox
+                id={`field-${key}`}
+                checked={optionalFields.has(key)}
+                onCheckedChange={(checked) => toggleField(key, Boolean(checked))}
+              />
+              <FieldLabel htmlFor={`field-${key}`}>{label}</FieldLabel>
+            </Field>
+          ))}
+        </FieldGroup>
+      </FieldSet>
+
+      <FormTextarea
+        label="許可ドメイン"
+        name="allowedDomains"
+        defaultValue={item?.allowedDomains.join("\n")}
+        description="1行に1ドメイン。空欄ならすべてのドメインから送信できます。"
+        placeholder={"example.com\ncampaign.example.com"}
+        rows={3}
+      />
+      <FormInput
+        label="送信完了メッセージ"
+        name="successMessage"
+        defaultValue={item?.successMessage ?? "ありがとうございます。"}
+        required
+      />
+      <Field orientation="horizontal">
+        <Switch
+          id="form-turnstile"
+          checked={turnstileEnabled}
+          onCheckedChange={setTurnstileEnabled}
+        />
+        <FieldContent>
+          <FieldLabel htmlFor="form-turnstile">
+            <FieldTitle>Turnstileによるbot対策</FieldTitle>
+            <FieldDescription>
+              WorkerにTurnstileシークレットが設定されている場合に検証します。
+            </FieldDescription>
+          </FieldLabel>
+        </FieldContent>
+      </Field>
+    </FormDialog>
   );
 }
 

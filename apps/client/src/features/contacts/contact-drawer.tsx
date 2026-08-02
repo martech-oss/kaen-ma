@@ -28,6 +28,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type ContactOptions } from "@/features/contacts/contact-api";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { nullableString } from "@/lib/form-data";
 import { formatLongDateTime } from "@/lib/format";
 import { orpc } from "@/lib/orpc";
@@ -231,15 +232,12 @@ function ProfileEditForm({
   disabled: boolean;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("保存できませんでした");
   const contact = profile.contact;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       await orpc.contacts.update({
         id: contact.id,
         firstName: nullableString(form.get("firstName")),
@@ -250,11 +248,7 @@ function ProfileEditForm({
         stage: getFormString(form, "stage"),
       });
       await onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
   return (
     <Section title="基本情報" icon={<UserRound className="size-4" />}>
@@ -322,16 +316,13 @@ function ScoreForm({
   disabled: boolean;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("スコアを変更できませんでした");
   if (disabled) return null;
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       await orpc.contactResources.adjustScore({
         contactId,
         delta: Number(form.get("delta")),
@@ -339,11 +330,7 @@ function ScoreForm({
       });
       formElement.reset();
       await onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "スコアを変更できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
   return (
     <Section title="スコアを調整" icon={<Zap className="size-4" />}>

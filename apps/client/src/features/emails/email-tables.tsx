@@ -3,7 +3,8 @@ import { Pencil, RefreshCw, Send } from "lucide-react";
 import { type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ArchiveConfirm, EmptyState } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,15 +19,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { type EmailCampaignRow, type EmailTemplateRow } from "@/features/emails/email-api";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
@@ -64,117 +56,110 @@ export function CampaignTable({
     }
   }
 
-  if (!loading && items.length === 0) {
-    return (
-      <EmptyState
-        title="メールキャンペーンがありません"
-        description="最初の配信を作成して、セグメントへメールを届けましょう。"
-      />
-    );
-  }
+  const columns: DataTableColumn<EmailCampaignRow>[] = [
+    {
+      key: "campaign",
+      header: "キャンペーン",
+      cell: (campaign) => (
+        <div className="flex min-w-48 flex-col gap-1">
+          <span className="font-medium">{campaign.name}</span>
+          <span className="truncate text-xs text-muted-foreground">
+            {campaign.templateName} · {campaign.subject}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "target",
+      header: "配信対象",
+      cell: (campaign) => (
+        <div className="flex flex-col gap-1">
+          <span>{campaign.segmentName}</span>
+          <span className="text-xs text-muted-foreground">
+            {campaign.memberCount.toLocaleString()}件
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "状態",
+      cell: (campaign) => <EmailCampaignStatusBadge status={campaign.status} />,
+    },
+    {
+      key: "counts",
+      header: "送信 / 到達",
+      cell: (campaign) =>
+        `${campaign.sentCount.toLocaleString()} / ${campaign.deliveredCount.toLocaleString()}`,
+    },
+    {
+      key: "scheduledAt",
+      header: "配信日時",
+      cell: (campaign) =>
+        campaign.scheduledAt
+          ? formatDateTime(campaign.scheduledAt)
+          : campaign.startedAt
+            ? formatDateTime(campaign.startedAt)
+            : "未設定",
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cell: (campaign) => (
+        <div className="flex justify-end gap-2">
+          {campaign.status === "draft" || campaign.status === "scheduled" ? (
+            <>
+              <Button size="sm" variant="outline" onClick={() => onEdit(campaign)}>
+                <Pencil data-icon="inline-start" />
+                編集
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger render={<Button size="sm" />}>
+                  <Send data-icon="inline-start" />
+                  今すぐ送信
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogMedia>
+                      <Send />
+                    </AlertDialogMedia>
+                    <AlertDialogTitle>配信を開始しますか？</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      「{campaign.segmentName}
+                      」の現在の対象者を確定し、 Resendから送信します。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => void start(campaign)}>
+                      送信を開始
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          ) : null}
+          {campaign.status !== "sending" ? (
+            <ArchiveConfirm label={campaign.name} onConfirm={() => void archive(campaign)} />
+          ) : null}
+        </div>
+      ),
+      headClassName: "text-right",
+    },
+  ];
 
   return (
     <div className="overflow-x-auto rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>キャンペーン</TableHead>
-            <TableHead>配信対象</TableHead>
-            <TableHead>状態</TableHead>
-            <TableHead>送信 / 到達</TableHead>
-            <TableHead>配信日時</TableHead>
-            <TableHead className="text-right">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loading
-            ? Array.from({ length: 3 }).map((_, index) => (
-                <TableRow key={index}>
-                  {Array.from({ length: 6 }).map((__, cell) => (
-                    <TableCell key={cell}>
-                      <Skeleton className="h-5 w-28" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            : items.map((campaign) => (
-                <TableRow key={campaign.id}>
-                  <TableCell>
-                    <div className="flex min-w-48 flex-col gap-1">
-                      <span className="font-medium">{campaign.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {campaign.templateName} · {campaign.subject}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-1">
-                      <span>{campaign.segmentName}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {campaign.memberCount.toLocaleString()}件
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <EmailCampaignStatusBadge status={campaign.status} />
-                  </TableCell>
-                  <TableCell>
-                    {campaign.sentCount.toLocaleString()} /{" "}
-                    {campaign.deliveredCount.toLocaleString()}
-                  </TableCell>
-                  <TableCell>
-                    {campaign.scheduledAt
-                      ? formatDateTime(campaign.scheduledAt)
-                      : campaign.startedAt
-                        ? formatDateTime(campaign.startedAt)
-                        : "未設定"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-2">
-                      {campaign.status === "draft" || campaign.status === "scheduled" ? (
-                        <>
-                          <Button size="sm" variant="outline" onClick={() => onEdit(campaign)}>
-                            <Pencil data-icon="inline-start" />
-                            編集
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger render={<Button size="sm" />}>
-                              <Send data-icon="inline-start" />
-                              今すぐ送信
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogMedia>
-                                  <Send />
-                                </AlertDialogMedia>
-                                <AlertDialogTitle>配信を開始しますか？</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  「{campaign.segmentName}
-                                  」の現在の対象者を確定し、 Resendから送信します。
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => void start(campaign)}>
-                                  送信を開始
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </>
-                      ) : null}
-                      {campaign.status !== "sending" ? (
-                        <ArchiveConfirm
-                          label={campaign.name}
-                          onConfirm={() => void archive(campaign)}
-                        />
-                      ) : null}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        columns={columns}
+        rows={items}
+        rowKey={(campaign) => campaign.id}
+        caption="メールキャンペーン一覧"
+        loading={loading}
+        skeletonRowCount={3}
+        emptyTitle="メールキャンペーンがありません"
+        emptyDescription="最初の配信を作成して、セグメントへメールを届けましょう。"
+      />
     </div>
   );
 }
@@ -210,94 +195,90 @@ export function TemplateTable({
     }
   }
 
-  if (!loading && items.length === 0) {
-    return (
-      <EmptyState
-        title="テンプレートがありません"
-        description="Resendで公開したテンプレートを登録してください。"
-      />
-    );
-  }
+  const columns: DataTableColumn<EmailTemplateRow>[] = [
+    {
+      key: "template",
+      header: "テンプレート",
+      cell: (template) => (
+        <div className="flex min-w-48 flex-col gap-1">
+          <span className="font-medium">{template.name}</span>
+          <span className="text-xs text-muted-foreground">
+            {template.resendAlias ?? template.resendTemplateId}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "subject",
+      header: "件名",
+      cell: (template) => template.subject ?? "件名なし",
+      cellClassName: "max-w-80 truncate",
+    },
+    {
+      key: "purpose",
+      header: "用途",
+      cell: (template) => (
+        <Badge variant="outline">
+          {template.purpose === "marketing" ? "Marketing" : "Transactional"}
+        </Badge>
+      ),
+    },
+    {
+      key: "resend",
+      header: "Resend",
+      cell: (template) => (
+        <div className="flex flex-wrap gap-1">
+          <Badge variant={template.remoteStatus === "published" ? "secondary" : "outline"}>
+            {template.remoteStatus === "published" ? "公開済み" : "下書き"}
+          </Badge>
+          {template.hasUnpublishedVersions ? (
+            <Badge variant="outline">未公開の変更あり</Badge>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: "sync",
+      header: "同期状態",
+      cell: (template) => (
+        <div className="flex min-w-44 flex-col gap-1">
+          <span>{formatDateTime(template.lastSyncedAt)}</span>
+          {template.syncError ? (
+            <span className="text-xs text-destructive">{template.syncError}</span>
+          ) : (
+            <span className="text-xs text-muted-foreground">送信可能</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cell: (template) => (
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={() => void sync(template)}>
+            <RefreshCw data-icon="inline-start" />
+            同期
+          </Button>
+          <ArchiveConfirm label={template.name} onConfirm={() => void archive(template)} />
+        </div>
+      ),
+      headClassName: "text-right",
+    },
+  ];
+
   return (
     <div className="overflow-x-auto rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>テンプレート</TableHead>
-            <TableHead>件名</TableHead>
-            <TableHead>用途</TableHead>
-            <TableHead>Resend</TableHead>
-            <TableHead>同期状態</TableHead>
-            <TableHead className="text-right">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loading
-            ? Array.from({ length: 3 }).map((_, index) => (
-                <TableRow key={index}>
-                  {Array.from({ length: 6 }).map((__, cell) => (
-                    <TableCell key={cell}>
-                      <Skeleton className="h-5 w-28" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            : items.map((template) => (
-                <TableRow key={template.id}>
-                  <TableCell>
-                    <div className="flex min-w-48 flex-col gap-1">
-                      <span className="font-medium">{template.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {template.resendAlias ?? template.resendTemplateId}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-80 truncate">
-                    {template.subject ?? "件名なし"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {template.purpose === "marketing" ? "Marketing" : "Transactional"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      <Badge
-                        variant={template.remoteStatus === "published" ? "secondary" : "outline"}
-                      >
-                        {template.remoteStatus === "published" ? "公開済み" : "下書き"}
-                      </Badge>
-                      {template.hasUnpublishedVersions ? (
-                        <Badge variant="outline">未公開の変更あり</Badge>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex min-w-44 flex-col gap-1">
-                      <span>{formatDateTime(template.lastSyncedAt)}</span>
-                      {template.syncError ? (
-                        <span className="text-xs text-destructive">{template.syncError}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">送信可能</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => void sync(template)}>
-                        <RefreshCw data-icon="inline-start" />
-                        同期
-                      </Button>
-                      <ArchiveConfirm
-                        label={template.name}
-                        onConfirm={() => void archive(template)}
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-        </TableBody>
-      </Table>
+      <DataTable
+        columns={columns}
+        rows={items}
+        rowKey={(template) => template.id}
+        caption="メールテンプレート一覧"
+        loading={loading}
+        skeletonRowCount={3}
+        emptyTitle="テンプレートがありません"
+        emptyDescription="Resendで公開したテンプレートを登録してください。"
+      />
     </div>
   );
 }

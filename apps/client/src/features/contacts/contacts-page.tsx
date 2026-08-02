@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Building2, ChevronDown, Filter, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { AppDialog, ErrorAlert as ErrorNotice, PageLayout as Page } from "@/components/app-ui";
+import { ErrorAlert as ErrorNotice, PageLayout as Page } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
   contactsQueryOptions,
   type ContactStatus,
 } from "@/features/contacts/contact-api";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatLongDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { orpc } from "@/lib/orpc";
@@ -64,7 +65,6 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   const total = contactsQuery.data?.total ?? 0;
   const nextCursor = contactsQuery.data?.nextCursor;
   const loading = contactsQuery.isFetching;
-  const [error, setError] = useState("");
   const {
     query,
     setQuery,
@@ -96,7 +96,10 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   const [showSegmentSave, setShowSegmentSave] = useState(false);
   const [bulkAction, setBulkAction] = useState<BulkAction>("add_tag");
   const [bulkResourceId, setBulkResourceId] = useState("");
-  const [busy, setBusy] = useState(false);
+  // applyBulkAction/refreshSegment share one busy/error pair, mirroring the
+  // pre-DataTable design where both buttons disable together while either is
+  // in flight.
+  const { busy, error, run, setError } = useFormSubmission("操作に失敗しました");
 
   const refreshContacts = useCallback(async () => {
     await queryClient.invalidateQueries({
@@ -145,33 +148,22 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
       setError("一括操作の対象を選択してください");
       return;
     }
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       await orpc.contactResources.bulkAction({
         contactIds: [...selected],
         action: bulkAction,
         ...(needsResource ? { resourceId: bulkResourceId } : {}),
       });
       await refreshContactData();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "一括操作に失敗しました");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function refreshSegment() {
     if (!segmentId) return;
-    setBusy(true);
-    try {
+    await run(async () => {
       await orpc.segments.refresh({ id: segmentId });
       await refreshContactData();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "セグメントを更新できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   function buildSegmentFilter() {
@@ -522,35 +514,24 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
         </CardContent>
       </Card>
 
-      <AppDialog
+      <ContactCreateForm
         open={showCreate}
         onOpenChange={setShowCreate}
-        title="連絡先を追加"
-        description="プロフィール、会社、タグ、セグメントを登録します。"
-        className="sm:max-w-2xl"
-      >
-        <ContactCreateForm
-          options={options}
-          onSaved={async () => {
-            setShowCreate(false);
-            await refreshContactData();
-          }}
-        />
-      </AppDialog>
-      <AppDialog
+        options={options}
+        onSaved={async () => {
+          setShowCreate(false);
+          await refreshContactData();
+        }}
+      />
+      <SegmentSaveForm
         open={showSegmentSave}
         onOpenChange={setShowSegmentSave}
-        title="検索条件をセグメントとして保存"
-        description="現在の検索条件を動的セグメントに変換します。"
-      >
-        <SegmentSaveForm
-          filter={buildSegmentFilter()}
-          onSaved={async () => {
-            setShowSegmentSave(false);
-            await refreshOptions();
-          }}
-        />
-      </AppDialog>
+        filter={buildSegmentFilter()}
+        onSaved={async () => {
+          setShowSegmentSave(false);
+          await refreshOptions();
+        }}
+      />
       {activeContactId && (
         <ContactDrawer
           contactId={activeContactId}

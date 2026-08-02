@@ -2,7 +2,7 @@
 
 Cloudflare上で完結する、オープンソースのマーケティングオートメーション基盤です。
 
-Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」という考え方を、TypeScriptとCloudflare Workers向けに再構築しています。Mautic APIやPHPプラグインとの互換性は目的としていません。
+Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」という考え方を、TypeScriptとCloudflare Workers向けに再構築しています。Mautic APIやPHPプラグインとの互換性は目的としていません。
 
 > [!IMPORTANT]
 > 現在は `v0.1` の開発版です。本番投入前に、送信ドメイン、同意要件、Resend設定、負荷特性、バックアップ手順を環境ごとに検証してください。
@@ -10,12 +10,12 @@ Mauticの「Contact・Segment・Form・Content・Score・Campaign・計測」と
 ## 特徴
 
 - TanStack Startの公開Workerと、Service Binding経由でのみ呼び出すAPI Workerを分離
-- D1を業務データとキャンペーン状態機械の正本として使用
+- D1を業務データとオートメーション状態機械の正本として使用
 - R2によるAsset、CSV、受信添付ファイル、イベントアーカイブの保存
-- Queuesと1分Cronによる再開可能なキャンペーン実行
+- Queuesと1分Cronによる再開可能なオートメーション実行
 - Resend Hosted TemplatesによるTransactional・Marketingメール
 - React Emailで管理する認証メールテンプレート
-- React Flowを使ったビジュアルキャンペーンビルダー
+- React Flowを使ったビジュアルオートメーションビルダー
 - ステージ型パイプライン、商談、営業タスクを管理するDeals CRM
 - Contact・Automation・Email・Deals・Siteを横断するReporting
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
@@ -29,7 +29,7 @@ Kaenmaはメールの用途を型と実行時検証の両方で分離します�
 | 用途            | プロバイダー | 使用例                                       |
 | --------------- | ------------ | -------------------------------------------- |
 | `transactional` | Resend       | メール確認、招待、パスワード再設定、申込確認 |
-| `marketing`     | Resend       | Campaign、Segment配信、Broadcast             |
+| `marketing`     | Resend       | Automation、Segment配信、Broadcast           |
 
 送信元アドレスは用途ごとに分けます。配信停止・購読Topic・同意状態はKaenmaを正本とし、配信と開封・クリック・Bounceなどのイベント取得にはResendを使います。
 
@@ -43,14 +43,14 @@ flowchart LR
     CR["Cron Scheduler"] --> S
     S --> D["D1<br>業務データ・実行状態"]
     S --> R["R2<br>Asset・CSV・Archive"]
-    S --> Q["Queues<br>Campaign・Delivery"]
+    S --> Q["Queues<br>Automation・Delivery"]
     Q --> S
     S --> RE["Resend Hosted Templates<br>Transactional・Marketing"]
     S --> WH["Outbound Webhook"]
     ER["Cloudflare Email Routing"] --> S
 ```
 
-長時間のDelayはQueueに保持せず、D1の`campaign_jobs.due_at`に保存します。Cronが期限到達Jobをleaseし、Queueへ渡します。Queue consumerは送信直前に同意、抑止、購読Topic、頻度上限、キャンセル状態を再確認します。
+長時間のDelayはQueueに保持せず、D1の`automation_jobs.due_at`に保存します。Cronが期限到達Jobをleaseし、Queueへ渡します。Queue consumerは送信直前に同意、抑止、購読Topic、頻度上限、キャンセル状態を再確認します。
 
 ## リポジトリ構成
 
@@ -70,9 +70,15 @@ packages/
   sdk/                   contract型付きTypeScript SDK
 ```
 
-サーバーとpackagesは同じドメイン名で構成します:
+`apps/server/src`と`packages/database/src`は同じ12ドメインで一致します:
 auth / automations / broadcasts / consent / contacts / deals / messaging /
-platform / reports / segments / web / workspaces(+ server専用の runtime, public, orpc)。
+platform / reports / segments / web / workspaces
+(+ `apps/server/src`だけが持つserver専用の`runtime`, `public`, `orpc`)。
+
+`packages/orpc/src`はほぼ同じですが、`auth`(Better Authが直接APIを提供するためcontract化していない)、
+`broadcasts`(`messaging`contractに統合)、`platform`(`operations`contractに統合)を持たず、
+代わりに`assets`、`operations`、`projects`、横断的な`shared`があります。
+`companies`はcontacts配下の`company-contract.ts`/`company-schema.ts`として存在し、独立ドメインではありません。
 
 ## 必要環境
 
@@ -190,7 +196,8 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 
 - `DB`: D1
 - `ASSETS_BUCKET`: R2
-- `CAMPAIGN_QUEUE`: Campaign、Broadcast、Import/Export
+- `CAMPAIGN_QUEUE`: オートメーション、Broadcast、Import/Export
+  (Binding名・Queue名(`kaenma-campaign`)は歴史的名残りで、内容はAutomationにリネーム済みです。稼働中のCloudflare Queueリソースの改名は本リポジトリのリネーム範囲外としています)
 - `DELIVERY_QUEUE`: Email、Webhook delivery
 
 ローカル開発ではCloudflare Viteプラグインの`auxiliaryWorkers`により両Workerを
@@ -233,21 +240,21 @@ pnpm deploy
 5. WorkerのSecret bindingへResendの送信・Template管理API keyとWebhook signing secretを登録する
 6. ContactまたはCSVを取り込む
 7. ResendでTemplateを公開し、Kaenmaのメールテンプレート画面から登録する
-8. Campaignを作成・検証・公開する
+8. オートメーションを作成・検証・公開する
 
 Better AuthのOrganizationをKaenmaのWorkspaceとして扱います。
 
-| Role     | 主な権限                         |
-| -------- | -------------------------------- |
-| Owner    | Workspace全体、メンバー、設定    |
-| Admin    | 設定、APIキー、Webhook、運用     |
-| Marketer | Contact、Content、Campaign、配信 |
-| Analyst  | 閲覧、分析、Export               |
-| Viewer   | 閲覧                             |
+| Role     | 主な権限                           |
+| -------- | ---------------------------------- |
+| Owner    | Workspace全体、メンバー、設定      |
+| Admin    | 設定、APIキー、Webhook、運用       |
+| Marketer | Contact、Content、Automation、配信 |
+| Analyst  | 閲覧、分析、Export                 |
+| Viewer   | 閲覧                               |
 
-## キャンペーン
+## オートメーション
 
-Campaignは次のNodeから構成されます。
+オートメーションは次のNodeから構成されます。
 
 - `Source`: Segment参加、Form送信、Contact作成、API/Webhookイベント
 - `Action`: Email、Webhook、Tag、Segment、Score、Field更新
@@ -276,13 +283,13 @@ BroadcastはMarketingメール専用です。
 4. 送信直前に同意と抑止を再評価
 5. Resendの公開済みHosted Templateを使って受信者ごとに送信
 
-CampaignメールとBroadcastは同じDeliveryテーブル、同意判定、イベント正規化を使用します。
+オートメーションメールとBroadcastは同じDeliveryテーブル、同意判定、イベント正規化を使用します。
 
 ## Deals CRM
 
 Dealsはワークスペースごとのパイプラインで商談を管理します。初回利用時に標準ステージを作成し、カンバン上で商談を移動できます。
 
-- 商談金額、完了予定日、担当者、連絡先、アカウントの関連付け
+- 商談金額、完了予定日、担当者、連絡先、会社の関連付け
 - 進行中・獲得・失注のライフサイクル
 - タスク、電話、メール、ミーティングの期限・担当者・完了管理
 - 商談とタスクの変更はWorkspaceとRBACで制限
@@ -350,11 +357,11 @@ GET    /api/v1/segments
 POST   /api/v1/segments
 POST   /api/v1/segments/preview
 
-GET    /api/v1/campaigns
-POST   /api/v1/campaigns
-PUT    /api/v1/campaigns/:id/draft
-POST   /api/v1/campaigns/:id/publish
-POST   /api/v1/campaigns/:id/enroll
+GET    /api/v1/automations
+POST   /api/v1/automations
+PUT    /api/v1/automations/:id/draft
+POST   /api/v1/automations/:id/publish
+POST   /api/v1/automations/:id/enroll
 
 GET    /api/v1/deals
 POST   /api/v1/deals
@@ -433,11 +440,11 @@ node packages/mcp-server/dist/index.js
 
 - Contact検索
 - Dashboard集計
-- Campaign一覧とdraft取得
-- Campaign enrollmentの準備
-- 明示確認後のCampaign enrollment
+- オートメーション一覧とdraft取得
+- オートメーション enrollmentの準備
+- 明示確認後のオートメーション enrollment
 
-実配信につながるCampaign enrollmentは二段階です。準備Toolが短時間有効な確認Tokenを発行し、確認Toolで `CONFIRM SEND` を明示しない限り実行されません。
+実配信につながるオートメーション enrollmentは二段階です。準備Toolが短時間有効な確認Tokenを発行し、確認Toolで `CONFIRM SEND` を明示しない限り実行されません。
 
 ## セットアップCLI
 
@@ -469,7 +476,7 @@ GitHub・npm公開後は`npx create-kaenma`として利用する予定です。`
 
 ## Email Routing
 
-CampaignとBroadcastは、署名付きのReply-Toアドレスを生成します。
+オートメーションとBroadcastは、署名付きのReply-Toアドレスを生成します。
 
 ```text
 r+<signed-token>@reply.example.com
@@ -503,7 +510,7 @@ TransactionalメールもBounce、Complaintなどの抑止対象です。Marketi
 - Secure、HttpOnly、SameSite Cookie
 - Cookieを使う変更系APIでOriginを検証
 - Segment ASTを許可済み演算子からparameterized SQLへ変換
-- Campaign公開時のグラフ検証
+- オートメーション公開時のグラフ検証
 - Provider credentialをAES-GCMで暗号化
 - WebhookをHMAC、timestamp、event IDで検証
 - Tracking、解除、Reply TokenをHMAC署名
@@ -535,7 +542,7 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 現在のテスト対象には以下が含まれます。
 
 - Segment ASTのSQL parameter binding
-- Campaignの循環、到達性、Provider制約
+- オートメーションの循環、到達性、Provider制約
 - 同意判定
 - Job状態遷移とRetry
 - Email rendererのescape
@@ -562,7 +569,7 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 - R2アーカイブの復元・検索Tool
 - Provider contract testと負荷試験Fixture
 - `create-kaenma`のnpm公開
-- デモWorkspaceとCampaign Template
+- デモWorkspaceとオートメーションTemplate
 
 ## コントリビューション
 

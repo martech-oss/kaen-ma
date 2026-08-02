@@ -6,6 +6,7 @@ import { ErrorAlert as ErrorNotice } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { type CompanyOption, type SegmentOption } from "@/features/contacts/contact-api";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { orpc, orpcQuery } from "@/lib/orpc";
 
 import { ControlledSelect, Section } from "./contact-bits";
@@ -93,8 +94,8 @@ export function CompanyEditor({
   onChanged: () => Promise<void>;
 }): ReactNode {
   const [selectedId, setSelectedId] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  // addCompany/removeCompany share one busy/error pair, same as before.
+  const { busy, error, run } = useFormSubmission("会社を更新できませんでした");
   const assigned = new Set(companies.map((company) => company.id));
   const queryClient = useQueryClient();
 
@@ -107,9 +108,7 @@ export function CompanyEditor({
 
   async function addCompany() {
     if (!selectedId) return;
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       await orpc.companies.assignContact({
         id: selectedId,
         contactId,
@@ -118,25 +117,15 @@ export function CompanyEditor({
       await invalidateCompany(selectedId);
       setSelectedId("");
       await onChanged();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "会社へ追加できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   async function removeCompany(companyId: string) {
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       await orpc.companies.removeContact({ id: companyId, contactId });
       await invalidateCompany(companyId);
       await onChanged();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "会社との関連を解除できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (

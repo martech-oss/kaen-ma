@@ -1,15 +1,9 @@
 import { Plus, Tags } from "lucide-react";
-import { type FormEvent, type ReactNode, useCallback, useState } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  AppDialog,
-  EmptyState,
-  ErrorAlert,
-  FormInput,
-  LoadingButton,
-  PageLayout,
-} from "@/components/app-ui";
+import { ErrorAlert, FormDialog, FormInput, PageLayout } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,21 +14,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { FieldGroup } from "@/components/ui/field";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   loadContactResources,
   type ContactResources,
 } from "@/features/contacts/contact-resource-api";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
 
@@ -45,22 +30,15 @@ function useContactResources(initialResources: ContactResources): {
   load: () => Promise<void>;
 } {
   const [resources, setResources] = useState<ContactResources>(initialResources);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("コンタクト設定を読み込めませんでした");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
+  async function load() {
+    await run(async () => {
       setResources(await loadContactResources());
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "コンタクト設定を読み込めませんでした");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    });
+  }
 
-  return { resources, loading, error, load };
+  return { resources, loading: busy, error, load };
 }
 
 export function ContactTagsPage({
@@ -70,6 +48,44 @@ export function ContactTagsPage({
 }): ReactNode {
   const { resources, loading, error, load } = useContactResources(initialResources);
   const [showCreate, setShowCreate] = useState(false);
+
+  const columns: DataTableColumn<ContactResources["tags"][number]>[] = [
+    {
+      key: "tag",
+      header: "タグ",
+      cell: (tag) => (
+        <Badge variant="outline">
+          <span
+            aria-hidden="true"
+            className="size-2 rounded-full"
+            style={{ backgroundColor: tag.color }}
+          />
+          {tag.name}
+        </Badge>
+      ),
+      headClassName: "px-4",
+      cellClassName: "px-4 font-medium",
+    },
+    {
+      key: "color",
+      header: "カラー",
+      cell: (tag) => (
+        <span className="font-mono text-xs text-muted-foreground">{tag.color.toUpperCase()}</span>
+      ),
+    },
+    {
+      key: "slug",
+      header: "スラッグ",
+      cell: (tag) => <span className="font-mono text-xs text-muted-foreground">{tag.slug}</span>,
+    },
+    {
+      key: "contactCount",
+      header: "連絡先",
+      cell: (tag) => <Badge variant="secondary">{Number(tag.contactCount).toLocaleString()}</Badge>,
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right",
+    },
+  ];
 
   return (
     <PageLayout
@@ -95,76 +111,31 @@ export function ContactTagsPage({
           </CardAction>
         </CardHeader>
         <CardContent className="px-0">
-          <Table>
-            <TableCaption className="sr-only">コンタクトタグ一覧</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-4">タグ</TableHead>
-                <TableHead>カラー</TableHead>
-                <TableHead>スラッグ</TableHead>
-                <TableHead className="px-4 text-right">連絡先</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <ResourceTableSkeleton columns={4} />
-              ) : (
-                resources.tags.map((tag) => (
-                  <TableRow key={tag.id}>
-                    <TableCell className="px-4 font-medium">
-                      <Badge variant="outline">
-                        <span
-                          aria-hidden="true"
-                          className="size-2 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        {tag.name}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {tag.color.toUpperCase()}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-xs text-muted-foreground">{tag.slug}</span>
-                    </TableCell>
-                    <TableCell className="px-4 text-right">
-                      <Badge variant="secondary">{Number(tag.contactCount).toLocaleString()}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          {!loading && resources.tags.length === 0 ? (
-            <EmptyState
-              compact
-              title="タグがまだありません"
-              description="検索や分類に使う最初のタグを作成しましょう。"
-              action={
-                <Button variant="outline" onClick={() => setShowCreate(true)}>
-                  <Tags data-icon="inline-start" />
-                  タグを作成
-                </Button>
-              }
-            />
-          ) : null}
+          <DataTable
+            columns={columns}
+            rows={resources.tags}
+            rowKey={(tag) => tag.id}
+            caption="コンタクトタグ一覧"
+            loading={loading}
+            emptyTitle="タグがまだありません"
+            emptyDescription="検索や分類に使う最初のタグを作成しましょう。"
+            emptyAction={
+              <Button variant="outline" onClick={() => setShowCreate(true)}>
+                <Tags data-icon="inline-start" />
+                タグを作成
+              </Button>
+            }
+          />
         </CardContent>
       </Card>
-      <AppDialog
+      <CreateTagForm
         open={showCreate}
         onOpenChange={setShowCreate}
-        title="タグを作成"
-        description="連絡先を識別するラベルとカラーを設定します。"
-      >
-        <CreateTagForm
-          onSaved={async () => {
-            await load();
-            setShowCreate(false);
-          }}
-        />
-      </AppDialog>
+        onSaved={async () => {
+          await load();
+          setShowCreate(false);
+        }}
+      />
     </PageLayout>
   );
 }
@@ -186,58 +157,50 @@ function ResourceLoadError({
   );
 }
 
-function ResourceTableSkeleton({ columns }: { columns: number }): ReactNode {
-  return Array.from({ length: 4 }, (_, rowIndex) => (
-    <TableRow key={rowIndex}>
-      {Array.from({ length: columns }, (_, columnIndex) => (
-        <TableCell key={columnIndex} className={columnIndex === 0 ? "px-4" : undefined}>
-          <Skeleton className={columnIndex === 0 ? "h-4 w-32" : "h-4 w-20"} />
-        </TableCell>
-      ))}
-    </TableRow>
-  ));
-}
-
-function CreateTagForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+function CreateTagForm({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => Promise<void>;
+}): ReactNode {
+  const { busy, error, run } = useFormSubmission("タグを作成できませんでした");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       await orpc.contactResources.createTag({
         name: getFormString(form, "name"),
         color: getFormString(form, "color"),
       });
       await onSaved();
       toast.success("タグを作成しました");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "タグを作成できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
-    <form onSubmit={(event) => void submit(event)}>
-      <FieldGroup>
-        <FormInput label="名前" name="name" placeholder="例：ホットリード" required />
-        <FormInput
-          label="カラー"
-          name="color"
-          type="color"
-          defaultValue="#64748b"
-          description="検索結果やプロフィールでの識別に使用します。"
-          required
-        />
-        {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <LoadingButton busy={busy} busyLabel="作成中…" type="submit">
-          作成
-        </LoadingButton>
-      </FieldGroup>
-    </form>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="タグを作成"
+      description="連絡先を識別するラベルとカラーを設定します。"
+      onSubmit={(event) => void submit(event)}
+      busy={busy}
+      error={error}
+      submitLabel="作成"
+    >
+      <FormInput label="名前" name="name" placeholder="例：ホットリード" required />
+      <FormInput
+        label="カラー"
+        name="color"
+        type="color"
+        defaultValue="#64748b"
+        description="検索結果やプロフィールでの識別に使用します。"
+        required
+      />
+    </FormDialog>
   );
 }

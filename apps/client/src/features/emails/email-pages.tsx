@@ -2,7 +2,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { CalendarClock, FileText, Plus, Send, UsersRound } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
-import { AppDialog, PageLayout } from "@/components/app-ui";
+import { PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -190,55 +190,38 @@ function EmailCenterPage({
         />
       ) : null}
 
-      <AppDialog
+      <CampaignForm
         open={showCampaignForm}
         onOpenChange={setShowCampaignForm}
-        title={editingCampaign ? "メールキャンペーンを編集" : "メールキャンペーンを作成"}
-        description="配信対象、テンプレート、送信タイミングを設定します。"
-        className="sm:max-w-xl"
-      >
-        <CampaignForm
-          campaign={editingCampaign}
-          segments={segments}
-          templates={templates.filter(
-            (template) => template.purpose === "marketing" && template.sendable,
-          )}
-          topics={topics}
-          onSaved={() => {
-            setShowCampaignForm(false);
-            setEditingCampaign(null);
-          }}
-        />
-      </AppDialog>
+        campaign={editingCampaign}
+        segments={segments}
+        templates={templates.filter(
+          (template) => template.purpose === "marketing" && template.sendable,
+        )}
+        topics={topics}
+        onSaved={() => {
+          setShowCampaignForm(false);
+          setEditingCampaign(null);
+        }}
+      />
 
-      <AppDialog
+      <TemplateForm
         open={showTemplateForm}
         onOpenChange={setShowTemplateForm}
-        title="Resend Templateを登録"
-        description="Resendで作成・公開したテンプレートをKaenmaから利用できるようにします。"
-        className="sm:max-w-xl"
-      >
-        <TemplateForm
-          onSaved={() => {
-            setShowTemplateForm(false);
-          }}
-        />
-      </AppDialog>
+        onSaved={() => {
+          setShowTemplateForm(false);
+        }}
+      />
 
-      <AppDialog
+      <VariableForm
         open={showVariableForm}
         onOpenChange={setShowVariableForm}
-        title={editingVariable ? "メッセージ変数を編集" : "メッセージ変数を作成"}
-        description="Resend Template内では MESSAGE_KEY の形式で登録します。"
-      >
-        <VariableForm
-          variable={editingVariable}
-          onSaved={() => {
-            setShowVariableForm(false);
-            setEditingVariable(null);
-          }}
-        />
-      </AppDialog>
+        variable={editingVariable}
+        onSaved={() => {
+          setShowVariableForm(false);
+          setEditingVariable(null);
+        }}
+      />
     </PageLayout>
   );
 }

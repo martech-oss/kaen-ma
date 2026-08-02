@@ -4,30 +4,20 @@ import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import {
-  AppDialog,
   ArchiveConfirm,
-  EmptyState,
-  ErrorAlert,
+  FormDialog,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
   FormTextarea,
-  LoadingButton,
   PageLayout,
 } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FieldGroup } from "@/components/ui/field";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { landingPagesQueryOptions, type LandingPageRow } from "@/features/website/website-api";
 import { CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
@@ -57,6 +47,80 @@ export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): 
     }
   }
 
+  const columns: DataTableColumn<LandingPageRow>[] = [
+    {
+      key: "name",
+      header: "名前",
+      cell: (item) => (
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">{item.name}</span>
+          <span className="text-xs text-muted-foreground">/{item.slug}</span>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "状態",
+      cell: (item) => <PublishStatusBadge status={item.status} />,
+    },
+    {
+      key: "version",
+      header: "バージョン",
+      cell: (item) => `v${item.version}`,
+    },
+    {
+      key: "updatedAt",
+      header: "更新日時",
+      cell: (item) => formatDateTime(item.updatedAt),
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cell: (item) => {
+        const publicUrl = `${window.location.origin}/p/${workspaceSlug}/${item.slug}`;
+        return (
+          <div className="flex justify-end gap-1">
+            <CopyButton value={publicUrl} label="URL" />
+            {item.status === "published" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                render={
+                  <a
+                    href={publicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`${item.name}を表示`}
+                  />
+                }
+              >
+                <ExternalLink data-icon="inline-start" />
+                表示
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label={`${item.name}を編集`}
+              onClick={() => {
+                setEditing(item);
+                setDialogOpen(true);
+              }}
+            >
+              <Pencil />
+            </Button>
+            <ArchiveConfirm
+              label={item.name}
+              description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
+              onConfirm={() => archive(item)}
+            />
+          </div>
+        );
+      },
+      headClassName: "text-right",
+    },
+  ];
+
   return (
     <PageLayout
       title="ランディングページ"
@@ -73,100 +137,30 @@ export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): 
       }
     >
       <LandingSummary items={items} />
-      {items.length === 0 ? (
-        <EmptyState
-          title="ランディングページがありません"
-          description="見出し、本文、CTAを入力して最初のページを作成してください。"
-        />
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>ページ一覧</CardTitle>
-            <CardDescription>公開URLと現在のバージョンを管理します。</CardDescription>
-          </CardHeader>
-          <CardContent className="px-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>名前</TableHead>
-                  <TableHead>状態</TableHead>
-                  <TableHead>バージョン</TableHead>
-                  <TableHead>更新日時</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => {
-                  const publicUrl = `${window.location.origin}/p/${workspaceSlug}/${item.slug}`;
-                  return (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <span className="font-medium">{item.name}</span>
-                          <span className="text-xs text-muted-foreground">/{item.slug}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <PublishStatusBadge status={item.status} />
-                      </TableCell>
-                      <TableCell>v{item.version}</TableCell>
-                      <TableCell>{formatDateTime(item.updatedAt)}</TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <CopyButton value={publicUrl} label="URL" />
-                          {item.status === "published" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              render={
-                                <a
-                                  href={publicUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  aria-label={`${item.name}を表示`}
-                                />
-                              }
-                            >
-                              <ExternalLink data-icon="inline-start" />
-                              表示
-                            </Button>
-                          ) : null}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            aria-label={`${item.name}を編集`}
-                            onClick={() => {
-                              setEditing(item);
-                              setDialogOpen(true);
-                            }}
-                          >
-                            <Pencil />
-                          </Button>
-                          <ArchiveConfirm
-                            label={item.name}
-                            description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
-                            onConfirm={() => archive(item)}
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>ページ一覧</CardTitle>
+          <CardDescription>公開URLと現在のバージョンを管理します。</CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          <DataTable
+            columns={columns}
+            rows={items}
+            rowKey={(item) => item.id}
+            caption="ページ一覧"
+            emptyTitle="ランディングページがありません"
+            emptyDescription="見出し、本文、CTAを入力して最初のページを作成してください。"
+          />
+        </CardContent>
+      </Card>
 
-      <AppDialog
+      <LandingPageEditor
+        key={editing?.id ?? "new"}
+        item={editing}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        title={editing ? "ランディングページを編集" : "ランディングページを作成"}
-        description="保存するたびに新しいページバージョンを作成します。"
-        className="sm:max-w-2xl"
-      >
-        <LandingPageEditor key={editing?.id ?? "new"} item={editing} onSaved={refresh} />
-      </AppDialog>
+        onSaved={refresh}
+      />
     </PageLayout>
   );
 }
@@ -213,14 +207,17 @@ function LandingSummary({ items }: { items: LandingPageRow[] }): ReactNode {
 
 function LandingPageEditor({
   item,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   item: LandingPageRow | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const current = readLandingContent(item?.contentDocument ?? undefined);
+  const { busy, error, run } = useFormSubmission("保存できませんでした");
 
   const createPage = useMutation(orpcQuery.website.createPage.mutationOptions());
   const updatePage = useMutation(orpcQuery.website.updatePage.mutationOptions());
@@ -229,84 +226,82 @@ function LandingPageEditor({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const name = getFormString(formData, "name").trim();
-    setBusy(true);
-    setError("");
-    try {
-      const payload = {
-        name,
-        slug: getFormString(formData, "slug").trim() || slugify(name),
-        status: getFormString(formData, "status") === "published" ? "published" : "draft",
-        content: buildLandingContent({
-          headline: getFormString(formData, "headline"),
-          body: getFormString(formData, "body"),
-          ctaLabel: getFormString(formData, "ctaLabel"),
-          ctaUrl: getFormString(formData, "ctaUrl"),
-        }),
-      } as const;
+    const payload = {
+      name,
+      slug: getFormString(formData, "slug").trim() || slugify(name),
+      status: getFormString(formData, "status") === "published" ? "published" : "draft",
+      content: buildLandingContent({
+        headline: getFormString(formData, "headline"),
+        body: getFormString(formData, "body"),
+        ctaLabel: getFormString(formData, "ctaLabel"),
+        ctaUrl: getFormString(formData, "ctaUrl"),
+      }),
+    } as const;
+    await run(async () => {
       await (item
         ? updatePage.mutateAsync({ id: item.id, ...payload })
         : createPage.mutateAsync(payload));
       toast.success(item ? "ページを更新しました" : "ページを作成しました");
       await onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
-    <form onSubmit={(event) => void submit(event)}>
-      <FieldGroup>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput
-            label="管理用の名前"
-            name="name"
-            defaultValue={item?.name}
-            placeholder="春のキャンペーン"
-            required
-          />
-          <FormInput
-            label="スラッグ"
-            name="slug"
-            defaultValue={item?.slug}
-            description="未入力なら名前から自動生成します。"
-            placeholder="spring-campaign"
-          />
-        </div>
-        <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
-          <FormSelectOption value="draft">下書き</FormSelectOption>
-          <FormSelectOption value="published">公開</FormSelectOption>
-        </FormNativeSelect>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={item ? "ランディングページを編集" : "ランディングページを作成"}
+      description="保存するたびに新しいページバージョンを作成します。"
+      className="sm:max-w-2xl"
+      onSubmit={(event) => void submit(event)}
+      busy={busy}
+      error={error}
+      submitLabel={item ? "新しいバージョンを保存" : "ページを作成"}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormInput
-          label="見出し"
-          name="headline"
-          defaultValue={current.headline}
-          placeholder="マーケティングを、もっとシンプルに。"
+          label="管理用の名前"
+          name="name"
+          defaultValue={item?.name}
+          placeholder="春のキャンペーン"
           required
         />
-        <FormTextarea label="本文" name="body" defaultValue={current.body} rows={4} required />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput
-            label="CTAラベル"
-            name="ctaLabel"
-            defaultValue={current.ctaLabel}
-            placeholder="無料で始める"
-          />
-          <FormInput
-            label="CTAリンク"
-            name="ctaUrl"
-            type="url"
-            defaultValue={current.ctaUrl}
-            placeholder="https://example.com/signup"
-          />
-        </div>
-        {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <LoadingButton busy={busy} type="submit" className="w-full">
-          {item ? "新しいバージョンを保存" : "ページを作成"}
-        </LoadingButton>
-      </FieldGroup>
-    </form>
+        <FormInput
+          label="スラッグ"
+          name="slug"
+          defaultValue={item?.slug}
+          description="未入力なら名前から自動生成します。"
+          placeholder="spring-campaign"
+        />
+      </div>
+      <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
+        <FormSelectOption value="draft">下書き</FormSelectOption>
+        <FormSelectOption value="published">公開</FormSelectOption>
+      </FormNativeSelect>
+      <FormInput
+        label="見出し"
+        name="headline"
+        defaultValue={current.headline}
+        placeholder="マーケティングを、もっとシンプルに。"
+        required
+      />
+      <FormTextarea label="本文" name="body" defaultValue={current.body} rows={4} required />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormInput
+          label="CTAラベル"
+          name="ctaLabel"
+          defaultValue={current.ctaLabel}
+          placeholder="無料で始める"
+        />
+        <FormInput
+          label="CTAリンク"
+          name="ctaUrl"
+          type="url"
+          defaultValue={current.ctaUrl}
+          placeholder="https://example.com/signup"
+        />
+      </div>
+    </FormDialog>
   );
 }
 

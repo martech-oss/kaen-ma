@@ -4,6 +4,7 @@ import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import { ErrorAlert, FormTextarea, LoadingButton, PageLayout } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,8 +33,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { siteTrackingQueryOptions, type SiteTrackingData } from "@/features/website/website-api";
+import {
+  siteTrackingQueryOptions,
+  type SiteTrackingData,
+  type TrackingTopPage,
+} from "@/features/website/website-api";
 import { CopyButton } from "@/features/website/website-shared";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
@@ -42,8 +48,7 @@ export function SiteTrackingPage(): ReactNode {
   const queryClient = useQueryClient();
   const { data } = useSuspenseQuery(siteTrackingQueryOptions());
   const [enabled, setEnabled] = useState(data.enabled);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("設定を保存できませんでした");
   const trackingCode = buildTrackingCode(data.workspaceSlug);
 
   const updateTracking = useMutation(orpcQuery.website.updateTracking.mutationOptions());
@@ -55,17 +60,11 @@ export function SiteTrackingPage(): ReactNode {
       .split(/[\n,]+/)
       .map((value) => value.trim())
       .filter(Boolean);
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       await updateTracking.mutateAsync({ enabled, allowedDomains });
       toast.success("サイトトラッキング設定を保存しました");
       await queryClient.invalidateQueries({ queryKey: orpcQuery.website.getTracking.key() });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "設定を保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
@@ -204,6 +203,20 @@ function TrackingSummary({ data }: { data: SiteTrackingData }): ReactNode {
 }
 
 function TopPages({ items }: { items: SiteTrackingData["topPages"] }): ReactNode {
+  const columns: DataTableColumn<TrackingTopPage>[] = [
+    {
+      key: "url",
+      header: "URL",
+      cell: (item) => <span className="block max-w-96 truncate">{item.url}</span>,
+    },
+    {
+      key: "views",
+      header: "表示",
+      cell: (item) => item.views.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right",
+    },
+  ];
   return (
     <Card>
       <CardHeader>
@@ -211,32 +224,13 @@ function TopPages({ items }: { items: SiteTrackingData["topPages"] }): ReactNode
         <CardDescription>過去30日間のページビュー順です。</CardDescription>
       </CardHeader>
       <CardContent className="px-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>URL</TableHead>
-              <TableHead className="text-right">表示</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.length > 0 ? (
-              items.map((item) => (
-                <TableRow key={item.url}>
-                  <TableCell>
-                    <span className="block max-w-96 truncate">{item.url}</span>
-                  </TableCell>
-                  <TableCell className="text-right">{item.views.toLocaleString()}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={2} className="h-28 text-center text-muted-foreground">
-                  まだページビューがありません
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(item) => item.url}
+          caption="上位ページ"
+          emptyTitle="まだページビューがありません"
+        />
       </CardContent>
     </Card>
   );

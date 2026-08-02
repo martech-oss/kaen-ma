@@ -3,18 +3,10 @@ import { Copy, Pencil } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ArchiveConfirm, EmptyState } from "@/components/app-ui";
+import { ArchiveConfirm } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import type { MessageVariableRow } from "@/features/emails/email-api";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
@@ -77,78 +69,72 @@ export function VariableTable({
       toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
     }
   }
-  if (!loading && items.length === 0) {
-    return (
-      <EmptyState
-        title="メッセージ変数がありません"
-        description="ブランド名、会社住所、共通署名などを登録できます。"
-      />
-    );
-  }
+
+  const columns: DataTableColumn<MessageVariableRow>[] = [
+    {
+      key: "name",
+      header: "名前",
+      cell: (variable) => (
+        <div className="flex flex-col gap-1">
+          <span className="font-medium">{variable.name}</span>
+          {variable.description ? (
+            <span className="text-xs text-muted-foreground">{variable.description}</span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: "token",
+      header: "変数",
+      cell: (variable) => {
+        const token = messageVariableToken(variable.key);
+        return (
+          <div className="flex items-center gap-2">
+            <code>{token}</code>
+            <CopyButton value={token} />
+          </div>
+        );
+      },
+    },
+    {
+      key: "value",
+      header: "値",
+      cell: (variable) => variable.value || "空の値",
+      cellClassName: "max-w-80 truncate",
+    },
+    {
+      key: "updatedAt",
+      header: "更新日",
+      cell: (variable) => formatDateTime(variable.updatedAt),
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cell: (variable) => (
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={() => onEdit(variable)}>
+            <Pencil data-icon="inline-start" />
+            編集
+          </Button>
+          <ArchiveConfirm label={variable.name} onConfirm={() => void archive(variable)} />
+        </div>
+      ),
+      headClassName: "text-right",
+    },
+  ];
+
   return (
     <div className="overflow-x-auto rounded-xl border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>名前</TableHead>
-            <TableHead>変数</TableHead>
-            <TableHead>値</TableHead>
-            <TableHead>更新日</TableHead>
-            <TableHead className="text-right">操作</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loading
-            ? Array.from({ length: 2 }).map((_, index) => (
-                <TableRow key={index}>
-                  {Array.from({ length: 5 }).map((__, cell) => (
-                    <TableCell key={cell}>
-                      <Skeleton className="h-5 w-28" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            : items.map((variable) => {
-                const token = messageVariableToken(variable.key);
-                return (
-                  <TableRow key={variable.id}>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium">{variable.name}</span>
-                        {variable.description ? (
-                          <span className="text-xs text-muted-foreground">
-                            {variable.description}
-                          </span>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <code>{token}</code>
-                        <CopyButton value={token} />
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-80 truncate">
-                      {variable.value || "空の値"}
-                    </TableCell>
-                    <TableCell>{formatDateTime(variable.updatedAt)}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => onEdit(variable)}>
-                          <Pencil data-icon="inline-start" />
-                          編集
-                        </Button>
-                        <ArchiveConfirm
-                          label={variable.name}
-                          onConfirm={() => void archive(variable)}
-                        />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-        </TableBody>
-      </Table>
+      <DataTable
+        columns={columns}
+        rows={items}
+        rowKey={(variable) => variable.id}
+        caption="メッセージ変数一覧"
+        loading={loading}
+        skeletonRowCount={2}
+        emptyTitle="メッセージ変数がありません"
+        emptyDescription="ブランド名、会社住所、共通署名などを登録できます。"
+      />
     </div>
   );
 }

@@ -11,31 +11,21 @@ import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import {
-  AppDialog,
   ArchiveConfirm,
-  EmptyState,
-  ErrorAlert,
+  FormDialog,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
   FormTextarea,
-  LoadingButton,
   PageLayout,
 } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { FieldGroup } from "@/components/ui/field";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { siteMessagesQueryOptions, type SiteMessageRow } from "@/features/website/website-api";
 import { PublishStatusBadge } from "@/features/website/website-shared";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
@@ -64,6 +54,73 @@ export function SiteMessagesPage(): ReactNode {
     }
   }
 
+  const columns: DataTableColumn<SiteMessageRow>[] = [
+    {
+      key: "name",
+      header: "名前",
+      cell: (item) => (
+        <div className="flex max-w-80 flex-col gap-1">
+          <span className="font-medium">{item.name}</span>
+          <span className="truncate text-xs text-muted-foreground">{item.headline}</span>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "状態",
+      cell: (item) => <PublishStatusBadge status={item.status} />,
+    },
+    {
+      key: "pagePattern",
+      header: "ページ条件",
+      cell: (item) => <code className="text-xs">{item.pagePattern}</code>,
+    },
+    {
+      key: "impressions",
+      header: "表示",
+      cell: (item) => item.impressionCount.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "clicks",
+      header: "クリック",
+      cell: (item) => item.clickCount.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "updatedAt",
+      header: "更新日時",
+      cell: (item) => formatDateTime(item.updatedAt),
+    },
+    {
+      key: "actions",
+      header: "操作",
+      cell: (item) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-label={`${item.name}を編集`}
+            onClick={() => {
+              setEditing(item);
+              setDialogOpen(true);
+            }}
+          >
+            <Pencil />
+          </Button>
+          <ArchiveConfirm
+            label={item.name}
+            description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
+            onConfirm={() => archive(item)}
+          />
+        </div>
+      ),
+      headClassName: "text-right",
+    },
+  ];
+
   return (
     <PageLayout
       title="サイトメッセージ"
@@ -87,91 +144,32 @@ export function SiteMessagesPage(): ReactNode {
         </AlertDescription>
       </Alert>
       <MessageSummary items={items} />
-      {items.length === 0 ? (
-        <EmptyState
-          title="サイトメッセージがありません"
-          description="ページ条件と表示期間を指定して、最初のメッセージを作成してください。"
-        />
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>メッセージ一覧</CardTitle>
-            <CardDescription>
-              公開状態、ページ条件、表示・クリック実績を確認できます。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>名前</TableHead>
-                  <TableHead>状態</TableHead>
-                  <TableHead>ページ条件</TableHead>
-                  <TableHead className="text-right">表示</TableHead>
-                  <TableHead className="text-right">クリック</TableHead>
-                  <TableHead>更新日時</TableHead>
-                  <TableHead className="text-right">操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {items.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell>
-                      <div className="flex max-w-80 flex-col gap-1">
-                        <span className="font-medium">{item.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          {item.headline}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <PublishStatusBadge status={item.status} />
-                    </TableCell>
-                    <TableCell>
-                      <code className="text-xs">{item.pagePattern}</code>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {item.impressionCount.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right">{item.clickCount.toLocaleString()}</TableCell>
-                    <TableCell>{formatDateTime(item.updatedAt)}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          aria-label={`${item.name}を編集`}
-                          onClick={() => {
-                            setEditing(item);
-                            setDialogOpen(true);
-                          }}
-                        >
-                          <Pencil />
-                        </Button>
-                        <ArchiveConfirm
-                          label={item.name}
-                          description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
-                          onConfirm={() => archive(item)}
-                        />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>メッセージ一覧</CardTitle>
+          <CardDescription>
+            公開状態、ページ条件、表示・クリック実績を確認できます。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-0">
+          <DataTable
+            columns={columns}
+            rows={items}
+            rowKey={(item) => item.id}
+            caption="メッセージ一覧"
+            emptyTitle="サイトメッセージがありません"
+            emptyDescription="ページ条件と表示期間を指定して、最初のメッセージを作成してください。"
+          />
+        </CardContent>
+      </Card>
 
-      <AppDialog
+      <SiteMessageEditor
+        key={editing?.id ?? "new"}
+        item={editing}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        title={editing ? "サイトメッセージを編集" : "サイトメッセージを作成"}
-        description="サイト右下に表示する内容と対象ページを設定します。"
-        className="sm:max-w-2xl"
-      >
-        <SiteMessageEditor key={editing?.id ?? "new"} item={editing} onSaved={refresh} />
-      </AppDialog>
+        onSaved={refresh}
+      />
     </PageLayout>
   );
 }
@@ -225,13 +223,16 @@ function MessageSummary({ items }: { items: SiteMessageRow[] }): ReactNode {
 
 function SiteMessageEditor({
   item,
+  open,
+  onOpenChange,
   onSaved,
 }: {
   item: SiteMessageRow | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run, setError } = useFormSubmission("保存できませんでした");
 
   const createMessage = useMutation(orpcQuery.website.createMessage.mutationOptions());
   const updateMessage = useMutation(orpcQuery.website.updateMessage.mutationOptions());
@@ -246,99 +247,97 @@ function SiteMessageEditor({
       setError("終了日時は開始日時より後にしてください");
       return;
     }
-    setBusy(true);
-    setError("");
-    try {
-      const payload = {
-        name: getFormString(formData, "name"),
-        status: getFormString(formData, "status") === "published" ? "published" : "draft",
-        headline: getFormString(formData, "headline"),
-        body: getFormString(formData, "body"),
-        ctaLabel: getFormString(formData, "ctaLabel"),
-        ctaUrl: ctaUrl || null,
-        pagePattern: getFormString(formData, "pagePattern"),
-        startsAt,
-        endsAt,
-      } as const;
+    const payload = {
+      name: getFormString(formData, "name"),
+      status: getFormString(formData, "status") === "published" ? "published" : "draft",
+      headline: getFormString(formData, "headline"),
+      body: getFormString(formData, "body"),
+      ctaLabel: getFormString(formData, "ctaLabel"),
+      ctaUrl: ctaUrl || null,
+      pagePattern: getFormString(formData, "pagePattern"),
+      startsAt,
+      endsAt,
+    } as const;
+    await run(async () => {
       await (item
         ? updateMessage.mutateAsync({ id: item.id, ...payload })
         : createMessage.mutateAsync(payload));
       toast.success(item ? "サイトメッセージを更新しました" : "サイトメッセージを作成しました");
       await onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
-    <form onSubmit={(event) => void submit(event)}>
-      <FieldGroup>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput
-            label="管理用の名前"
-            name="name"
-            defaultValue={item?.name}
-            placeholder="料金ページの案内"
-            required
-          />
-          <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
-            <FormSelectOption value="draft">下書き</FormSelectOption>
-            <FormSelectOption value="published">公開</FormSelectOption>
-          </FormNativeSelect>
-        </div>
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={item ? "サイトメッセージを編集" : "サイトメッセージを作成"}
+      description="サイト右下に表示する内容と対象ページを設定します。"
+      className="sm:max-w-2xl"
+      onSubmit={(event) => void submit(event)}
+      busy={busy}
+      error={error}
+      submitLabel={item ? "変更を保存" : "メッセージを作成"}
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormInput
-          label="見出し"
-          name="headline"
-          defaultValue={item?.headline}
-          placeholder="ご不明な点はありませんか？"
+          label="管理用の名前"
+          name="name"
+          defaultValue={item?.name}
+          placeholder="料金ページの案内"
           required
         />
-        <FormTextarea label="本文" name="body" defaultValue={item?.body} rows={3} />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput
-            label="CTAラベル"
-            name="ctaLabel"
-            defaultValue={item?.ctaLabel ?? ""}
-            placeholder="相談する"
-          />
-          <FormInput
-            label="CTAリンク"
-            name="ctaUrl"
-            type="url"
-            defaultValue={item?.ctaUrl ?? ""}
-            placeholder="https://example.com/contact"
-          />
-        </div>
+        <FormNativeSelect label="公開状態" name="status" defaultValue={item?.status ?? "draft"}>
+          <FormSelectOption value="draft">下書き</FormSelectOption>
+          <FormSelectOption value="published">公開</FormSelectOption>
+        </FormNativeSelect>
+      </div>
+      <FormInput
+        label="見出し"
+        name="headline"
+        defaultValue={item?.headline}
+        placeholder="ご不明な点はありませんか？"
+        required
+      />
+      <FormTextarea label="本文" name="body" defaultValue={item?.body} rows={3} />
+      <div className="grid gap-4 sm:grid-cols-2">
         <FormInput
-          label="対象ページ"
-          name="pagePattern"
-          defaultValue={item?.pagePattern ?? "*"}
-          description="* はすべてのページ、/pricing* は料金ページ配下を表します。"
-          placeholder="/pricing*"
-          required
+          label="CTAラベル"
+          name="ctaLabel"
+          defaultValue={item?.ctaLabel ?? ""}
+          placeholder="相談する"
         />
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormInput
-            label="表示開始"
-            name="startsAt"
-            type="datetime-local"
-            defaultValue={toLocalDateTime(item?.startsAt)}
-          />
-          <FormInput
-            label="表示終了"
-            name="endsAt"
-            type="datetime-local"
-            defaultValue={toLocalDateTime(item?.endsAt)}
-          />
-        </div>
-        {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <LoadingButton busy={busy} type="submit" className="w-full">
-          {item ? "変更を保存" : "メッセージを作成"}
-        </LoadingButton>
-      </FieldGroup>
-    </form>
+        <FormInput
+          label="CTAリンク"
+          name="ctaUrl"
+          type="url"
+          defaultValue={item?.ctaUrl ?? ""}
+          placeholder="https://example.com/contact"
+        />
+      </div>
+      <FormInput
+        label="対象ページ"
+        name="pagePattern"
+        defaultValue={item?.pagePattern ?? "*"}
+        description="* はすべてのページ、/pricing* は料金ページ配下を表します。"
+        placeholder="/pricing*"
+        required
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormInput
+          label="表示開始"
+          name="startsAt"
+          type="datetime-local"
+          defaultValue={toLocalDateTime(item?.startsAt)}
+        />
+        <FormInput
+          label="表示終了"
+          name="endsAt"
+          type="datetime-local"
+          defaultValue={toLocalDateTime(item?.endsAt)}
+        />
+      </div>
+    </FormDialog>
   );
 }
 

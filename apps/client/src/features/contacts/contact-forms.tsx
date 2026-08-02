@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode } from "react";
 
 import {
-  ErrorAlert as ErrorNotice,
+  FormDialog,
   FormInput as InputField,
-  LoadingButton,
   FormNativeSelect as SelectInput,
 } from "@/components/app-ui";
 import { NativeSelectOption } from "@/components/ui/native-select";
 import { type ContactOptions } from "@/features/contacts/contact-api";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { optionalString } from "@/lib/form-data";
 import { orpcQuery } from "@/lib/orpc";
 import { orpc } from "@/lib/orpc";
@@ -18,22 +18,23 @@ import { type SegmentFilter } from "@kaenma/orpc";
 import { slugify } from "./contact-bits";
 
 export function ContactCreateForm({
+  open,
+  onOpenChange,
   options,
   onSaved,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   options: ContactOptions;
   onSaved: () => Promise<void>;
 }): ReactNode {
   const createContact = useMutation(orpcQuery.contacts.create.mutationOptions());
   const queryClient = useQueryClient();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("保存できませんでした");
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       const contact = await createContact.mutateAsync({
         email: optionalString(form.get("email")),
         firstName: optionalString(form.get("firstName")),
@@ -68,82 +69,85 @@ export function ContactCreateForm({
         await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
       }
       await onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
   return (
-    <form
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="連絡先を追加"
+      description="プロフィール、会社、タグ、セグメントを登録します。"
       onSubmit={(event) => void submit(event)}
-      className="flex max-h-[75vh] flex-col gap-5 overflow-y-auto pr-1"
+      busy={busy}
+      error={error}
+      submitLabel="保存"
+      className="sm:max-w-2xl"
     >
-      <div className="grid grid-cols-2 gap-3">
-        <InputField label="名" name="firstName" />
-        <InputField label="姓" name="lastName" />
-      </div>
-      <InputField label="メールアドレス" name="email" type="email" />
-      <div className="grid grid-cols-2 gap-3">
-        <InputField label="電話番号" name="phone" />
-        <InputField label="外部ID" name="externalId" />
-      </div>
-      <div className="grid gap-3 md:grid-cols-2">
-        <InputField label="ステージ" name="stage" defaultValue="lead" />
-        <SelectInput label="会社" name="companyId">
-          <NativeSelectOption value="">指定なし</NativeSelectOption>
-          {options.companies.map((company) => (
-            <NativeSelectOption key={company.id} value={company.id}>
-              {company.name}
-            </NativeSelectOption>
-          ))}
-        </SelectInput>
-        <SelectInput label="タグ" name="tagId">
-          <NativeSelectOption value="">指定なし</NativeSelectOption>
-          {options.tags.map((tag) => (
-            <NativeSelectOption key={tag.id} value={tag.id}>
-              {tag.name}
-            </NativeSelectOption>
-          ))}
-        </SelectInput>
-        <SelectInput label="セグメント" name="segmentId">
-          <NativeSelectOption value="">指定なし</NativeSelectOption>
-          {options.segments
-            .filter((segment) => segment.kind === "static")
-            .map((segment) => (
-              <NativeSelectOption key={segment.id} value={segment.id}>
-                {segment.name}
+      <div className="flex max-h-[75vh] flex-col gap-5 overflow-y-auto pr-1">
+        <div className="grid grid-cols-2 gap-3">
+          <InputField label="名" name="firstName" />
+          <InputField label="姓" name="lastName" />
+        </div>
+        <InputField label="メールアドレス" name="email" type="email" />
+        <div className="grid grid-cols-2 gap-3">
+          <InputField label="電話番号" name="phone" />
+          <InputField label="外部ID" name="externalId" />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <InputField label="ステージ" name="stage" defaultValue="lead" />
+          <SelectInput label="会社" name="companyId">
+            <NativeSelectOption value="">指定なし</NativeSelectOption>
+            {options.companies.map((company) => (
+              <NativeSelectOption key={company.id} value={company.id}>
+                {company.name}
               </NativeSelectOption>
             ))}
-        </SelectInput>
+          </SelectInput>
+          <SelectInput label="タグ" name="tagId">
+            <NativeSelectOption value="">指定なし</NativeSelectOption>
+            {options.tags.map((tag) => (
+              <NativeSelectOption key={tag.id} value={tag.id}>
+                {tag.name}
+              </NativeSelectOption>
+            ))}
+          </SelectInput>
+          <SelectInput label="セグメント" name="segmentId">
+            <NativeSelectOption value="">指定なし</NativeSelectOption>
+            {options.segments
+              .filter((segment) => segment.kind === "static")
+              .map((segment) => (
+                <NativeSelectOption key={segment.id} value={segment.id}>
+                  {segment.name}
+                </NativeSelectOption>
+              ))}
+          </SelectInput>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          メールアドレスまたは外部IDのどちらかを入力してください。
+        </p>
       </div>
-      <p className="text-xs text-muted-foreground">
-        メールアドレスまたは外部IDのどちらかを入力してください。
-      </p>
-      {error && <ErrorNotice>{error}</ErrorNotice>}
-      <LoadingButton busy={busy} busyLabel="保存中…" className="w-full" type="submit">
-        保存
-      </LoadingButton>
-    </form>
+    </FormDialog>
   );
 }
 
 export function SegmentSaveForm({
+  open,
+  onOpenChange,
   filter,
   onSaved,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   filter: SegmentFilter | null;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const { busy, error, run } = useFormSubmission("セグメントを保存できませんでした");
   const queryClient = useQueryClient();
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!filter) return;
     const name = getFormString(new FormData(event.currentTarget), "name");
-    setBusy(true);
-    try {
+    await run(async () => {
       await orpc.segments.create({
         name,
         slug: slugify(name),
@@ -152,22 +156,23 @@ export function SegmentSaveForm({
       });
       await queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });
       await onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "セグメントを保存できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
   return (
-    <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="検索条件をセグメントとして保存"
+      description="現在の検索条件を動的セグメントに変換します。"
+      onSubmit={(event) => void submit(event)}
+      busy={busy}
+      error={error}
+      submitLabel="保存"
+    >
       <InputField label="セグメント名" name="name" required />
       <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
         現在の検索条件を動的セグメントとして保存します。連絡先の状態が変わったら再評価できます。
       </p>
-      {error && <ErrorNotice>{error}</ErrorNotice>}
-      <LoadingButton busy={busy} className="w-full" type="submit" disabled={!filter}>
-        保存
-      </LoadingButton>
-    </form>
+    </FormDialog>
   );
 }
