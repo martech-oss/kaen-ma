@@ -1,4 +1,4 @@
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import type {
   LandingPage,
   PublishStatus,
@@ -18,18 +18,18 @@ export type SiteTrackingData = SiteTracking;
 export type TrackingTopPage = SiteTracking["topPages"][number];
 export type TrackingEvent = SiteTracking["recentEvents"][number];
 
-export function loadSignupForms(signal?: AbortSignal): Promise<SignupForm[]> {
-  return orpc.website.listForms(undefined, signal ? { signal } : undefined);
+export function signupFormsQueryOptions() {
+  return orpcQuery.website.listForms.queryOptions();
 }
 
-export function loadLandingPages(signal?: AbortSignal): Promise<LandingPage[]> {
-  return orpc.website.listPages(undefined, signal ? { signal } : undefined);
+export function landingPagesQueryOptions() {
+  return orpcQuery.website.listPages.queryOptions();
 }
 
-export function loadSiteMessages(signal?: AbortSignal): Promise<SiteMessage[]> {
-  return orpc.website.listMessages(undefined, signal ? { signal } : undefined);
+export function siteMessagesQueryOptions() {
+  return orpcQuery.website.listMessages.queryOptions();
 }
 
-export function loadSiteTracking(signal?: AbortSignal): Promise<SiteTracking> {
-  return orpc.website.getTracking(undefined, signal ? { signal } : undefined);
+export function siteTrackingQueryOptions() {
+  return orpcQuery.website.getTracking.queryOptions();
 }

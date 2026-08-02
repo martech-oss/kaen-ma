@@ -1,6 +1,6 @@
-import type { CampaignNode } from "@kaenma/orpc";
+import type { AutomationNode } from "@kaenma/orpc";
 
-type DelayNode = Extract<CampaignNode, { type: "delay" }>;
+type DelayNode = Extract<AutomationNode, { type: "delay" }>;
 
 export function computeDueAt(node: DelayNode, now: Date, timezone: string): Date {
   const config = node.config;

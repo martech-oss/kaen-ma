@@ -1,4 +1,4 @@
-import { useRouter } from "@tanstack/react-router";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { ExternalLink, FileStack, Globe2, Pencil, Plus } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -25,33 +25,30 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { LandingPageRow } from "@/features/website/website-api";
+import { landingPagesQueryOptions, type LandingPageRow } from "@/features/website/website-api";
 import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
 import type { ContentDocument } from "@kaenma/orpc";
 
-export function LandingPagesPage({
-  items,
-  workspaceSlug,
-}: {
-  items: LandingPageRow[];
-  workspaceSlug: string;
-}): ReactNode {
-  const router = useRouter();
+export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
+  const queryClient = useQueryClient();
+  const { data: items } = useSuspenseQuery(landingPagesQueryOptions());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<LandingPageRow | null>(null);
+
+  const archivePage = useMutation(orpcQuery.website.archivePage.mutationOptions());
 
   async function refresh(): Promise<void> {
     setDialogOpen(false);
     setEditing(null);
-    await router.invalidate({ sync: true });
+    await queryClient.invalidateQueries({ queryKey: orpcQuery.website.listPages.key() });
   }
 
   async function archive(item: LandingPageRow): Promise<void> {
     try {
-      await orpc.website.archivePage({ id: item.id });
+      await archivePage.mutateAsync({ id: item.id });
       toast.success("ランディングページをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -220,6 +217,9 @@ function LandingPageEditor({
   const [error, setError] = useState("");
   const current = readLandingContent(item?.contentDocument ?? undefined);
 
+  const createPage = useMutation(orpcQuery.website.createPage.mutationOptions());
+  const updatePage = useMutation(orpcQuery.website.updatePage.mutationOptions());
+
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -239,8 +239,8 @@ function LandingPageEditor({
         }),
       } as const;
       await (item
-        ? orpc.website.updatePage({ id: item.id, ...payload })
-        : orpc.website.createPage(payload));
+        ? updatePage.mutateAsync({ id: item.id, ...payload })
+        : createPage.mutateAsync(payload));
       toast.success(item ? "ページを更新しました" : "ページを作成しました");
       await onSaved();
     } catch (caught) {

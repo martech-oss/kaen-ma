@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useState } from "react";
 
 import {
@@ -25,6 +25,7 @@ export function ContactCreateForm({
   onSaved: () => Promise<void>;
 }): ReactNode {
   const createContact = useMutation(orpcQuery.contacts.create.mutationOptions());
+  const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -44,7 +45,7 @@ export function ContactCreateForm({
       });
       const tagId = optionalString(form.get("tagId"));
       const segmentId = optionalString(form.get("segmentId"));
-      const accountId = optionalString(form.get("accountId"));
+      const companyId = optionalString(form.get("companyId"));
       await Promise.all([
         tagId
           ? orpc.contactResources.addTag({ contactId: contact.id, resourceId: tagId })
@@ -52,14 +53,20 @@ export function ContactCreateForm({
         segmentId
           ? orpc.contactResources.addSegment({ contactId: contact.id, resourceId: segmentId })
           : Promise.resolve(),
-        accountId
+        companyId
           ? orpc.companies.assignContact({
-              id: accountId,
+              id: companyId,
               contactId: contact.id,
               isPrimary: true,
             })
           : Promise.resolve(),
       ]);
+      if (companyId) {
+        await queryClient.invalidateQueries({
+          queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+        });
+        await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+      }
       await onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存できませんでした");
@@ -83,11 +90,11 @@ export function ContactCreateForm({
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <InputField label="ステージ" name="stage" defaultValue="lead" />
-        <SelectInput label="アカウント" name="accountId">
+        <SelectInput label="会社" name="companyId">
           <NativeSelectOption value="">指定なし</NativeSelectOption>
-          {options.companies.map((account) => (
-            <NativeSelectOption key={account.id} value={account.id}>
-              {account.name}
+          {options.companies.map((company) => (
+            <NativeSelectOption key={company.id} value={company.id}>
+              {company.name}
             </NativeSelectOption>
           ))}
         </SelectInput>
@@ -130,6 +137,7 @@ export function SegmentSaveForm({
 }): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const queryClient = useQueryClient();
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!filter) return;
@@ -142,6 +150,7 @@ export function SegmentSaveForm({
         kind: "dynamic",
         filter,
       });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });
       await onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "セグメントを保存できませんでした");

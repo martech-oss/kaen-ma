@@ -1,11 +1,12 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Building2, Filter, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { ErrorAlert as ErrorNotice } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { type AccountOption, type SegmentOption } from "@/features/contacts/contact-api";
-import { orpc } from "@/lib/orpc";
+import { type CompanyOption, type SegmentOption } from "@/features/contacts/contact-api";
+import { orpc, orpcQuery } from "@/lib/orpc";
 
 import { ControlledSelect, Section } from "./contact-bits";
 import { type ContactProfile } from "./contact-drawer";
@@ -78,25 +79,33 @@ export function RelationEditor({
   );
 }
 
-export function AccountEditor({
+export function CompanyEditor({
   contactId,
-  accounts,
+  companies,
   options,
   disabled,
   onChanged,
 }: {
   contactId: string;
-  accounts: ContactProfile["companies"];
-  options: AccountOption[];
+  companies: ContactProfile["companies"];
+  options: CompanyOption[];
   disabled: boolean;
   onChanged: () => Promise<void>;
 }): ReactNode {
   const [selectedId, setSelectedId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const assigned = new Set(accounts.map((account) => account.id));
+  const assigned = new Set(companies.map((company) => company.id));
+  const queryClient = useQueryClient();
 
-  async function addAccount() {
+  async function invalidateCompany(companyId: string) {
+    await queryClient.invalidateQueries({
+      queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+    });
+    await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+  }
+
+  async function addCompany() {
     if (!selectedId) return;
     setBusy(true);
     setError("");
@@ -104,54 +113,54 @@ export function AccountEditor({
       await orpc.companies.assignContact({
         id: selectedId,
         contactId,
-        isPrimary: accounts.length === 0,
+        isPrimary: companies.length === 0,
       });
+      await invalidateCompany(selectedId);
       setSelectedId("");
       await onChanged();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "アカウントへ追加できませんでした");
+      setError(caught instanceof Error ? caught.message : "会社へ追加できませんでした");
     } finally {
       setBusy(false);
     }
   }
 
-  async function removeAccount(accountId: string) {
+  async function removeCompany(companyId: string) {
     setBusy(true);
     setError("");
     try {
-      await orpc.companies.removeContact({ id: accountId, contactId });
+      await orpc.companies.removeContact({ id: companyId, contactId });
+      await invalidateCompany(companyId);
       await onChanged();
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "アカウントとの関連を解除できませんでした",
-      );
+      setError(caught instanceof Error ? caught.message : "会社との関連を解除できませんでした");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Section title="アカウント" icon={<Building2 />}>
+    <Section title="会社" icon={<Building2 />}>
       <div className="flex flex-wrap gap-2">
-        {accounts.map((account) => (
-          <Badge key={account.id} variant="outline">
+        {companies.map((company) => (
+          <Badge key={company.id} variant="outline">
             <Building2 />
-            {account.name}
-            {account.isPrimary ? " · 主担当" : ""}
+            {company.name}
+            {company.isPrimary ? " · 主担当" : ""}
             {!disabled ? (
               <Button
                 variant="ghost"
                 size="icon-xs"
                 disabled={busy}
-                onClick={() => void removeAccount(account.id)}
-                aria-label={`${account.name}との関連を解除`}
+                onClick={() => void removeCompany(company.id)}
+                aria-label={`${company.name}との関連を解除`}
               >
                 <X />
               </Button>
             ) : null}
           </Badge>
         ))}
-        {accounts.length === 0 ? (
+        {companies.length === 0 ? (
           <span className="text-sm text-muted-foreground">未所属</span>
         ) : null}
       </div>
@@ -161,20 +170,20 @@ export function AccountEditor({
           <ControlledSelect
             value={selectedId}
             onValueChange={setSelectedId}
-            placeholder="追加するアカウントを選択"
+            placeholder="追加する会社を選択"
             className="flex-1"
             options={options
-              .filter((account) => !assigned.has(account.id))
-              .map((account) => ({
-                value: account.id,
-                label: account.name,
+              .filter((company) => !assigned.has(company.id))
+              .map((company) => ({
+                value: company.id,
+                label: company.name,
               }))}
           />
           <Button
             variant="outline"
             className="shrink-0"
             disabled={!selectedId || busy}
-            onClick={() => void addAccount()}
+            onClick={() => void addCompany()}
           >
             追加
           </Button>

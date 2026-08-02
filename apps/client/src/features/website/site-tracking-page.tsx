@@ -1,4 +1,4 @@
-import { useRouter } from "@tanstack/react-router";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Activity, ChartNoAxesCombined, ContactRound, Eye, Info } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -32,18 +32,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { SiteTrackingData } from "@/features/website/website-api";
+import { siteTrackingQueryOptions, type SiteTrackingData } from "@/features/website/website-api";
 import { CopyButton } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
 
-export function SiteTrackingPage({ data }: { data: SiteTrackingData }): ReactNode {
-  const router = useRouter();
+export function SiteTrackingPage(): ReactNode {
+  const queryClient = useQueryClient();
+  const { data } = useSuspenseQuery(siteTrackingQueryOptions());
   const [enabled, setEnabled] = useState(data.enabled);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const trackingCode = buildTrackingCode(data.workspaceSlug);
+
+  const updateTracking = useMutation(orpcQuery.website.updateTracking.mutationOptions());
 
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -55,9 +58,9 @@ export function SiteTrackingPage({ data }: { data: SiteTrackingData }): ReactNod
     setBusy(true);
     setError("");
     try {
-      await orpc.website.updateTracking({ enabled, allowedDomains });
+      await updateTracking.mutateAsync({ enabled, allowedDomains });
       toast.success("サイトトラッキング設定を保存しました");
-      await router.invalidate({ sync: true });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.website.getTracking.key() });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "設定を保存できませんでした");
     } finally {

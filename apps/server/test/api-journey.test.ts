@@ -104,7 +104,7 @@ describe("workspace API journey", () => {
       contacts: [expect.objectContaining({ id: contact.id, customFields: { source: "e2e" } })],
     });
 
-    const createdCampaign = await api("/campaigns", {
+    const createdAutomation = await api("/automations", {
       method: "POST",
       body: JSON.stringify({
         name: "Welcome journey",
@@ -127,27 +127,27 @@ describe("workspace API journey", () => {
         edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
       }),
     });
-    expect(createdCampaign.status).toBe(201);
-    const campaign = (await createdCampaign.json()) as { id: string; draftVersionId: string };
-    expect(campaign.draftVersionId).toBeTruthy();
+    expect(createdAutomation.status).toBe(201);
+    const automation = (await createdAutomation.json()) as { id: string; draftVersionId: string };
+    expect(automation.draftVersionId).toBeTruthy();
 
-    const campaigns = (await (await api("/campaigns")).json()) as Array<{
+    const automations = (await (await api("/automations")).json()) as Array<{
       name: string;
       status: string;
       enrollmentCount: number;
     }>;
-    expect(campaigns).toEqual([
+    expect(automations).toEqual([
       expect.objectContaining({ name: "Welcome journey", status: "draft", enrollmentCount: 0 }),
     ]);
 
-    const published = await api(`/campaigns/${campaign.id}/publish`, { method: "POST" });
+    const published = await api(`/automations/${automation.id}/publish`, { method: "POST" });
     expect(published.status).toBe(200);
     await expect(published.json()).resolves.toMatchObject({
       publishedVersionId: expect.any(String),
       draftVersionId: expect.any(String),
     });
 
-    const enrolled = await api(`/campaigns/${campaign.id}/enroll`, {
+    const enrolled = await api(`/automations/${automation.id}/enroll`, {
       method: "POST",
       body: JSON.stringify({ contactId: contact.id }),
     });
@@ -168,11 +168,11 @@ describe("workspace API journey", () => {
     expect(dashboardResponse.status).toBe(200);
     const dashboard = (await dashboardResponse.json()) as {
       contacts: { count: number };
-      campaigns: { count: number };
+      automations: { count: number };
       recentEvents: unknown[];
     };
     expect(dashboard.contacts.count).toBe(1);
-    expect(dashboard.campaigns.count).toBe(1);
+    expect(dashboard.automations.count).toBe(1);
     expect(dashboard.recentEvents).toEqual([
       expect.objectContaining({ contactId: contact.id, properties: {} }),
     ]);

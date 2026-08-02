@@ -20,7 +20,7 @@ export function useContactFilters(initialSearch: ContactSearch) {
   const [status, setStatus] = useState<ContactStatus>(initialSearch.status);
   const [stage, setStage] = useState(initialSearch.stage);
   const [tagId, setTagId] = useState(initialSearch.tagId);
-  const [accountId, setAccountId] = useState(initialSearch.accountId);
+  const [companyId, setCompanyId] = useState(initialSearch.companyId);
   const [segmentId, setSegmentId] = useState(initialSearch.segmentId);
   const [scoreMin, setScoreMin] = useState(initialSearch.scoreMin);
   const [scoreMax, setScoreMax] = useState(initialSearch.scoreMax);
@@ -33,7 +33,7 @@ export function useContactFilters(initialSearch: ContactSearch) {
     setStatus(initialSearch.status);
     setStage(initialSearch.stage);
     setTagId(initialSearch.tagId);
-    setAccountId(initialSearch.accountId);
+    setCompanyId(initialSearch.companyId);
     setSegmentId(initialSearch.segmentId);
     setScoreMin(initialSearch.scoreMin);
     setScoreMax(initialSearch.scoreMax);
@@ -47,7 +47,7 @@ export function useContactFilters(initialSearch: ContactSearch) {
       status,
       stage,
       tagId,
-      accountId,
+      companyId,
       segmentId,
       scoreMin,
       scoreMax,
@@ -73,7 +73,7 @@ export function useContactFilters(initialSearch: ContactSearch) {
     }, NAVIGATE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [
-    accountId,
+    companyId,
     direction,
     initialSearch,
     navigate,
@@ -88,7 +88,7 @@ export function useContactFilters(initialSearch: ContactSearch) {
   ]);
 
   const hasAdvancedFilters = Boolean(
-    stage || tagId || accountId || segmentId || scoreMin || scoreMax,
+    stage || tagId || companyId || segmentId || scoreMin || scoreMax,
   );
 
   /** Resets everything except `status`, which has its own control outside the filter panel. */
@@ -96,7 +96,7 @@ export function useContactFilters(initialSearch: ContactSearch) {
     setQuery("");
     setStage("");
     setTagId("");
-    setAccountId("");
+    setCompanyId("");
     setSegmentId("");
     setScoreMin("");
     setScoreMax("");
@@ -113,8 +113,8 @@ export function useContactFilters(initialSearch: ContactSearch) {
     setStage,
     tagId,
     setTagId,
-    accountId,
-    setAccountId,
+    companyId,
+    setCompanyId,
     segmentId,
     setSegmentId,
     scoreMin,

@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import type { CampaignDefinition } from "@kaenma/orpc";
+import type { AutomationDefinition } from "@kaenma/orpc";
 
 import {
   canTransitionJob,
   compileSegmentFilter,
   evaluateSendEligibility,
   retryDelaySeconds,
-  validateCampaign,
+  validateAutomation,
 } from "./index.js";
 
-describe("campaign validation", () => {
+describe("automation validation", () => {
   it("rejects cycles", () => {
-    const definition: CampaignDefinition = {
+    const definition: AutomationDefinition = {
       name: "bad",
       description: "",
       timezone: "UTC",
@@ -38,11 +38,11 @@ describe("campaign validation", () => {
         { id: "two", source: "send", target: "source", branch: "next" },
       ],
     };
-    expect(validateCampaign(definition).map((issue) => issue.code)).toContain("cycle");
+    expect(validateAutomation(definition).map((issue) => issue.code)).toContain("cycle");
   });
 
   it("accepts a hosted email template action", () => {
-    const definition: CampaignDefinition = {
+    const definition: AutomationDefinition = {
       name: "resend campaign",
       description: "",
       timezone: "UTC",
@@ -65,7 +65,7 @@ describe("campaign validation", () => {
       ],
       edges: [{ id: "one", source: "source", target: "send", branch: "next" }],
     };
-    expect(validateCampaign(definition)).toEqual([]);
+    expect(validateAutomation(definition)).toEqual([]);
   });
 });
 

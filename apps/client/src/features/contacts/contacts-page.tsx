@@ -88,8 +88,8 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
     setStage,
     tagId,
     setTagId,
-    accountId,
-    setAccountId,
+    companyId,
+    setCompanyId,
     segmentId,
     setSegmentId,
     scoreMin,
@@ -173,7 +173,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
 
   function buildSegmentFilter() {
     return createSegmentFilter(
-      { q: query, status, stage, tagId, accountId, scoreMin, scoreMax },
+      { q: query, status, stage, tagId, companyId, scoreMin, scoreMax },
       options,
     );
   }
@@ -183,9 +183,9 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
       title="連絡先"
       action={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/accounts" />}>
+          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/companies" />}>
             <Building2 data-icon="inline-start" />
-            アカウント
+            会社
           </Button>
           <Button variant="outline" nativeButton={false} render={<Link to="/contacts/tags" />}>
             <Tags data-icon="inline-start" />
@@ -250,13 +250,13 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
               }))}
             />
             <ControlledSelect
-              value={accountId}
-              onValueChange={setAccountId}
-              placeholder="すべてのアカウント"
+              value={companyId}
+              onValueChange={setCompanyId}
+              placeholder="すべての会社"
               className="min-w-44"
-              options={options.companies.map((account) => ({
-                value: account.id,
-                label: account.name,
+              options={options.companies.map((company) => ({
+                value: company.id,
+                label: company.name,
               }))}
             />
             <ControlledSelect
@@ -487,10 +487,10 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                       </TableCell>
                       <TableCell className="max-w-80">
                         <div className="flex flex-wrap gap-1">
-                          {contact.companies.slice(0, 1).map((account) => (
-                            <Badge key={account.id} variant="secondary">
+                          {contact.companies.slice(0, 1).map((company) => (
+                            <Badge key={company.id} variant="secondary">
                               <Building2 />
-                              {account.name}
+                              {company.name}
                             </Badge>
                           ))}
                           {contact.tags.slice(0, 3).map((tag) => (

@@ -1,6 +1,6 @@
-import { type CampaignEdge, type CampaignNode } from "@kaenma/orpc";
+import { type AutomationEdge, type AutomationNode } from "@kaenma/orpc";
 
-export function nodeLabel(node: CampaignNode): string {
+export function nodeLabel(node: AutomationNode): string {
   if (node.type === "source") return triggerLabel(node.config.source);
   if (node.type === "delay") {
     return node.config.mode === "relative"
@@ -15,7 +15,7 @@ export function nodeLabel(node: CampaignNode): string {
   return node.config.action.replaceAll("_", " ");
 }
 
-export function nodeTypeLabel(type: CampaignNode["type"]): string {
+export function nodeTypeLabel(type: AutomationNode["type"]): string {
   return {
     source: "開始条件",
     action: "アクション",
@@ -39,7 +39,9 @@ export function triggerLabel(source: string | null): string {
   );
 }
 
-function eventLabel(event: Extract<CampaignNode, { type: "decision" }>["config"]["event"]): string {
+function eventLabel(
+  event: Extract<AutomationNode, { type: "decision" }>["config"]["event"],
+): string {
   return {
     opened: "メール開封",
     clicked: "メールクリック",
@@ -56,6 +58,6 @@ export function formatDuration(minutes: number): string {
   return `${minutes}分`;
 }
 
-export function branchLabel(branch: CampaignEdge["branch"]): string | undefined {
+export function branchLabel(branch: AutomationEdge["branch"]): string | undefined {
   return { next: undefined, yes: "はい", no: "いいえ", timeout: "時間切れ" }[branch];
 }

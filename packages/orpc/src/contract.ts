@@ -1,5 +1,5 @@
 import { assetsContract } from "./assets/contract";
-import { campaignsContract } from "./automations/contract";
+import { automationsContract } from "./automations/contract";
 import { consentContract } from "./consent/contract";
 import { companiesContract } from "./contacts/company-contract";
 import { contactsContract } from "./contacts/contract";
@@ -19,7 +19,7 @@ export const contract = {
   workspace: workspaceContract,
   consent: consentContract,
   contacts: contactsContract,
-  campaigns: campaignsContract,
+  automations: automationsContract,
   contactResources: contactResourcesContract,
   deals: dealsContract,
   emails: emailsContract,

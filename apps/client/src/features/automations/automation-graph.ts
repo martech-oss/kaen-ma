@@ -1,10 +1,10 @@
 import { type Edge } from "@xyflow/react";
 
-import { type CampaignDefinition, type CampaignEdge, type CampaignNode } from "@kaenma/orpc";
+import { type AutomationDefinition, type AutomationEdge, type AutomationNode } from "@kaenma/orpc";
 
-import { type EmailTemplateOption } from "./campaign-types";
+import { type EmailTemplateOption } from "./automation-types";
 
-export function chainEdges(ids: string[]): CampaignEdge[] {
+export function chainEdges(ids: string[]): AutomationEdge[] {
   return ids.slice(1).map((target, index) => ({
     id: `${ids[index]}-${target}`,
     source: ids[index]!,
@@ -14,8 +14,8 @@ export function chainEdges(ids: string[]): CampaignEdge[] {
 }
 
 export function connectionBranches(
-  node: CampaignNode,
-): Array<readonly [CampaignEdge["branch"], string]> {
+  node: AutomationNode,
+): Array<readonly [AutomationEdge["branch"], string]> {
   if (node.type === "condition") {
     return [
       ["yes", "はい"],
@@ -31,12 +31,12 @@ export function connectionBranches(
   return [["next", "次へ"]];
 }
 
-export function withCampaignConnection(
-  definition: CampaignDefinition,
+export function withAutomationConnection(
+  definition: AutomationDefinition,
   sourceId: string,
   targetId: string | null,
-  branch: CampaignEdge["branch"],
-): CampaignDefinition | null {
+  branch: AutomationEdge["branch"],
+): AutomationDefinition | null {
   const source = definition.nodes.find((node) => node.id === sourceId);
   const target = targetId
     ? definition.nodes.find((node) => node.id === targetId && node.type !== "source")
@@ -73,7 +73,7 @@ export function withCampaignConnection(
 }
 
 export function connectionCreatesCycle(
-  edges: CampaignEdge[],
+  edges: AutomationEdge[],
   sourceId: string,
   targetId: string,
 ): boolean {
@@ -92,26 +92,26 @@ export function connectionCreatesCycle(
   return false;
 }
 
-export function isBranch(value: string | null | undefined): value is CampaignEdge["branch"] {
+export function isBranch(value: string | null | undefined): value is AutomationEdge["branch"] {
   return value === "next" || value === "yes" || value === "no" || value === "timeout";
 }
 
-export function toCampaignEdge(edge: Edge): CampaignEdge {
+export function toAutomationEdge(edge: Edge): AutomationEdge {
   return {
     id: edge.id,
     source: edge.source,
     target: edge.target,
     branch: isBranch(edge.data?.["branch"] as string | undefined)
-      ? (edge.data?.["branch"] as CampaignEdge["branch"])
+      ? (edge.data?.["branch"] as AutomationEdge["branch"])
       : "next",
   };
 }
 
 export function sourceNode(
-  config: Extract<CampaignNode, { type: "source" }>["config"],
+  config: Extract<AutomationNode, { type: "source" }>["config"],
   x: number,
   y: number,
-): Extract<CampaignNode, { type: "source" }> {
+): Extract<AutomationNode, { type: "source" }> {
   return { id: "source", type: "source", position: { x, y }, config };
 }
 
@@ -119,7 +119,7 @@ export function emailNode(
   id: string,
   position: { x: number; y: number },
   template: EmailTemplateOption,
-): Extract<CampaignNode, { type: "action" }> {
+): Extract<AutomationNode, { type: "action" }> {
   return {
     id,
     type: "action",
@@ -136,7 +136,7 @@ export function delayNode(
   minutes: number,
   x: number,
   y: number,
-): Extract<CampaignNode, { type: "delay" }> {
+): Extract<AutomationNode, { type: "delay" }> {
   return { id, type: "delay", position: { x, y }, config: { mode: "relative", minutes } };
 }
 
@@ -144,7 +144,7 @@ export function sourceConfig(
   source: string,
   formId: string,
   segmentId: string,
-): Extract<CampaignNode, { type: "source" }>["config"] {
+): Extract<AutomationNode, { type: "source" }>["config"] {
   if (source === "form_submitted") return { source, formId, reentry: "once" };
   if (source === "segment_joined") return { source, segmentId, reentry: "once" };
   if (source === "api_event") return { source, eventName: "custom_event", reentry: "every_time" };

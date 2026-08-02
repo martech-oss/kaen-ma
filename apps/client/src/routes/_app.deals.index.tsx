@@ -1,7 +1,12 @@
 import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
 
 import { RouteError, RoutePending } from "@/components/route-status";
-import { dealSearchDefaults, loadDealsWorkspace, type DealSearch } from "@/features/deals/deal-api";
+import {
+  dealOptionsQueryOptions,
+  dealSearchDefaults,
+  dealsQueryOptions,
+  type DealSearch,
+} from "@/features/deals/deal-api";
 import { DealsPage } from "@/features/deals/deal-pages";
 
 export const Route = createFileRoute("/_app/deals/")({
@@ -14,14 +19,18 @@ export const Route = createFileRoute("/_app/deals/")({
     middlewares: [stripSearchParams(dealSearchDefaults)],
   },
   loaderDeps: ({ search }) => search,
-  loader: ({ deps, abortController }) => loadDealsWorkspace(deps, abortController.signal),
+  loader: ({ deps, context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(dealOptionsQueryOptions()),
+      context.queryClient.ensureQueryData(dealsQueryOptions(deps)),
+    ]),
   pendingComponent: RoutePending,
   errorComponent: RouteError,
   component: DealsRoute,
 });
 
 function DealsRoute() {
-  return <DealsPage initialData={Route.useLoaderData()} search={Route.useSearch()} />;
+  return <DealsPage search={Route.useSearch()} />;
 }
 
 function isDealStatus(value: unknown): value is DealSearch["status"] {

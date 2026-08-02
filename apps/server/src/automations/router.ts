@@ -1,19 +1,19 @@
-import { validateCampaign } from "@kaenma/core";
+import { validateAutomation } from "@kaenma/core";
 import { AutomationRepository, uuidv7 } from "@kaenma/database";
-import { campaignDefinitionSchema, type CampaignDefinition } from "@kaenma/orpc";
+import { automationDefinitionSchema, type AutomationDefinition } from "@kaenma/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { isRecord } from "../platform/values";
-import { getCampaignAnalytics } from "./analytics-service";
+import { getAutomationAnalytics } from "./analytics-service";
 import { enrollContactManually } from "./enrollment";
-import { listCampaigns, normalizeCampaignStatus } from "./list-service";
-import { campaignTrigger } from "./triggers";
+import { listAutomations, normalizeAutomationStatus } from "./list-service";
+import { automationTrigger } from "./triggers";
 
-export const listCampaignsProcedure = authed.campaigns.list.handler(async ({ context }) => {
-  return listCampaigns(context.database, context.workspace.workspaceId);
+export const listAutomationsProcedure = authed.automations.list.handler(async ({ context }) => {
+  return listAutomations(context.database, context.workspace.workspaceId);
 });
 
-export const createCampaignProcedure = authed.campaigns.create.handler(
+export const createAutomationProcedure = authed.automations.create.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const repository = new AutomationRepository(context.database, context.workspace);
@@ -27,18 +27,18 @@ export const createCampaignProcedure = authed.campaigns.create.handler(
   },
 );
 
-export const getCampaignDraftProcedure = authed.campaigns.getDraft.handler(
+export const getAutomationDraftProcedure = authed.automations.getDraft.handler(
   async ({ context, input, errors }) => {
     const repository = new AutomationRepository(context.database, context.workspace);
     const row = await repository.getDraft(input.id);
-    if (!row) throw errors.CAMPAIGN_NOT_FOUND();
-    const graph = campaignDefinitionSchema.safeParse(JSON.parse(row.graph));
-    if (!graph.success) throw errors.CAMPAIGN_NOT_FOUND();
-    return { graph: graph.data, status: normalizeCampaignStatus(row.status) };
+    if (!row) throw errors.AUTOMATION_NOT_FOUND();
+    const graph = automationDefinitionSchema.safeParse(JSON.parse(row.graph));
+    if (!graph.success) throw errors.AUTOMATION_NOT_FOUND();
+    return { graph: graph.data, status: normalizeAutomationStatus(row.status) };
   },
 );
 
-export const saveCampaignDraftProcedure = authed.campaigns.saveDraft.handler(
+export const saveAutomationDraftProcedure = authed.automations.saveDraft.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...definition } = input;
@@ -54,17 +54,17 @@ export const saveCampaignDraftProcedure = authed.campaigns.saveDraft.handler(
   },
 );
 
-export const publishCampaignProcedure = authed.campaigns.publish.handler(
+export const publishAutomationProcedure = authed.automations.publish.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const repository = new AutomationRepository(context.database, context.workspace);
     const row = await repository.findPublishableDraft(input.id);
     if (!row) throw errors.DRAFT_NOT_FOUND();
 
-    const parsed = campaignDefinitionSchema.safeParse(JSON.parse(row.graph));
+    const parsed = automationDefinitionSchema.safeParse(JSON.parse(row.graph));
     if (!parsed.success) throw errors.INVALID_GRAPH({ message: "フロー定義が不正です" });
-    const definition: CampaignDefinition = parsed.data;
-    const validation = validateCampaign(definition);
+    const definition: AutomationDefinition = parsed.data;
+    const validation = validateAutomation(definition);
     if (validation.length > 0) {
       throw errors.INVALID_GRAPH({ data: { issues: validation } });
     }
@@ -91,7 +91,7 @@ export const publishCampaignProcedure = authed.campaigns.publish.handler(
 
     const source = definition.nodes.find((node) => node.type === "source");
     if (!source) throw errors.INVALID_GRAPH({ message: "開始条件がありません" });
-    const trigger = campaignTrigger(source.config);
+    const trigger = automationTrigger(source.config);
     const published = await repository.publishDraft({
       automationId: input.id,
       draftVersionId: row.draftVersionId,
@@ -111,7 +111,7 @@ export const publishCampaignProcedure = authed.campaigns.publish.handler(
   },
 );
 
-export const setCampaignStatusProcedure = authed.campaigns.setStatus.handler(
+export const setAutomationStatusProcedure = authed.automations.setStatus.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const repository = new AutomationRepository(context.database, context.workspace);
@@ -121,7 +121,7 @@ export const setCampaignStatusProcedure = authed.campaigns.setStatus.handler(
   },
 );
 
-export const enrollCampaignProcedure = authed.campaigns.enroll.handler(
+export const enrollAutomationProcedure = authed.automations.enroll.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const outcome = await enrollContactManually(context.database, {
@@ -132,7 +132,7 @@ export const enrollCampaignProcedure = authed.campaigns.enroll.handler(
     });
     switch (outcome.kind) {
       case "not_active":
-        throw errors.CAMPAIGN_NOT_ACTIVE();
+        throw errors.AUTOMATION_NOT_ACTIVE();
       case "source_missing":
         throw errors.SOURCE_MISSING();
       case "already_enrolled":
@@ -143,9 +143,9 @@ export const enrollCampaignProcedure = authed.campaigns.enroll.handler(
   },
 );
 
-export const campaignAnalyticsProcedure = authed.campaigns.analytics.handler(
+export const automationAnalyticsProcedure = authed.automations.analytics.handler(
   async ({ context, input }) =>
-    getCampaignAnalytics(context.database, context.workspace.workspaceId, input.id),
+    getAutomationAnalytics(context.database, context.workspace.workspaceId, input.id),
 );
 
 // isRecord is re-exported for the client-side error shape check in tests.

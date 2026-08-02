@@ -1,6 +1,6 @@
-import type { CampaignDefinition, CampaignEdge, CampaignNode } from "@kaenma/orpc";
+import type { AutomationDefinition, AutomationEdge, AutomationNode } from "@kaenma/orpc";
 
-export interface CampaignValidationIssue {
+export interface AutomationValidationIssue {
   code:
     | "duplicate_node"
     | "duplicate_edge"
@@ -15,7 +15,7 @@ export interface CampaignValidationIssue {
   edgeId?: string;
 }
 
-const branchesByNodeType: Record<CampaignNode["type"], ReadonlySet<CampaignEdge["branch"]>> = {
+const branchesByNodeType: Record<AutomationNode["type"], ReadonlySet<AutomationEdge["branch"]>> = {
   source: new Set(["next"]),
   action: new Set(["next"]),
   delay: new Set(["next"]),
@@ -23,9 +23,9 @@ const branchesByNodeType: Record<CampaignNode["type"], ReadonlySet<CampaignEdge[
   decision: new Set(["yes", "no", "timeout"]),
 };
 
-export function validateCampaign(definition: CampaignDefinition): CampaignValidationIssue[] {
-  const issues: CampaignValidationIssue[] = [];
-  const nodes = new Map<string, CampaignNode>();
+export function validateAutomation(definition: AutomationDefinition): AutomationValidationIssue[] {
+  const issues: AutomationValidationIssue[] = [];
+  const nodes = new Map<string, AutomationNode>();
   const edgeIds = new Set<string>();
 
   for (const node of definition.nodes) {
@@ -41,11 +41,11 @@ export function validateCampaign(definition: CampaignDefinition): CampaignValida
 
   const sources = definition.nodes.filter((node) => node.type === "source");
   if (sources.length === 0) {
-    issues.push({ code: "missing_source", message: "Campaign requires one source node" });
+    issues.push({ code: "missing_source", message: "Automation requires one source node" });
   } else if (sources.length > 1) {
     issues.push({
       code: "multiple_sources",
-      message: "Campaign must have exactly one source node",
+      message: "Automation must have exactly one source node",
     });
   }
 
@@ -92,7 +92,7 @@ export function validateCampaign(definition: CampaignDefinition): CampaignValida
       if (visiting.has(nodeId)) {
         issues.push({
           code: "cycle",
-          message: `Campaign contains a cycle at ${nodeId}`,
+          message: `Automation contains a cycle at ${nodeId}`,
           nodeId,
         });
         return;
@@ -120,7 +120,7 @@ export function validateCampaign(definition: CampaignDefinition): CampaignValida
   return deduplicateIssues(issues);
 }
 
-function deduplicateIssues(issues: CampaignValidationIssue[]): CampaignValidationIssue[] {
+function deduplicateIssues(issues: AutomationValidationIssue[]): AutomationValidationIssue[] {
   const seen = new Set<string>();
   return issues.filter((issue) => {
     const key = `${issue.code}:${issue.nodeId ?? ""}:${issue.edgeId ?? ""}`;
@@ -131,10 +131,10 @@ function deduplicateIssues(issues: CampaignValidationIssue[]): CampaignValidatio
 }
 
 export function outgoingEdges(
-  definition: CampaignDefinition,
+  definition: AutomationDefinition,
   nodeId: string,
-  branch?: CampaignEdge["branch"],
-): CampaignEdge[] {
+  branch?: AutomationEdge["branch"],
+): AutomationEdge[] {
   return definition.edges.filter(
     (edge) => edge.source === nodeId && (branch === undefined || edge.branch === branch),
   );

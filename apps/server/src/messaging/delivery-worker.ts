@@ -12,7 +12,7 @@ import {
   uuidv7,
   type DeliveryClaimRecord,
 } from "@kaenma/database";
-import { type CampaignNode } from "@kaenma/orpc";
+import { type AutomationNode } from "@kaenma/orpc";
 
 import { type AutomationJobRow } from "../automations/worker";
 import { type RuntimeEnv } from "../env";
@@ -24,7 +24,7 @@ import { parseJsonRecord } from "../platform/values";
 export type DeliveryRow = DeliveryClaimRecord;
 
 export async function createEmailDelivery(
-  action: Extract<CampaignNode, { type: "action" }>["config"] & {
+  action: Extract<AutomationNode, { type: "action" }>["config"] & {
     action: "send_email";
   },
   job: AutomationJobRow,

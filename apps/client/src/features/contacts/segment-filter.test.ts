@@ -7,14 +7,14 @@ const emptyInput = {
   status: "all" as const,
   stage: "",
   tagId: "",
-  accountId: "",
+  companyId: "",
   scoreMin: "",
   scoreMax: "",
 };
 
 const resources = {
   tags: [{ id: "tag-1", slug: "customer" }],
-  companies: [{ id: "account-1", name: "Kaenma" }],
+  companies: [{ id: "company-1", name: "Kaenma" }],
 };
 
 describe("createSegmentFilter", () => {
@@ -50,7 +50,7 @@ describe("createSegmentFilter", () => {
         {
           ...emptyInput,
           tagId: "tag-1",
-          accountId: "account-1",
+          companyId: "company-1",
           scoreMin: "10",
         },
         resources,

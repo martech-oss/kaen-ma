@@ -3,7 +3,7 @@ import {
   AutomationRepository,
   type KaenmaDatabase,
 } from "@kaenma/database";
-import type { CampaignDefinition } from "@kaenma/orpc";
+import type { AutomationDefinition } from "@kaenma/orpc";
 
 export interface ContactEvent {
   id: string;
@@ -85,7 +85,7 @@ export async function enrollContactManually(
   const repository = new AutomationRepository(database, { workspaceId: input.workspaceId });
   const automation = await repository.findActivePublishedAutomation(input.automationId);
   if (!automation) return { kind: "not_active" };
-  const graph = JSON.parse(automation.graph) as CampaignDefinition;
+  const graph = JSON.parse(automation.graph) as AutomationDefinition;
   const source = graph.nodes.find((node) => node.type === "source");
   if (!source) return { kind: "source_missing" };
   const result = await enrollPublishedAutomation(database, {

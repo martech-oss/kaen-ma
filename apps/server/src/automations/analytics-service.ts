@@ -2,16 +2,16 @@ import { and, count, eq } from "drizzle-orm";
 
 import { automationEnrollments, deliveries, type KaenmaDatabase } from "@kaenma/database";
 
-export interface CampaignAnalytics {
+export interface AutomationAnalytics {
   enrollments: Array<{ status: string; count: number }>;
   deliveries: Array<{ status: string; count: number }>;
 }
 
-export async function getCampaignAnalytics(
+export async function getAutomationAnalytics(
   database: KaenmaDatabase,
   workspaceId: string,
   automationId: string,
-): Promise<CampaignAnalytics> {
+): Promise<AutomationAnalytics> {
   const [enrollmentRows, deliveryRows] = await Promise.all([
     database.orm
       .select({ status: automationEnrollments.status, count: count() })

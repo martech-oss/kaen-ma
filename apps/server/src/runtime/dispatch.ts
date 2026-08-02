@@ -9,7 +9,7 @@ import {
 } from "@kaenma/database";
 
 import { enrollInactiveContacts } from "../automations/enrollment";
-import { processCampaignJob } from "../automations/worker";
+import { processAutomationJob } from "../automations/worker";
 import { processBroadcastBatch } from "../broadcasts/worker";
 import { processContactExport, processContactImport } from "../contacts/worker";
 import { type RuntimeEnv } from "../env";
@@ -82,7 +82,7 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
         if (!parsed.success) throw new PermanentChannelError("Invalid campaign queue message");
         switch (parsed.data.kind) {
           case "campaign_job":
-            await processCampaignJob(parsed.data.jobId, parsed.data.leaseId, env);
+            await processAutomationJob(parsed.data.jobId, parsed.data.leaseId, env);
             break;
           case "broadcast_batch":
             await processBroadcastBatch(

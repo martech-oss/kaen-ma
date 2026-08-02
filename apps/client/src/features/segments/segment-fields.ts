@@ -17,7 +17,7 @@ export const segmentFieldOptions = [
   { field: "status", label: "ステータス" },
   { field: "created_at", label: "作成日時" },
   { field: "updated_at", label: "更新日時" },
-  { field: "company", label: "アカウント" },
+  { field: "company", label: "会社" },
   { field: "tag", label: "タグ" },
 ] as const satisfies readonly { field: SegmentField; label: string }[];
 

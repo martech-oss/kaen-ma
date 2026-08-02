@@ -48,7 +48,7 @@ import { type ContactProfile } from "@kaenma/orpc";
 export type { ContactProfile };
 
 import { ContactAvatar, contactName, ContactStatusBadge, Section, StatCard } from "./contact-bits";
-import { AccountEditor, RelationEditor, SegmentEditor } from "./contact-editors";
+import { CompanyEditor, RelationEditor, SegmentEditor } from "./contact-editors";
 
 export function ContactDrawer({
   contactId,
@@ -209,9 +209,9 @@ export function ContactDrawer({
                 }
               />
 
-              <AccountEditor
+              <CompanyEditor
                 contactId={contactId}
-                accounts={profile.companies}
+                companies={profile.companies}
                 options={options.companies}
                 disabled={profile.contact.status === "archived"}
                 onChanged={changed}

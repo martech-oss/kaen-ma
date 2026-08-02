@@ -6,7 +6,7 @@ type SegmentCondition = Extract<SegmentFilter, { kind: "condition" }>;
 
 type SegmentFilterInput = Pick<
   ContactSearch,
-  "q" | "status" | "stage" | "tagId" | "accountId" | "scoreMin" | "scoreMax"
+  "q" | "status" | "stage" | "tagId" | "companyId" | "scoreMin" | "scoreMax"
 >;
 
 interface SegmentFilterResources {
@@ -45,7 +45,7 @@ export function createSegmentFilter(
   const tag = resources.tags.find((item) => item.id === input.tagId);
   addTextCondition(children, "tag", tag?.slug);
 
-  const company = resources.companies.find((item) => item.id === input.accountId);
+  const company = resources.companies.find((item) => item.id === input.companyId);
   addTextCondition(children, "company", company?.name);
 
   if (children.length === 0) return null;

@@ -1,6 +1,6 @@
-import type { CampaignDraft, CampaignRow } from "@kaenma/orpc";
+import type { AutomationDraft, AutomationRow } from "@kaenma/orpc";
 
-export type { CampaignDraft, CampaignRow };
+export type { AutomationDraft, AutomationRow };
 
 export interface AutomationOptions {
   templates: EmailTemplateOption[];

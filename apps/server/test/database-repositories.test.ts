@@ -259,15 +259,15 @@ describe("cross-cutting repositories", () => {
     });
   });
 
-  it("claims only due, unleased campaign jobs in the requested workspace", async () => {
+  it("claims only due, unleased automation jobs in the requested workspace", async () => {
     const first = await seedWorkspace("jobs-first");
     const second = await seedWorkspace("jobs-second");
     const due = "2026-08-01T00:00:00.000Z";
     const later = "2026-08-01T01:00:00.000Z";
-    const firstDue = await seedCampaignJob(first, due);
-    await seedCampaignJob(first, later);
-    await seedCampaignJob(first, due, "2026-08-01T00:30:00.000Z");
-    await seedCampaignJob(second, due);
+    const firstDue = await seedAutomationJob(first, due);
+    await seedAutomationJob(first, later);
+    await seedAutomationJob(first, due, "2026-08-01T00:30:00.000Z");
+    await seedAutomationJob(second, due);
 
     const claimed = await claimDueJobs(
       env.DB,
@@ -327,13 +327,13 @@ async function seedWorkspace(
   return { workspaceId, userId, role };
 }
 
-async function seedCampaignJob(
+async function seedAutomationJob(
   context: WorkspaceContext,
   dueAt: string,
   leaseUntil: string | null = null,
 ): Promise<string> {
   const contactId = uuidv7();
-  const campaignId = uuidv7();
+  const automationId = uuidv7();
   const versionId = uuidv7();
   const enrollmentId = uuidv7();
   const jobId = uuidv7();
@@ -346,20 +346,18 @@ async function seedCampaignJob(
     createdAt: now,
     updatedAt: now,
   });
-  await database()
-    .orm.insert(automations)
-    .values({
-      id: campaignId,
-      workspaceId: context.workspaceId,
-      name: `Campaign ${campaignId}`,
-      status: "active",
-      createdAt: now,
-      updatedAt: now,
-    });
+  await database().orm.insert(automations).values({
+    id: automationId,
+    workspaceId: context.workspaceId,
+    name: `Automation `,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  });
   await database().orm.insert(automationVersions).values({
     id: versionId,
     workspaceId: context.workspaceId,
-    automationId: campaignId,
+    automationId: automationId,
     version: 1,
     status: "published",
     timezone: "UTC",
@@ -369,7 +367,7 @@ async function seedCampaignJob(
   await database().orm.insert(automationEnrollments).values({
     id: enrollmentId,
     workspaceId: context.workspaceId,
-    automationId: campaignId,
+    automationId: automationId,
     automationVersionId: versionId,
     contactId,
     status: "active",

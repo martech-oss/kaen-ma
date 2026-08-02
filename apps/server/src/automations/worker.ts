@@ -7,10 +7,10 @@ import {
   type AutomationJobRow,
 } from "@kaenma/database";
 import {
-  campaignDefinitionSchema,
-  type CampaignDefinition,
-  type CampaignEdge,
-  type CampaignNode,
+  automationDefinitionSchema,
+  type AutomationDefinition,
+  type AutomationEdge,
+  type AutomationNode,
 } from "@kaenma/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
@@ -21,7 +21,7 @@ import { primitiveString } from "../platform/values";
 
 export type { AutomationJobRow };
 
-export async function processCampaignJob(
+export async function processAutomationJob(
   jobId: string,
   leaseId: string,
   env: RuntimeEnv,
@@ -33,9 +33,9 @@ export async function processCampaignJob(
   if (!started && job.status !== "running") return;
 
   try {
-    const definition = campaignDefinitionSchema.parse(JSON.parse(job.graph));
+    const definition = automationDefinitionSchema.parse(JSON.parse(job.graph));
     const node = definition.nodes.find((candidate) => candidate.id === job.node_id);
-    if (!node) throw new PermanentChannelError(`Campaign node ${job.node_id} is missing`);
+    if (!node) throw new PermanentChannelError(`Automation node ${job.node_id} is missing`);
     const result = await executeNode(node, definition, job, env);
     if (result.waitUntil) {
       await engine.parkJobUntil(job.id, leaseId, {
@@ -58,11 +58,11 @@ export async function processCampaignJob(
 }
 
 export async function executeNode(
-  node: CampaignNode,
-  definition: CampaignDefinition,
+  node: AutomationNode,
+  definition: AutomationDefinition,
   job: AutomationJobRow,
   env: RuntimeEnv,
-): Promise<{ branch?: CampaignEdge["branch"]; waitUntil?: string }> {
+): Promise<{ branch?: AutomationEdge["branch"]; waitUntil?: string }> {
   if (node.type === "source") return { branch: "next" };
   if (node.type === "delay") {
     return {
@@ -154,8 +154,8 @@ export async function executeNode(
 export async function finishNode(
   job: AutomationJobRow,
   leaseId: string,
-  definition: CampaignDefinition,
-  branch: CampaignEdge["branch"] | undefined,
+  definition: AutomationDefinition,
+  branch: AutomationEdge["branch"] | undefined,
   env: RuntimeEnv,
 ): Promise<void> {
   const engine = new AutomationEngineRepository(createDatabase(env.DB));
@@ -169,7 +169,7 @@ export async function finishNode(
 }
 
 export async function evaluateCondition(
-  node: Extract<CampaignNode, { type: "condition" }>,
+  node: Extract<AutomationNode, { type: "condition" }>,
   job: AutomationJobRow,
   env: RuntimeEnv,
 ): Promise<boolean> {

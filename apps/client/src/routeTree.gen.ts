@@ -23,10 +23,10 @@ import { Route as AppReportsRouteImport } from './routes/_app.reports'
 import { Route as AppSegmentsRouteImport } from './routes/_app.segments'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppWebsiteRouteImport } from './routes/_app.website'
-import { Route as AppCampaignsIndexRouteImport } from './routes/_app.campaigns.index'
-import { Route as AppCampaignsIdRouteImport } from './routes/_app.campaigns.$id'
+import { Route as AppAutomationsIndexRouteImport } from './routes/_app.automations.index'
+import { Route as AppAutomationsIdRouteImport } from './routes/_app.automations.$id'
 import { Route as AppContactsIndexRouteImport } from './routes/_app.contacts.index'
-import { Route as AppContactsAccountsRouteImport } from './routes/_app.contacts.accounts'
+import { Route as AppContactsCompaniesRouteImport } from './routes/_app.contacts.companies'
 import { Route as AppContactsSegmentsRouteImport } from './routes/_app.contacts.segments'
 import { Route as AppContactsTagsRouteImport } from './routes/_app.contacts.tags'
 import { Route as AppDealsIndexRouteImport } from './routes/_app.deals.index'
@@ -40,8 +40,8 @@ import { Route as AppWebsiteFormsRouteImport } from './routes/_app.website.forms
 import { Route as AppWebsiteMessagesRouteImport } from './routes/_app.website.messages'
 import { Route as AppWebsitePagesRouteImport } from './routes/_app.website.pages'
 import { Route as AppWebsiteTrackingRouteImport } from './routes/_app.website.tracking'
-import { Route as AppContactsAccountsIndexRouteImport } from './routes/_app.contacts.accounts.index'
-import { Route as AppContactsAccountsIdRouteImport } from './routes/_app.contacts.accounts.$id'
+import { Route as AppContactsCompaniesIndexRouteImport } from './routes/_app.contacts.companies.index'
+import { Route as AppContactsCompaniesIdRouteImport } from './routes/_app.contacts.companies.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -112,14 +112,14 @@ const AppWebsiteRoute = AppWebsiteRouteImport.update({
   path: '/website',
   getParentRoute: () => AppRoute,
 } as any)
-const AppCampaignsIndexRoute = AppCampaignsIndexRouteImport.update({
-  id: '/campaigns/',
-  path: '/campaigns/',
+const AppAutomationsIndexRoute = AppAutomationsIndexRouteImport.update({
+  id: '/automations/',
+  path: '/automations/',
   getParentRoute: () => AppRoute,
 } as any)
-const AppCampaignsIdRoute = AppCampaignsIdRouteImport.update({
-  id: '/campaigns/$id',
-  path: '/campaigns/$id',
+const AppAutomationsIdRoute = AppAutomationsIdRouteImport.update({
+  id: '/automations/$id',
+  path: '/automations/$id',
   getParentRoute: () => AppRoute,
 } as any)
 const AppContactsIndexRoute = AppContactsIndexRouteImport.update({
@@ -127,9 +127,9 @@ const AppContactsIndexRoute = AppContactsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppContactsRoute,
 } as any)
-const AppContactsAccountsRoute = AppContactsAccountsRouteImport.update({
-  id: '/accounts',
-  path: '/accounts',
+const AppContactsCompaniesRoute = AppContactsCompaniesRouteImport.update({
+  id: '/companies',
+  path: '/companies',
   getParentRoute: () => AppContactsRoute,
 } as any)
 const AppContactsSegmentsRoute = AppContactsSegmentsRouteImport.update({
@@ -197,16 +197,16 @@ const AppWebsiteTrackingRoute = AppWebsiteTrackingRouteImport.update({
   path: '/tracking',
   getParentRoute: () => AppWebsiteRoute,
 } as any)
-const AppContactsAccountsIndexRoute =
-  AppContactsAccountsIndexRouteImport.update({
+const AppContactsCompaniesIndexRoute =
+  AppContactsCompaniesIndexRouteImport.update({
     id: '/',
     path: '/',
-    getParentRoute: () => AppContactsAccountsRoute,
+    getParentRoute: () => AppContactsCompaniesRoute,
   } as any)
-const AppContactsAccountsIdRoute = AppContactsAccountsIdRouteImport.update({
+const AppContactsCompaniesIdRoute = AppContactsCompaniesIdRouteImport.update({
   id: '/$id',
   path: '/$id',
-  getParentRoute: () => AppContactsAccountsRoute,
+  getParentRoute: () => AppContactsCompaniesRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -223,8 +223,8 @@ export interface FileRoutesByFullPath {
   '/segments': typeof AppSegmentsRoute
   '/settings': typeof AppSettingsRoute
   '/website': typeof AppWebsiteRouteWithChildren
-  '/campaigns/$id': typeof AppCampaignsIdRoute
-  '/contacts/accounts': typeof AppContactsAccountsRouteWithChildren
+  '/automations/$id': typeof AppAutomationsIdRoute
+  '/contacts/companies': typeof AppContactsCompaniesRouteWithChildren
   '/contacts/segments': typeof AppContactsSegmentsRoute
   '/contacts/tags': typeof AppContactsTagsRoute
   '/deals/$id': typeof AppDealsIdRoute
@@ -235,13 +235,13 @@ export interface FileRoutesByFullPath {
   '/website/messages': typeof AppWebsiteMessagesRoute
   '/website/pages': typeof AppWebsitePagesRoute
   '/website/tracking': typeof AppWebsiteTrackingRoute
-  '/campaigns/': typeof AppCampaignsIndexRoute
+  '/automations/': typeof AppAutomationsIndexRoute
   '/contacts/': typeof AppContactsIndexRoute
   '/deals/': typeof AppDealsIndexRoute
   '/emails/': typeof AppEmailsIndexRoute
   '/website/': typeof AppWebsiteIndexRoute
-  '/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
-  '/contacts/accounts/': typeof AppContactsAccountsIndexRoute
+  '/contacts/companies/$id': typeof AppContactsCompaniesIdRoute
+  '/contacts/companies/': typeof AppContactsCompaniesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -253,7 +253,7 @@ export interface FileRoutesByTo {
   '/reports': typeof AppReportsRoute
   '/segments': typeof AppSegmentsRoute
   '/settings': typeof AppSettingsRoute
-  '/campaigns/$id': typeof AppCampaignsIdRoute
+  '/automations/$id': typeof AppAutomationsIdRoute
   '/contacts/segments': typeof AppContactsSegmentsRoute
   '/contacts/tags': typeof AppContactsTagsRoute
   '/deals/$id': typeof AppDealsIdRoute
@@ -264,13 +264,13 @@ export interface FileRoutesByTo {
   '/website/messages': typeof AppWebsiteMessagesRoute
   '/website/pages': typeof AppWebsitePagesRoute
   '/website/tracking': typeof AppWebsiteTrackingRoute
-  '/campaigns': typeof AppCampaignsIndexRoute
+  '/automations': typeof AppAutomationsIndexRoute
   '/contacts': typeof AppContactsIndexRoute
   '/deals': typeof AppDealsIndexRoute
   '/emails': typeof AppEmailsIndexRoute
   '/website': typeof AppWebsiteIndexRoute
-  '/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
-  '/contacts/accounts': typeof AppContactsAccountsIndexRoute
+  '/contacts/companies/$id': typeof AppContactsCompaniesIdRoute
+  '/contacts/companies': typeof AppContactsCompaniesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -288,8 +288,8 @@ export interface FileRoutesById {
   '/_app/segments': typeof AppSegmentsRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/website': typeof AppWebsiteRouteWithChildren
-  '/_app/campaigns/$id': typeof AppCampaignsIdRoute
-  '/_app/contacts/accounts': typeof AppContactsAccountsRouteWithChildren
+  '/_app/automations/$id': typeof AppAutomationsIdRoute
+  '/_app/contacts/companies': typeof AppContactsCompaniesRouteWithChildren
   '/_app/contacts/segments': typeof AppContactsSegmentsRoute
   '/_app/contacts/tags': typeof AppContactsTagsRoute
   '/_app/deals/$id': typeof AppDealsIdRoute
@@ -300,13 +300,13 @@ export interface FileRoutesById {
   '/_app/website/messages': typeof AppWebsiteMessagesRoute
   '/_app/website/pages': typeof AppWebsitePagesRoute
   '/_app/website/tracking': typeof AppWebsiteTrackingRoute
-  '/_app/campaigns/': typeof AppCampaignsIndexRoute
+  '/_app/automations/': typeof AppAutomationsIndexRoute
   '/_app/contacts/': typeof AppContactsIndexRoute
   '/_app/deals/': typeof AppDealsIndexRoute
   '/_app/emails/': typeof AppEmailsIndexRoute
   '/_app/website/': typeof AppWebsiteIndexRoute
-  '/_app/contacts/accounts/$id': typeof AppContactsAccountsIdRoute
-  '/_app/contacts/accounts/': typeof AppContactsAccountsIndexRoute
+  '/_app/contacts/companies/$id': typeof AppContactsCompaniesIdRoute
+  '/_app/contacts/companies/': typeof AppContactsCompaniesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -324,8 +324,8 @@ export interface FileRouteTypes {
     | '/segments'
     | '/settings'
     | '/website'
-    | '/campaigns/$id'
-    | '/contacts/accounts'
+    | '/automations/$id'
+    | '/contacts/companies'
     | '/contacts/segments'
     | '/contacts/tags'
     | '/deals/$id'
@@ -336,13 +336,13 @@ export interface FileRouteTypes {
     | '/website/messages'
     | '/website/pages'
     | '/website/tracking'
-    | '/campaigns/'
+    | '/automations/'
     | '/contacts/'
     | '/deals/'
     | '/emails/'
     | '/website/'
-    | '/contacts/accounts/$id'
-    | '/contacts/accounts/'
+    | '/contacts/companies/$id'
+    | '/contacts/companies/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -354,7 +354,7 @@ export interface FileRouteTypes {
     | '/reports'
     | '/segments'
     | '/settings'
-    | '/campaigns/$id'
+    | '/automations/$id'
     | '/contacts/segments'
     | '/contacts/tags'
     | '/deals/$id'
@@ -365,13 +365,13 @@ export interface FileRouteTypes {
     | '/website/messages'
     | '/website/pages'
     | '/website/tracking'
-    | '/campaigns'
+    | '/automations'
     | '/contacts'
     | '/deals'
     | '/emails'
     | '/website'
-    | '/contacts/accounts/$id'
-    | '/contacts/accounts'
+    | '/contacts/companies/$id'
+    | '/contacts/companies'
   id:
     | '__root__'
     | '/'
@@ -388,8 +388,8 @@ export interface FileRouteTypes {
     | '/_app/segments'
     | '/_app/settings'
     | '/_app/website'
-    | '/_app/campaigns/$id'
-    | '/_app/contacts/accounts'
+    | '/_app/automations/$id'
+    | '/_app/contacts/companies'
     | '/_app/contacts/segments'
     | '/_app/contacts/tags'
     | '/_app/deals/$id'
@@ -400,13 +400,13 @@ export interface FileRouteTypes {
     | '/_app/website/messages'
     | '/_app/website/pages'
     | '/_app/website/tracking'
-    | '/_app/campaigns/'
+    | '/_app/automations/'
     | '/_app/contacts/'
     | '/_app/deals/'
     | '/_app/emails/'
     | '/_app/website/'
-    | '/_app/contacts/accounts/$id'
-    | '/_app/contacts/accounts/'
+    | '/_app/contacts/companies/$id'
+    | '/_app/contacts/companies/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -517,18 +517,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWebsiteRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/campaigns/': {
-      id: '/_app/campaigns/'
-      path: '/campaigns'
-      fullPath: '/campaigns/'
-      preLoaderRoute: typeof AppCampaignsIndexRouteImport
+    '/_app/automations/': {
+      id: '/_app/automations/'
+      path: '/automations'
+      fullPath: '/automations/'
+      preLoaderRoute: typeof AppAutomationsIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/campaigns/$id': {
-      id: '/_app/campaigns/$id'
-      path: '/campaigns/$id'
-      fullPath: '/campaigns/$id'
-      preLoaderRoute: typeof AppCampaignsIdRouteImport
+    '/_app/automations/$id': {
+      id: '/_app/automations/$id'
+      path: '/automations/$id'
+      fullPath: '/automations/$id'
+      preLoaderRoute: typeof AppAutomationsIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/contacts/': {
@@ -538,11 +538,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppContactsIndexRouteImport
       parentRoute: typeof AppContactsRoute
     }
-    '/_app/contacts/accounts': {
-      id: '/_app/contacts/accounts'
-      path: '/accounts'
-      fullPath: '/contacts/accounts'
-      preLoaderRoute: typeof AppContactsAccountsRouteImport
+    '/_app/contacts/companies': {
+      id: '/_app/contacts/companies'
+      path: '/companies'
+      fullPath: '/contacts/companies'
+      preLoaderRoute: typeof AppContactsCompaniesRouteImport
       parentRoute: typeof AppContactsRoute
     }
     '/_app/contacts/segments': {
@@ -636,45 +636,45 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWebsiteTrackingRouteImport
       parentRoute: typeof AppWebsiteRoute
     }
-    '/_app/contacts/accounts/': {
-      id: '/_app/contacts/accounts/'
+    '/_app/contacts/companies/': {
+      id: '/_app/contacts/companies/'
       path: '/'
-      fullPath: '/contacts/accounts/'
-      preLoaderRoute: typeof AppContactsAccountsIndexRouteImport
-      parentRoute: typeof AppContactsAccountsRoute
+      fullPath: '/contacts/companies/'
+      preLoaderRoute: typeof AppContactsCompaniesIndexRouteImport
+      parentRoute: typeof AppContactsCompaniesRoute
     }
-    '/_app/contacts/accounts/$id': {
-      id: '/_app/contacts/accounts/$id'
+    '/_app/contacts/companies/$id': {
+      id: '/_app/contacts/companies/$id'
       path: '/$id'
-      fullPath: '/contacts/accounts/$id'
-      preLoaderRoute: typeof AppContactsAccountsIdRouteImport
-      parentRoute: typeof AppContactsAccountsRoute
+      fullPath: '/contacts/companies/$id'
+      preLoaderRoute: typeof AppContactsCompaniesIdRouteImport
+      parentRoute: typeof AppContactsCompaniesRoute
     }
   }
 }
 
-interface AppContactsAccountsRouteChildren {
-  AppContactsAccountsIdRoute: typeof AppContactsAccountsIdRoute
-  AppContactsAccountsIndexRoute: typeof AppContactsAccountsIndexRoute
+interface AppContactsCompaniesRouteChildren {
+  AppContactsCompaniesIdRoute: typeof AppContactsCompaniesIdRoute
+  AppContactsCompaniesIndexRoute: typeof AppContactsCompaniesIndexRoute
 }
 
-const AppContactsAccountsRouteChildren: AppContactsAccountsRouteChildren = {
-  AppContactsAccountsIdRoute: AppContactsAccountsIdRoute,
-  AppContactsAccountsIndexRoute: AppContactsAccountsIndexRoute,
+const AppContactsCompaniesRouteChildren: AppContactsCompaniesRouteChildren = {
+  AppContactsCompaniesIdRoute: AppContactsCompaniesIdRoute,
+  AppContactsCompaniesIndexRoute: AppContactsCompaniesIndexRoute,
 }
 
-const AppContactsAccountsRouteWithChildren =
-  AppContactsAccountsRoute._addFileChildren(AppContactsAccountsRouteChildren)
+const AppContactsCompaniesRouteWithChildren =
+  AppContactsCompaniesRoute._addFileChildren(AppContactsCompaniesRouteChildren)
 
 interface AppContactsRouteChildren {
-  AppContactsAccountsRoute: typeof AppContactsAccountsRouteWithChildren
+  AppContactsCompaniesRoute: typeof AppContactsCompaniesRouteWithChildren
   AppContactsSegmentsRoute: typeof AppContactsSegmentsRoute
   AppContactsTagsRoute: typeof AppContactsTagsRoute
   AppContactsIndexRoute: typeof AppContactsIndexRoute
 }
 
 const AppContactsRouteChildren: AppContactsRouteChildren = {
-  AppContactsAccountsRoute: AppContactsAccountsRouteWithChildren,
+  AppContactsCompaniesRoute: AppContactsCompaniesRouteWithChildren,
   AppContactsSegmentsRoute: AppContactsSegmentsRoute,
   AppContactsTagsRoute: AppContactsTagsRoute,
   AppContactsIndexRoute: AppContactsIndexRoute,
@@ -746,8 +746,8 @@ interface AppRouteChildren {
   AppSegmentsRoute: typeof AppSegmentsRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppWebsiteRoute: typeof AppWebsiteRouteWithChildren
-  AppCampaignsIdRoute: typeof AppCampaignsIdRoute
-  AppCampaignsIndexRoute: typeof AppCampaignsIndexRoute
+  AppAutomationsIdRoute: typeof AppAutomationsIdRoute
+  AppAutomationsIndexRoute: typeof AppAutomationsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -760,8 +760,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppSegmentsRoute: AppSegmentsRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppWebsiteRoute: AppWebsiteRouteWithChildren,
-  AppCampaignsIdRoute: AppCampaignsIdRoute,
-  AppCampaignsIndexRoute: AppCampaignsIndexRoute,
+  AppAutomationsIdRoute: AppAutomationsIdRoute,
+  AppAutomationsIndexRoute: AppAutomationsIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

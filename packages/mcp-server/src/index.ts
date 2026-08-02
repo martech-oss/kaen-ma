@@ -20,7 +20,7 @@ const server = new McpServer({
 
 const pendingConfirmations = new Map<
   string,
-  { campaignId: string; contactId: string; expiresAt: number }
+  { automationId: string; contactId: string; expiresAt: number }
 >();
 
 server.registerTool(
@@ -46,51 +46,51 @@ server.registerTool(
   "get_dashboard",
   {
     title: "Get Kaenma dashboard",
-    description: "Read aggregate contact, campaign, and delivery health.",
+    description: "Read aggregate contact, automation, and delivery health.",
     inputSchema: {},
   },
   async () => jsonResult(await client.operations.dashboard()),
 );
 
 server.registerTool(
-  "list_campaigns",
+  "list_automations",
   {
-    title: "List Kaenma campaigns",
-    description: "List campaigns and their current status. This tool is read-only.",
+    title: "List Kaenma automations",
+    description: "List automations and their current status. This tool is read-only.",
     inputSchema: {},
   },
-  async () => jsonResult(await client.campaigns.list()),
+  async () => jsonResult(await client.automations.list()),
 );
 
 server.registerTool(
-  "get_campaign_draft",
+  "get_automation_draft",
   {
-    title: "Get campaign draft",
-    description: "Read the editable campaign graph.",
-    inputSchema: { campaignId: z.string().min(1) },
+    title: "Get automation draft",
+    description: "Read the editable automation graph.",
+    inputSchema: { automationId: z.string().min(1) },
   },
-  async ({ campaignId }) => jsonResult(await client.campaigns.getDraft({ id: campaignId })),
+  async ({ automationId }) => jsonResult(await client.automations.getDraft({ id: automationId })),
 );
 
 server.registerTool(
-  "prepare_campaign_enrollment",
+  "prepare_automation_enrollment",
   {
-    title: "Prepare campaign enrollment",
+    title: "Prepare automation enrollment",
     description:
       "Prepare, but do not execute, a contact enrollment. The returned confirmation token expires in five minutes.",
     inputSchema: {
-      campaignId: z.string().min(1),
+      automationId: z.string().min(1),
       contactId: z.string().min(1),
     },
   },
-  async ({ campaignId, contactId }) => {
-    const [campaign, contact] = await Promise.all([
-      client.campaigns.getDraft({ id: campaignId }),
+  async ({ automationId, contactId }) => {
+    const [automation, contact] = await Promise.all([
+      client.automations.getDraft({ id: automationId }),
       client.contacts.get({ id: contactId }),
     ]);
     const confirmationToken = crypto.randomUUID();
     pendingConfirmations.set(confirmationToken, {
-      campaignId,
+      automationId,
       contactId,
       expiresAt: Date.now() + 5 * 60_000,
     });
@@ -98,10 +98,10 @@ server.registerTool(
       requiresConfirmation: true,
       confirmationToken,
       warning:
-        "This enrollment can trigger real email or webhook delivery. Call confirm_campaign_enrollment with confirmation exactly CONFIRM SEND.",
-      campaign: {
-        id: campaignId,
-        name: campaign.graph.name,
+        "This enrollment can trigger real email or webhook delivery. Call confirm_automation_enrollment with confirmation exactly CONFIRM SEND.",
+      automation: {
+        id: automationId,
+        name: automation.graph.name,
       },
       contact: {
         id: contact.id,
@@ -112,9 +112,9 @@ server.registerTool(
 );
 
 server.registerTool(
-  "confirm_campaign_enrollment",
+  "confirm_automation_enrollment",
   {
-    title: "Confirm campaign enrollment",
+    title: "Confirm automation enrollment",
     description:
       "Enroll a contact only after explicit user confirmation. This can trigger a real delivery.",
     inputSchema: {
@@ -131,8 +131,8 @@ server.registerTool(
         isError: true,
       };
     }
-    const result = await client.campaigns.enroll({
-      id: pending.campaignId,
+    const result = await client.automations.enroll({
+      id: pending.automationId,
       contactId: pending.contactId,
       sourceEventId: confirmationToken,
     });

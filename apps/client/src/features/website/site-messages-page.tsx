@@ -1,4 +1,4 @@
-import { useRouter } from "@tanstack/react-router";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import {
   Eye,
   Link as LinkIcon,
@@ -33,26 +33,29 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { SiteMessageRow } from "@/features/website/website-api";
+import { siteMessagesQueryOptions, type SiteMessageRow } from "@/features/website/website-api";
 import { ArchiveConfirm, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
 
-export function SiteMessagesPage({ items }: { items: SiteMessageRow[] }): ReactNode {
-  const router = useRouter();
+export function SiteMessagesPage(): ReactNode {
+  const queryClient = useQueryClient();
+  const { data: items } = useSuspenseQuery(siteMessagesQueryOptions());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SiteMessageRow | null>(null);
+
+  const archiveMessage = useMutation(orpcQuery.website.archiveMessage.mutationOptions());
 
   async function refresh(): Promise<void> {
     setDialogOpen(false);
     setEditing(null);
-    await router.invalidate({ sync: true });
+    await queryClient.invalidateQueries({ queryKey: orpcQuery.website.listMessages.key() });
   }
 
   async function archive(item: SiteMessageRow): Promise<void> {
     try {
-      await orpc.website.archiveMessage({ id: item.id });
+      await archiveMessage.mutateAsync({ id: item.id });
       toast.success("サイトメッセージをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -225,6 +228,9 @@ function SiteMessageEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  const createMessage = useMutation(orpcQuery.website.createMessage.mutationOptions());
+  const updateMessage = useMutation(orpcQuery.website.updateMessage.mutationOptions());
+
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -250,8 +256,8 @@ function SiteMessageEditor({
         endsAt,
       } as const;
       await (item
-        ? orpc.website.updateMessage({ id: item.id, ...payload })
-        : orpc.website.createMessage(payload));
+        ? updateMessage.mutateAsync({ id: item.id, ...payload })
+        : createMessage.mutateAsync(payload));
       toast.success(item ? "サイトメッセージを更新しました" : "サイトメッセージを作成しました");
       await onSaved();
     } catch (caught) {

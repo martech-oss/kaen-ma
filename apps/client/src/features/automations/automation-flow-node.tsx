@@ -5,11 +5,11 @@ import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { type CampaignNode } from "@kaenma/orpc";
+import { type AutomationNode } from "@kaenma/orpc";
 
-import { nodeLabel, nodeTypeLabel } from "./campaign-labels";
+import { nodeLabel, nodeTypeLabel } from "./automation-labels";
 
-export function nodeHandles(node: CampaignNode): NonNullable<Node["handles"]> {
+export function nodeHandles(node: AutomationNode): NonNullable<Node["handles"]> {
   const height = node.type === "decision" || node.type === "condition" ? 82 : 70;
   const target =
     node.type === "source"
@@ -85,9 +85,12 @@ export function nodeHandles(node: CampaignNode): NonNullable<Node["handles"]> {
   ];
 }
 
-function CampaignFlowNode({ data, selected }: NodeProps<Node<{ node: CampaignNode }>>): ReactNode {
+function AutomationFlowNode({
+  data,
+  selected,
+}: NodeProps<Node<{ node: AutomationNode }>>): ReactNode {
   const node = data.node;
-  const colors: Record<CampaignNode["type"], string> = {
+  const colors: Record<AutomationNode["type"], string> = {
     source: "border-emerald-500",
     action: "border-primary",
     condition: "border-amber-500",
@@ -167,7 +170,7 @@ function CampaignFlowNode({ data, selected }: NodeProps<Node<{ node: CampaignNod
   );
 }
 
-export const campaignNodeTypes = { campaign: CampaignFlowNode };
+export const automationNodeTypes = { automation: AutomationFlowNode };
 
 export function StepButton({
   icon: Icon,

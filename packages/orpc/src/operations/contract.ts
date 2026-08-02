@@ -32,7 +32,7 @@ export type DeadLetterRow = z.infer<typeof deadLetterRowSchema>;
 
 export const dashboardSchema = z.object({
   contacts: z.object({ count: z.number().int().nonnegative() }),
-  campaigns: z.object({ count: z.number().int().nonnegative() }),
+  automations: z.object({ count: z.number().int().nonnegative() }),
   deliveries: z.object({
     sent: z.number().int().nonnegative(),
     delivered: z.number().int().nonnegative(),

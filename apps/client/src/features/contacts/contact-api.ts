@@ -4,13 +4,7 @@ import { orpc, orpcQuery } from "@/lib/orpc";
 import type { ContactListInput } from "@kaenma/orpc";
 import type { CompanyOption, ContactOptions, SegmentOption, Tag as TagOption } from "@kaenma/orpc";
 
-export type {
-  CompanyOption,
-  CompanyOption as AccountOption,
-  ContactOptions,
-  SegmentOption,
-  TagOption,
-};
+export type { CompanyOption, ContactOptions, SegmentOption, TagOption };
 
 export const contactOptionsQueryKey = ["contacts", "options"] as const;
 
@@ -22,7 +16,7 @@ export interface ContactSearch {
   status: ContactStatus;
   stage: string;
   tagId: string;
-  accountId: string;
+  companyId: string;
   segmentId: string;
   scoreMin: string;
   scoreMax: string;
@@ -35,7 +29,7 @@ export const contactSearchDefaults: ContactSearch = {
   status: "active",
   stage: "",
   tagId: "",
-  accountId: "",
+  companyId: "",
   segmentId: "",
   scoreMin: "",
   scoreMax: "",
@@ -64,7 +58,7 @@ export function parseContactSearch(search: Record<string, unknown>): ContactSear
     status,
     stage: stringValue("stage"),
     tagId: stringValue("tagId"),
-    accountId: stringValue("accountId"),
+    companyId: stringValue("companyId"),
     segmentId: stringValue("segmentId"),
     scoreMin: stringValue("scoreMin"),
     scoreMax: stringValue("scoreMax"),
@@ -86,7 +80,7 @@ export function buildContactSearchInput(search: ContactSearch): ContactListInput
     ...(query ? { query } : {}),
     ...(search.stage ? { stage: search.stage } : {}),
     ...(search.tagId ? { tagId: search.tagId } : {}),
-    ...(search.accountId ? { companyId: search.accountId } : {}),
+    ...(search.companyId ? { companyId: search.companyId } : {}),
     ...(search.segmentId ? { segmentId: search.segmentId } : {}),
     ...(scoreMin === undefined ? {} : { scoreMin }),
     ...(scoreMax === undefined ? {} : { scoreMax }),

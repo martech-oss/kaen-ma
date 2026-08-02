@@ -1,4 +1,4 @@
-import { useRouter } from "@tanstack/react-router";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Code2, ExternalLink, Pencil, Plus, Rows3 } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -36,32 +36,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { SignupFormDefinition, SignupFormRow } from "@/features/website/website-api";
+import {
+  signupFormsQueryOptions,
+  type SignupFormDefinition,
+  type SignupFormRow,
+} from "@/features/website/website-api";
 import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
 
-export function SignupFormsPage({
-  items,
-  workspaceSlug,
-}: {
-  items: SignupFormRow[];
-  workspaceSlug: string;
-}): ReactNode {
-  const router = useRouter();
+export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
+  const queryClient = useQueryClient();
+  const { data: items } = useSuspenseQuery(signupFormsQueryOptions());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<SignupFormRow | null>(null);
+
+  const archiveForm = useMutation(orpcQuery.website.archiveForm.mutationOptions());
 
   async function refresh(): Promise<void> {
     setDialogOpen(false);
     setEditing(null);
-    await router.invalidate({ sync: true });
+    await queryClient.invalidateQueries({ queryKey: orpcQuery.website.listForms.key() });
   }
 
   async function archive(item: SignupFormRow): Promise<void> {
     try {
-      await orpc.website.archiveForm({ id: item.id });
+      await archiveForm.mutateAsync({ id: item.id });
       toast.success("サインアップフォームをアーカイブしました");
       await refresh();
     } catch (error) {
@@ -248,6 +249,9 @@ function SignupFormEditor({
     ),
   );
 
+  const createForm = useMutation(orpcQuery.website.createForm.mutationOptions());
+  const updateForm = useMutation(orpcQuery.website.updateForm.mutationOptions());
+
   function toggleField(field: string, checked: boolean): void {
     setOptionalFields((current) => {
       const next = new Set(current);
@@ -290,8 +294,8 @@ function SignupFormEditor({
         successMessage: getFormString(formData, "successMessage"),
       } as const;
       await (item
-        ? orpc.website.updateForm({ id: item.id, ...payload })
-        : orpc.website.createForm(payload));
+        ? updateForm.mutateAsync({ id: item.id, ...payload })
+        : createForm.mutateAsync(payload));
       toast.success(item ? "フォームを更新しました" : "フォームを作成しました");
       await onSaved();
     } catch (caught) {

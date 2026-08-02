@@ -20,7 +20,7 @@ type Client = ContractRouterClient<typeof contract>;
 describe("Automation flows", () => {
   it("enrolls a newly created contact into a published welcome flow", async () => {
     const { client, workspaceId } = await createWorkspaceClient();
-    const campaign = await client.campaigns.create({
+    const automation = await client.automations.create({
       name: "Welcome flow",
       description: "Welcome new contacts",
       timezone: "Asia/Tokyo",
@@ -40,8 +40,8 @@ describe("Automation flows", () => {
       ],
       edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
     });
-    expect(campaign.id).toBeTruthy();
-    const published = await client.campaigns.publish({ id: campaign.id });
+    expect(automation.id).toBeTruthy();
+    const published = await client.automations.publish({ id: automation.id });
     expect(published.publishedVersionId).toBeTruthy();
 
     const contact = await client.contacts.create({
@@ -54,7 +54,7 @@ describe("Automation flows", () => {
        JOIN automation_jobs cj ON cj.enrollment_id = ce.id
        WHERE ce.workspace_id = ? AND ce.automation_id = ? AND ce.contact_id = ?`,
     )
-      .bind(workspaceId, campaign.id, contact.id)
+      .bind(workspaceId, automation.id, contact.id)
       .first<{
         status: string;
         current_node_id: string;
@@ -75,7 +75,7 @@ describe("Automation flows", () => {
       email: "behavior@example.com",
       customFields: {},
     });
-    const cartCampaignId = await createAndPublishSingleActionFlow(client, {
+    const cartAutomationId = await createAndPublishSingleActionFlow(client, {
       name: "Cart flow",
       source: {
         source: "api_event",
@@ -96,11 +96,11 @@ describe("Automation flows", () => {
       `SELECT COUNT(*) AS count FROM automation_enrollments
        WHERE workspace_id = ? AND automation_id = ? AND contact_id = ?`,
     )
-      .bind(workspaceId, cartCampaignId, contact.id)
+      .bind(workspaceId, cartAutomationId, contact.id)
       .first<{ count: number }>();
     expect(cartEnrollments?.count).toBe(2);
 
-    const inactivityCampaignId = await createAndPublishSingleActionFlow(client, {
+    const inactivityAutomationId = await createAndPublishSingleActionFlow(client, {
       name: "Re-engagement flow",
       source: { source: "contact_inactive", days: 30, reentry: "once" },
     });
@@ -125,7 +125,7 @@ describe("Automation flows", () => {
       `SELECT COUNT(*) AS count FROM automation_enrollments
        WHERE workspace_id = ? AND automation_id = ? AND contact_id = ?`,
     )
-      .bind(workspaceId, inactivityCampaignId, contact.id)
+      .bind(workspaceId, inactivityAutomationId, contact.id)
       .first<{ count: number }>();
     expect(inactivityEnrollments?.count).toBe(1);
   });
@@ -140,7 +140,7 @@ async function createAndPublishSingleActionFlow(
       | { source: "contact_inactive"; days: number; reentry: "once" };
   },
 ): Promise<string> {
-  const created = await client.campaigns.create({
+  const created = await client.automations.create({
     name: input.name,
     description: "",
     timezone: "UTC",
@@ -161,7 +161,7 @@ async function createAndPublishSingleActionFlow(
     edges: [{ id: "source-score", source: "source", target: "score", branch: "next" }],
   });
   expect(created.id).toBeTruthy();
-  const published = await client.campaigns.publish({ id: created.id });
+  const published = await client.automations.publish({ id: created.id });
   expect(published.publishedVersionId).toBeTruthy();
   return created.id;
 }

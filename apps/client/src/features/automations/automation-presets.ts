@@ -1,9 +1,9 @@
 import { Activity, Clock3, Sparkles, UserPlus } from "lucide-react";
 
-import { type CampaignDefinition } from "@kaenma/orpc";
+import { type AutomationDefinition } from "@kaenma/orpc";
 
-import { chainEdges, delayNode, emailNode, sourceNode } from "./campaign-graph";
-import { type EmailTemplateOption } from "./campaign-types";
+import { chainEdges, delayNode, emailNode, sourceNode } from "./automation-graph";
+import { type EmailTemplateOption } from "./automation-types";
 
 export type PresetId = "welcome" | "cart" | "purchase" | "reengagement";
 
@@ -39,11 +39,11 @@ export const presets: Array<{
   },
 ];
 
-export function createPresetCampaign(
+export function createPresetAutomation(
   name: string,
   preset: PresetId,
   template: EmailTemplateOption,
-): CampaignDefinition {
+): AutomationDefinition {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   if (preset === "welcome") {
     return {

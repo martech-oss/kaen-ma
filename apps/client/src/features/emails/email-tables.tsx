@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, RefreshCw, Send } from "lucide-react";
 import { type ReactNode } from "react";
 import { toast } from "sonner";
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/table";
 import { type EmailCampaignRow, type EmailTemplateRow } from "@/features/emails/email-api";
 import { formatDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 
 import { ArchiveConfirm } from "./email-forms";
 
@@ -36,18 +37,20 @@ export function CampaignTable({
   items,
   loading,
   onEdit,
-  onChanged,
 }: {
   items: EmailCampaignRow[];
   loading: boolean;
   onEdit: (campaign: EmailCampaignRow) => void;
-  onChanged: () => Promise<void>;
 }): ReactNode {
+  const queryClient = useQueryClient();
+  const startCampaign = useMutation(orpcQuery.emails.startCampaign.mutationOptions());
+  const archiveCampaign = useMutation(orpcQuery.emails.archiveCampaign.mutationOptions());
+
   async function start(campaign: EmailCampaignRow) {
     try {
-      await orpc.emails.startCampaign({ id: campaign.id });
+      await startCampaign.mutateAsync({ id: campaign.id });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listCampaigns.key() });
       toast.success("メールキャンペーンの送信を開始しました");
-      await onChanged();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "送信を開始できませんでした");
     }
@@ -55,9 +58,9 @@ export function CampaignTable({
 
   async function archive(campaign: EmailCampaignRow) {
     try {
-      await orpc.emails.archiveCampaign({ id: campaign.id });
+      await archiveCampaign.mutateAsync({ id: campaign.id });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listCampaigns.key() });
       toast.success("メールキャンペーンをアーカイブしました");
-      await onChanged();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
     }
@@ -181,17 +184,19 @@ export function CampaignTable({
 export function TemplateTable({
   items,
   loading,
-  onChanged,
 }: {
   items: EmailTemplateRow[];
   loading: boolean;
-  onChanged: () => Promise<void>;
 }): ReactNode {
+  const queryClient = useQueryClient();
+  const syncTemplate = useMutation(orpcQuery.emails.syncTemplate.mutationOptions());
+  const archiveTemplate = useMutation(orpcQuery.emails.archiveTemplate.mutationOptions());
+
   async function sync(template: EmailTemplateRow) {
     try {
-      await orpc.emails.syncTemplate({ id: template.id });
+      await syncTemplate.mutateAsync({ id: template.id });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() });
       toast.success("Resend Templateを同期しました");
-      await onChanged();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "テンプレートを同期できませんでした");
     }
@@ -199,9 +204,9 @@ export function TemplateTable({
 
   async function archive(template: EmailTemplateRow) {
     try {
-      await orpc.emails.archiveTemplate({ id: template.id });
+      await archiveTemplate.mutateAsync({ id: template.id });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() });
       toast.success("テンプレートをアーカイブしました");
-      await onChanged();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
     }

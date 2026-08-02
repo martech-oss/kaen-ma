@@ -1,17 +1,17 @@
 import { AutomationRepository, type KaenmaDatabase } from "@kaenma/database";
-import type { CampaignRow } from "@kaenma/orpc";
+import type { AutomationRow } from "@kaenma/orpc";
 
-export async function listCampaigns(
+export async function listAutomations(
   database: KaenmaDatabase,
   workspaceId: string,
-): Promise<CampaignRow[]> {
+): Promise<AutomationRow[]> {
   const repository = new AutomationRepository(database, { workspaceId });
   const rows = await repository.listAutomationsWithCounts();
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     description: row.description,
-    status: normalizeCampaignStatus(row.status),
+    status: normalizeAutomationStatus(row.status),
     triggerSource: row.triggerSource,
     enrollmentCount: row.enrollmentCount,
     activeCount: row.activeCount,
@@ -20,6 +20,6 @@ export async function listCampaigns(
   }));
 }
 
-export function normalizeCampaignStatus(value: unknown): CampaignRow["status"] {
+export function normalizeAutomationStatus(value: unknown): AutomationRow["status"] {
   return value === "active" || value === "paused" || value === "archived" ? value : "draft";
 }

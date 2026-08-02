@@ -28,8 +28,8 @@ export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
       icon: UsersRound,
     },
     {
-      label: "公開キャンペーン",
-      value: data.campaigns.count.toLocaleString(),
+      label: "公開オートメーション",
+      value: data.automations.count.toLocaleString(),
       icon: Activity,
     },
     {

@@ -111,28 +111,28 @@ export const delayNodeSchema = z.object({
   ]),
 });
 
-export const campaignNodeSchema = z.discriminatedUnion("type", [
+export const automationNodeSchema = z.discriminatedUnion("type", [
   sourceNodeSchema,
   actionNodeSchema,
   conditionNodeSchema,
   decisionNodeSchema,
   delayNodeSchema,
 ]);
-export type CampaignNode = z.infer<typeof campaignNodeSchema>;
+export type AutomationNode = z.infer<typeof automationNodeSchema>;
 
-export const campaignEdgeSchema = z.object({
+export const automationEdgeSchema = z.object({
   id: z.string().min(1),
   source: z.string().min(1),
   target: z.string().min(1),
   branch: z.enum(["next", "yes", "no", "timeout"]).default("next"),
 });
-export type CampaignEdge = z.infer<typeof campaignEdgeSchema>;
+export type AutomationEdge = z.infer<typeof automationEdgeSchema>;
 
-export const campaignDefinitionSchema = z.object({
+export const automationDefinitionSchema = z.object({
   name: z.string().trim().min(1).max(191),
   description: z.string().max(2_000).default(""),
   timezone: z.string().min(1).default("UTC"),
-  nodes: z.array(campaignNodeSchema).min(1).max(500),
-  edges: z.array(campaignEdgeSchema).max(1_000),
+  nodes: z.array(automationNodeSchema).min(1).max(500),
+  edges: z.array(automationEdgeSchema).max(1_000),
 });
-export type CampaignDefinition = z.infer<typeof campaignDefinitionSchema>;
+export type AutomationDefinition = z.infer<typeof automationDefinitionSchema>;

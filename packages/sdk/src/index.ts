@@ -34,7 +34,7 @@ export { isDefinedError, ORPCError, safe } from "@orpc/client";
 export { contract } from "@kaenma/orpc";
 export type {
   AssetSummary,
-  CampaignRow,
+  AutomationRow,
   ContactListInput,
   ContactListResult,
   ContactSummary,

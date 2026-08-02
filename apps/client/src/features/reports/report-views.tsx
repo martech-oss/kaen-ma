@@ -127,7 +127,7 @@ export function AutomationsReportView({ report }: { report: AutomationsReport })
               <TableRow key={automation.id}>
                 <TableCell className="px-4 font-medium">
                   <Link
-                    to="/campaigns/$id"
+                    to="/automations/$id"
                     params={{ id: automation.id }}
                     className="hover:underline"
                   >

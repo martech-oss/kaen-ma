@@ -18,10 +18,10 @@ import {
   FieldLabel,
   FieldTitle,
 } from "@/components/ui/field";
-import type { ContactOption } from "@/features/accounts/account-api";
+import type { ContactOption } from "@/features/companies/company-api";
 import { getFormString } from "@/lib/utils";
 
-export function AccountForm({
+export function CompanyForm({
   initialName = "",
   initialDomain = "",
   submitLabel,
@@ -47,7 +47,7 @@ export function AccountForm({
         ...(domain ? { domain } : {}),
       });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "アカウントを保存できませんでした");
+      setError(caught instanceof Error ? caught.message : "会社を保存できませんでした");
     } finally {
       setBusy(false);
     }
@@ -80,7 +80,7 @@ export function AccountForm({
   );
 }
 
-export function AddAccountContactForm({
+export function AddCompanyContactForm({
   contacts,
   onSubmit,
 }: {
@@ -115,7 +115,7 @@ export function AddAccountContactForm({
       <EmptyState
         compact
         title="追加できる連絡先がありません"
-        description="すべての連絡先がこのアカウントに所属しています。"
+        description="すべての連絡先がこの会社に所属しています。"
       />
     );
   }
@@ -134,16 +134,14 @@ export function AddAccountContactForm({
         <FormInput label="役職" name="title" placeholder="例：マーケティング責任者" />
         <Field orientation="horizontal">
           <Checkbox
-            id="account-primary-contact"
+            id="company-primary-contact"
             checked={isPrimary}
             onCheckedChange={(checked) => setIsPrimary(Boolean(checked))}
           />
           <FieldContent>
-            <FieldLabel htmlFor="account-primary-contact">
-              <FieldTitle>主担当アカウントにする</FieldTitle>
-              <FieldDescription>
-                この連絡先に設定済みの主担当アカウントは解除されます。
-              </FieldDescription>
+            <FieldLabel htmlFor="company-primary-contact">
+              <FieldTitle>主担当にする</FieldTitle>
+              <FieldDescription>この連絡先に設定済みの主担当は解除されます。</FieldDescription>
             </FieldLabel>
           </FieldContent>
         </Field>

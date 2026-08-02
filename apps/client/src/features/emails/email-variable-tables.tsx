@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, Pencil } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import type { MessageVariableRow } from "@/features/emails/email-api";
 import { formatDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 
 import { ArchiveConfirm } from "./email-forms";
 
@@ -62,18 +63,18 @@ export function VariableTable({
   items,
   loading,
   onEdit,
-  onChanged,
 }: {
   items: MessageVariableRow[];
   loading: boolean;
   onEdit: (variable: MessageVariableRow) => void;
-  onChanged: () => Promise<void>;
 }): ReactNode {
+  const queryClient = useQueryClient();
+  const archiveVariable = useMutation(orpcQuery.emails.archiveVariable.mutationOptions());
   async function archive(variable: MessageVariableRow) {
     try {
-      await orpc.emails.archiveVariable({ id: variable.id });
+      await archiveVariable.mutateAsync({ id: variable.id });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listVariables.key() });
       toast.success("メッセージ変数をアーカイブしました");
-      await onChanged();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
     }

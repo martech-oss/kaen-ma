@@ -1,4 +1,5 @@
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   applyEdgeChanges,
   applyNodeChanges,
@@ -47,64 +48,77 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  automationsQueryOptions,
+  emailTemplateOptionsQueryOptions,
+} from "@/features/automations/automation-api";
 import { formatDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
-import { type CampaignDefinition, type CampaignEdge, type CampaignNode } from "@kaenma/orpc";
+import {
+  type AutomationDefinition,
+  type AutomationEdge,
+  type AutomationNode,
+  type AutomationRow,
+} from "@kaenma/orpc";
 
-import { campaignNodeTypes, nodeHandles, StepButton } from "./campaign-flow-node";
+import { automationNodeTypes, nodeHandles, StepButton } from "./automation-flow-node";
 import {
   connectionBranches,
   isBranch,
-  toCampaignEdge,
-  withCampaignConnection,
-} from "./campaign-graph";
-import { emailNode } from "./campaign-graph";
-import { branchLabel, triggerLabel } from "./campaign-labels";
-import { NodeSettings } from "./campaign-node-settings";
-import { createPresetCampaign, type PresetId, presets } from "./campaign-presets";
-import { type AutomationOptions, type CampaignDraft, type CampaignRow } from "./campaign-types";
+  toAutomationEdge,
+  withAutomationConnection,
+} from "./automation-graph";
+import { emailNode } from "./automation-graph";
+import { branchLabel, triggerLabel } from "./automation-labels";
+import { NodeSettings } from "./automation-node-settings";
+import { createPresetAutomation, type PresetId, presets } from "./automation-presets";
+import { type AutomationDraft, type AutomationOptions } from "./automation-types";
 
 export type {
   AutomationOptions,
-  CampaignDraft,
-  CampaignRow,
+  AutomationDraft,
+  AutomationRow,
   EmailTemplateOption,
-} from "./campaign-types";
+} from "./automation-types";
 
-export function CampaignsPage({
-  campaigns,
-  options,
-}: {
-  campaigns: CampaignRow[];
-  options: AutomationOptions;
-}): ReactNode {
+export function AutomationsPage(): ReactNode {
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const router = useRouter();
+  const { data: automations } = useSuspenseQuery(automationsQueryOptions());
+  const { data: allTemplates } = useSuspenseQuery(emailTemplateOptionsQueryOptions());
+  const templates = useMemo(
+    () => allTemplates.filter((template) => template.sendable),
+    [allTemplates],
+  );
   const [createOpen, setCreateOpen] = useState(false);
   const [preset, setPreset] = useState<PresetId>("welcome");
   const [name, setName] = useState("ウェルカムシリーズ");
-  const [templateId, setTemplateId] = useState(options.templates[0]?.id ?? "");
+  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
+
+  const createAutomation = useMutation(orpcQuery.automations.create.mutationOptions());
+  const setAutomationStatus = useMutation(orpcQuery.automations.setStatus.mutationOptions());
 
   function selectPreset(value: PresetId): void {
     setPreset(value);
     setName(presets.find((item) => item.id === value)?.name ?? "");
   }
 
-  async function createCampaign(): Promise<void> {
-    const template = options.templates.find((item) => item.id === templateId);
+  async function createAutomationFlow(): Promise<void> {
+    const template = templates.find((item) => item.id === templateId);
     if (!template) {
       toast.error("使用するメールテンプレートを選択してください");
       return;
     }
     setCreating(true);
     try {
-      const definition = createPresetCampaign(name.trim(), preset, template);
-      const created = await orpc.campaigns.create(definition);
+      const definition = createPresetAutomation(name.trim(), preset, template);
+      const created = await createAutomation.mutateAsync(definition);
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() });
       setCreateOpen(false);
       await navigate({
-        to: "/campaigns/$id",
+        to: "/automations/$id",
         params: { id: created.id },
       });
     } catch (error) {
@@ -114,11 +128,15 @@ export function CampaignsPage({
     }
   }
 
-  async function changeStatus(campaign: CampaignRow): Promise<void> {
-    const status = campaign.status === "active" ? "paused" : "active";
-    await orpc.campaigns.setStatus({ id: campaign.id, status });
-    toast.success(status === "active" ? "オートメーションを再開しました" : "一時停止しました");
-    await router.invalidate();
+  async function changeStatus(automation: AutomationRow): Promise<void> {
+    const status = automation.status === "active" ? "paused" : "active";
+    try {
+      await setAutomationStatus.mutateAsync({ id: automation.id, status });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() });
+      toast.success(status === "active" ? "オートメーションを再開しました" : "一時停止しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "更新できませんでした");
+    }
   }
 
   return (
@@ -136,43 +154,43 @@ export function CampaignsPage({
         メール送信・待機・条件分岐を自動で実行します。
       </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {campaigns.map((campaign) => (
-          <Card key={campaign.id} className="transition-shadow hover:shadow-md">
+        {automations.map((automation) => (
+          <Card key={automation.id} className="transition-shadow hover:shadow-md">
             <CardHeader>
               <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <GitBranch className="size-4" />
               </div>
-              <CardTitle>{campaign.name}</CardTitle>
-              <CardDescription>{triggerLabel(campaign.triggerSource)}</CardDescription>
+              <CardTitle>{automation.name}</CardTitle>
+              <CardDescription>{triggerLabel(automation.triggerSource)}</CardDescription>
               <CardAction>
-                <CampaignStatusBadge status={campaign.status} />
+                <AutomationStatusBadge status={automation.status} />
               </CardAction>
             </CardHeader>
             <CardContent className="grid grid-cols-3 gap-3">
-              <Metric label="登録" value={campaign.enrollmentCount} />
-              <Metric label="進行中" value={campaign.activeCount} />
-              <Metric label="完了" value={campaign.completedCount} />
+              <Metric label="登録" value={automation.enrollmentCount} />
+              <Metric label="進行中" value={automation.activeCount} />
+              <Metric label="完了" value={automation.completedCount} />
             </CardContent>
             <CardFooter className="justify-between gap-2">
               <span className="text-xs text-muted-foreground">
-                {formatDateTime(campaign.updatedAt)}
+                {formatDateTime(automation.updatedAt)}
               </span>
               <div className="flex gap-1">
-                {campaign.status === "active" || campaign.status === "paused" ? (
+                {automation.status === "active" || automation.status === "paused" ? (
                   <Button
                     size="icon-sm"
                     variant="ghost"
-                    aria-label={campaign.status === "active" ? "一時停止" : "再開"}
-                    onClick={() => void changeStatus(campaign)}
+                    aria-label={automation.status === "active" ? "一時停止" : "再開"}
+                    onClick={() => void changeStatus(automation)}
                   >
-                    {campaign.status === "active" ? <Pause /> : <Play />}
+                    {automation.status === "active" ? <Pause /> : <Play />}
                   </Button>
                 ) : null}
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() =>
-                    void navigate({ to: "/campaigns/$id", params: { id: campaign.id } })
+                    void navigate({ to: "/automations/$id", params: { id: automation.id } })
                   }
                 >
                   編集
@@ -182,7 +200,7 @@ export function CampaignsPage({
           </Card>
         ))}
       </div>
-      {campaigns.length === 0 ? (
+      {automations.length === 0 ? (
         <SimpleEmpty label="テンプレートから最初のオートメーションを作成しましょう" />
       ) : null}
       <AppDialog
@@ -225,7 +243,7 @@ export function CampaignsPage({
             onChange={(event) => setTemplateId(event.target.value)}
           >
             <FormSelectOption value="">選択してください</FormSelectOption>
-            {options.templates.map((template) => (
+            {templates.map((template) => (
               <FormSelectOption key={template.id} value={template.id}>
                 {template.name}
                 {template.subject ? ` · ${template.subject}` : ""}
@@ -233,7 +251,7 @@ export function CampaignsPage({
             ))}
           </FormNativeSelect>
         </div>
-        {options.templates.length === 0 ? (
+        {templates.length === 0 ? (
           <p className="text-sm text-destructive">
             先に「メール → テンプレート」で送信内容を作成してください。
           </p>
@@ -244,7 +262,7 @@ export function CampaignsPage({
           </Button>
           <Button
             disabled={creating || !name.trim() || !templateId}
-            onClick={() => void createCampaign()}
+            onClick={() => void createAutomationFlow()}
           >
             {creating ? "作成中..." : "このテンプレートで作成"}
           </Button>
@@ -254,16 +272,20 @@ export function CampaignsPage({
   );
 }
 
-export function CampaignBuilder({
+export function AutomationBuilder({
   id,
   initialDraft,
   options,
 }: {
   id: string;
-  initialDraft: CampaignDraft;
+  initialDraft: AutomationDraft;
   options: AutomationOptions;
 }): ReactNode {
-  const [definition, setDefinition] = useState<CampaignDefinition>(initialDraft.graph);
+  const queryClient = useQueryClient();
+  const saveDraft = useMutation(orpcQuery.automations.saveDraft.mutationOptions());
+  const publishDraft = useMutation(orpcQuery.automations.publish.mutationOptions());
+  const setAutomationStatus = useMutation(orpcQuery.automations.setStatus.mutationOptions());
+  const [definition, setDefinition] = useState<AutomationDefinition>(initialDraft.graph);
   const [status, setStatus] = useState(initialDraft.status);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
     initialDraft.graph.nodes[0]?.id ?? null,
@@ -277,7 +299,7 @@ export function CampaignBuilder({
       definition.nodes.map((node) => ({
         id: node.id,
         position: node.position,
-        type: "campaign",
+        type: "automation",
         initialWidth: 180,
         initialHeight: node.type === "decision" || node.type === "condition" ? 82 : 70,
         handles: nodeHandles(node),
@@ -320,7 +342,7 @@ export function CampaignBuilder({
       const changed = applyEdgeChanges(changes, flowEdges);
       setDefinition((current) => ({
         ...current,
-        edges: changed.map(toCampaignEdge),
+        edges: changed.map(toAutomationEdge),
       }));
     },
     [flowEdges],
@@ -329,7 +351,12 @@ export function CampaignBuilder({
     (connection: Connection) => {
       if (!connection.source || !connection.target) return;
       const branch = isBranch(connection.sourceHandle) ? connection.sourceHandle : "next";
-      const next = withCampaignConnection(definition, connection.source, connection.target, branch);
+      const next = withAutomationConnection(
+        definition,
+        connection.source,
+        connection.target,
+        branch,
+      );
       if (!next) {
         toast.error("循環する接続は作成できません");
         return;
@@ -340,7 +367,7 @@ export function CampaignBuilder({
     [definition],
   );
 
-  function updateNode(nodeId: string, update: (node: CampaignNode) => CampaignNode): void {
+  function updateNode(nodeId: string, update: (node: AutomationNode) => AutomationNode): void {
     setDefinition((current) => ({
       ...current,
       nodes: current.nodes.map((node) => (node.id === nodeId ? update(node) : node)),
@@ -350,7 +377,7 @@ export function CampaignBuilder({
   function addNode(kind: "email" | "delay" | "decision" | "condition"): void {
     const id = crypto.randomUUID();
     const position = { x: 360, y: 120 + definition.nodes.length * 70 };
-    let node: CampaignNode;
+    let node: AutomationNode;
     if (kind === "email") {
       const template = options.templates[0];
       if (!template) {
@@ -408,8 +435,12 @@ export function CampaignBuilder({
     toast.success(freeBranch ? "ステップを追加して接続しました" : "ステップを追加しました");
   }
 
-  function setConnection(sourceId: string, branch: CampaignEdge["branch"], targetId: string): void {
-    const next = withCampaignConnection(definition, sourceId, targetId || null, branch);
+  function setConnection(
+    sourceId: string,
+    branch: AutomationEdge["branch"],
+    targetId: string,
+  ): void {
+    const next = withAutomationConnection(definition, sourceId, targetId || null, branch);
     if (!next) {
       toast.error("循環する接続は作成できません");
       return;
@@ -434,9 +465,9 @@ export function CampaignBuilder({
     setSaving(true);
     setNotice("");
     try {
-      await orpc.campaigns.saveDraft({ id, ...definition });
+      await saveDraft.mutateAsync({ id, ...definition });
       if (publish) {
-        await orpc.campaigns.publish({ id });
+        await publishDraft.mutateAsync({ id });
         setStatus("active");
         setNotice("公開しました。以降の行動イベントから自動登録されます。");
         toast.success("オートメーションを公開しました");
@@ -444,6 +475,9 @@ export function CampaignBuilder({
         setNotice("下書きを保存しました");
         toast.success("下書きを保存しました");
       }
+      // The list page's cache would otherwise still show the pre-save status/
+      // enrollment counts when the user navigates back to it.
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() });
     } catch (error) {
       const message = error instanceof Error ? error.message : "保存できませんでした";
       setNotice(message);
@@ -455,9 +489,14 @@ export function CampaignBuilder({
 
   async function changeStatus(): Promise<void> {
     const nextStatus = status === "active" ? "paused" : "active";
-    await orpc.campaigns.setStatus({ id, status: nextStatus });
-    setStatus(nextStatus);
-    toast.success(nextStatus === "active" ? "再開しました" : "一時停止しました");
+    try {
+      await setAutomationStatus.mutateAsync({ id, status: nextStatus });
+      setStatus(nextStatus);
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() });
+      toast.success(nextStatus === "active" ? "再開しました" : "一時停止しました");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "更新できませんでした");
+    }
   }
 
   return (
@@ -473,7 +512,7 @@ export function CampaignBuilder({
             }
           />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <CampaignStatusBadge status={status} />
+            <AutomationStatusBadge status={status} />
             <span>{definition.timezone}</span>
           </div>
         </div>
@@ -516,7 +555,7 @@ export function CampaignBuilder({
         <ReactFlow
           nodes={flowNodes}
           edges={flowEdges}
-          nodeTypes={campaignNodeTypes}
+          nodeTypes={automationNodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -552,7 +591,7 @@ export function CampaignBuilder({
   );
 }
 
-function CampaignStatusBadge({ status }: { status: CampaignRow["status"] }): ReactNode {
+function AutomationStatusBadge({ status }: { status: AutomationRow["status"] }): ReactNode {
   const label = {
     draft: "下書き",
     active: "稼働中",

@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, ExternalLink } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -33,7 +34,7 @@ import {
 } from "@/features/emails/email-api";
 import { nullableString } from "@/lib/form-data";
 import { toDateTimeLocal } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
 
 export function CampaignForm({
@@ -47,8 +48,11 @@ export function CampaignForm({
   segments: SegmentOption[];
   templates: EmailTemplateRow[];
   topics: TopicOption[];
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }): ReactNode {
+  const queryClient = useQueryClient();
+  const createCampaign = useMutation(orpcQuery.emails.createCampaign.mutationOptions());
+  const updateCampaign = useMutation(orpcQuery.emails.updateCampaign.mutationOptions());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -66,12 +70,13 @@ export function CampaignForm({
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
       };
       await (campaign
-        ? orpc.emails.updateCampaign({ id: campaign.id, ...payload })
-        : orpc.emails.createCampaign(payload));
+        ? updateCampaign.mutateAsync({ id: campaign.id, ...payload })
+        : createCampaign.mutateAsync(payload));
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listCampaigns.key() });
       toast.success(
         campaign ? "メールキャンペーンを更新しました" : "メールキャンペーンを作成しました",
       );
-      await onSaved();
+      onSaved();
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "メールキャンペーンを保存できませんでした",
@@ -146,7 +151,9 @@ export function CampaignForm({
   );
 }
 
-export function TemplateForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
+export function TemplateForm({ onSaved }: { onSaved: () => void }): ReactNode {
+  const queryClient = useQueryClient();
+  const importTemplate = useMutation(orpcQuery.emails.importTemplate.mutationOptions());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -155,12 +162,13 @@ export function TemplateForm({ onSaved }: { onSaved: () => Promise<void> }): Rea
     setError("");
     const form = new FormData(event.currentTarget);
     try {
-      await orpc.emails.importTemplate({
+      await importTemplate.mutateAsync({
         resendTemplateId: getFormString(form, "resendTemplateId"),
         purpose: getFormString(form, "purpose") === "transactional" ? "transactional" : "marketing",
       });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() });
       toast.success("Resend Templateを登録しました");
-      await onSaved();
+      onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Resend Templateを登録できませんでした");
     } finally {
@@ -210,8 +218,11 @@ export function VariableForm({
   onSaved,
 }: {
   variable: MessageVariableRow | null;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }): ReactNode {
+  const queryClient = useQueryClient();
+  const createVariable = useMutation(orpcQuery.emails.createVariable.mutationOptions());
+  const updateVariable = useMutation(orpcQuery.emails.updateVariable.mutationOptions());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -227,10 +238,11 @@ export function VariableForm({
         description: getFormString(form, "description"),
       };
       await (variable
-        ? orpc.emails.updateVariable({ id: variable.id, ...payload })
-        : orpc.emails.createVariable(payload));
+        ? updateVariable.mutateAsync({ id: variable.id, ...payload })
+        : createVariable.mutateAsync(payload));
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listVariables.key() });
       toast.success(variable ? "メッセージ変数を更新しました" : "メッセージ変数を作成しました");
-      await onSaved();
+      onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "メッセージ変数を保存できませんでした");
     } finally {

@@ -5,11 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { type CampaignEdge, type CampaignNode } from "@kaenma/orpc";
+import { type AutomationEdge, type AutomationNode } from "@kaenma/orpc";
 
-import { connectionBranches, sourceConfig } from "./campaign-graph";
-import { formatDuration, nodeLabel, nodeTypeLabel } from "./campaign-labels";
-import { type AutomationOptions } from "./campaign-types";
+import { connectionBranches, sourceConfig } from "./automation-graph";
+import { formatDuration, nodeLabel, nodeTypeLabel } from "./automation-labels";
+import { type AutomationOptions } from "./automation-types";
 
 export function NodeSettings({
   node,
@@ -20,12 +20,16 @@ export function NodeSettings({
   onConnectionChange,
   onDelete,
 }: {
-  node: CampaignNode | null;
-  nodes: CampaignNode[];
-  edges: CampaignEdge[];
+  node: AutomationNode | null;
+  nodes: AutomationNode[];
+  edges: AutomationEdge[];
   options: AutomationOptions;
-  onUpdate: (update: (node: CampaignNode) => CampaignNode) => void;
-  onConnectionChange: (sourceId: string, branch: CampaignEdge["branch"], targetId: string) => void;
+  onUpdate: (update: (node: AutomationNode) => AutomationNode) => void;
+  onConnectionChange: (
+    sourceId: string,
+    branch: AutomationEdge["branch"],
+    targetId: string,
+  ) => void;
   onDelete: () => void;
 }): ReactNode {
   if (!node) {
@@ -75,10 +79,14 @@ export function ConnectionSettings({
   edges,
   onConnectionChange,
 }: {
-  node: CampaignNode;
-  nodes: CampaignNode[];
-  edges: CampaignEdge[];
-  onConnectionChange: (sourceId: string, branch: CampaignEdge["branch"], targetId: string) => void;
+  node: AutomationNode;
+  nodes: AutomationNode[];
+  edges: AutomationEdge[];
+  onConnectionChange: (
+    sourceId: string,
+    branch: AutomationEdge["branch"],
+    targetId: string,
+  ) => void;
 }): ReactNode {
   const targets = nodes.filter((target) => target.id !== node.id && target.type !== "source");
   const branches = connectionBranches(node);
@@ -117,9 +125,9 @@ function SourceSettings({
   options,
   onUpdate,
 }: {
-  node: Extract<CampaignNode, { type: "source" }>;
+  node: Extract<AutomationNode, { type: "source" }>;
   options: AutomationOptions;
-  onUpdate: (update: (node: CampaignNode) => CampaignNode) => void;
+  onUpdate: (update: (node: AutomationNode) => AutomationNode) => void;
 }): ReactNode {
   const source = node.config.source;
   return (
@@ -251,9 +259,9 @@ function ActionSettings({
   options,
   onUpdate,
 }: {
-  node: Extract<CampaignNode, { type: "action" }>;
+  node: Extract<AutomationNode, { type: "action" }>;
   options: AutomationOptions;
-  onUpdate: (update: (node: CampaignNode) => CampaignNode) => void;
+  onUpdate: (update: (node: AutomationNode) => AutomationNode) => void;
 }): ReactNode {
   if (node.config.action === "send_email") {
     return (
@@ -304,8 +312,8 @@ function DelaySettings({
   node,
   onUpdate,
 }: {
-  node: Extract<CampaignNode, { type: "delay" }>;
-  onUpdate: (update: (node: CampaignNode) => CampaignNode) => void;
+  node: Extract<AutomationNode, { type: "delay" }>;
+  onUpdate: (update: (node: AutomationNode) => AutomationNode) => void;
 }): ReactNode {
   if (node.config.mode !== "relative") {
     return (
@@ -338,8 +346,8 @@ function DecisionSettings({
   node,
   onUpdate,
 }: {
-  node: Extract<CampaignNode, { type: "decision" }>;
-  onUpdate: (update: (node: CampaignNode) => CampaignNode) => void;
+  node: Extract<AutomationNode, { type: "decision" }>;
+  onUpdate: (update: (node: AutomationNode) => AutomationNode) => void;
 }): ReactNode {
   return (
     <>
@@ -414,8 +422,8 @@ function ConditionSettings({
   node,
   onUpdate,
 }: {
-  node: Extract<CampaignNode, { type: "condition" }>;
-  onUpdate: (update: (node: CampaignNode) => CampaignNode) => void;
+  node: Extract<AutomationNode, { type: "condition" }>;
+  onUpdate: (update: (node: AutomationNode) => AutomationNode) => void;
 }): ReactNode {
   return (
     <>

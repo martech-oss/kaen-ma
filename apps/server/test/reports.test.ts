@@ -15,8 +15,8 @@ describe("Reporting", () => {
   it("aggregates contacts, automations, emails, deals, and site activity", async () => {
     const contactId = uuidv7();
     const archivedContactId = uuidv7();
-    const campaignId = uuidv7();
-    const campaignVersionId = uuidv7();
+    const automationId = uuidv7();
+    const automationVersionId = uuidv7();
     const enrollmentId = uuidv7();
     const deliveryId = uuidv7();
     const pipelineId = uuidv7();
@@ -89,12 +89,12 @@ describe("Reporting", () => {
         `INSERT INTO automations
          (id, workspace_id, name, description, status, created_at, updated_at)
          VALUES (?, ?, 'Welcome flow', '', 'active', ?, ?)`,
-      ).bind(campaignId, workspaceId, at, at),
+      ).bind(automationId, workspaceId, at, at),
       env.DB.prepare(
         `INSERT INTO automation_versions
          (id, workspace_id, automation_id, version, status, timezone, graph, published_at, created_at)
          VALUES (?, ?, ?, 1, 'published', 'Asia/Tokyo', '{"nodes":[],"edges":[]}', ?, ?)`,
-      ).bind(campaignVersionId, workspaceId, campaignId, at, at),
+      ).bind(automationVersionId, workspaceId, automationId, at, at),
       env.DB.prepare(
         `INSERT INTO automation_enrollments
          (id, workspace_id, automation_id, automation_version_id, contact_id, status,
@@ -103,8 +103,8 @@ describe("Reporting", () => {
       ).bind(
         enrollmentId,
         workspaceId,
-        campaignId,
-        campaignVersionId,
+        automationId,
+        automationVersionId,
         contactId,
         at,
         completedAt,

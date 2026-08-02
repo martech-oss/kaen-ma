@@ -1,12 +1,12 @@
 import {
-  campaignAnalyticsProcedure,
-  createCampaignProcedure,
-  enrollCampaignProcedure,
-  getCampaignDraftProcedure,
-  listCampaignsProcedure,
-  publishCampaignProcedure,
-  saveCampaignDraftProcedure,
-  setCampaignStatusProcedure,
+  automationAnalyticsProcedure,
+  createAutomationProcedure,
+  enrollAutomationProcedure,
+  getAutomationDraftProcedure,
+  listAutomationsProcedure,
+  publishAutomationProcedure,
+  saveAutomationDraftProcedure,
+  setAutomationStatusProcedure,
 } from "../automations/router";
 import { createTopicProcedure, listTopicsProcedure } from "../consent/router";
 import {
@@ -202,15 +202,15 @@ export const orpcRouter = os.router({
     refresh: refreshSegmentProcedure,
     preview: previewSegmentProcedure,
   },
-  campaigns: {
-    list: listCampaignsProcedure,
-    create: createCampaignProcedure,
-    getDraft: getCampaignDraftProcedure,
-    saveDraft: saveCampaignDraftProcedure,
-    publish: publishCampaignProcedure,
-    setStatus: setCampaignStatusProcedure,
-    enroll: enrollCampaignProcedure,
-    analytics: campaignAnalyticsProcedure,
+  automations: {
+    list: listAutomationsProcedure,
+    create: createAutomationProcedure,
+    getDraft: getAutomationDraftProcedure,
+    saveDraft: saveAutomationDraftProcedure,
+    publish: publishAutomationProcedure,
+    setStatus: setAutomationStatusProcedure,
+    enroll: enrollAutomationProcedure,
+    analytics: automationAnalyticsProcedure,
   },
   contactResources: {
     options: contactOptionsProcedure,

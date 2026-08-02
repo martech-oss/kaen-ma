@@ -186,12 +186,12 @@ describe("oRPC contract completion (P2)", () => {
     });
   });
 
-  it("guards manual enrollment and serves per-campaign analytics", async () => {
+  it("guards manual enrollment and serves per-automation analytics", async () => {
     const { client } = await createWorkspaceClient();
     await expect(
-      client.campaigns.enroll({ id: uuidv7(), contactId: uuidv7() }),
-    ).rejects.toMatchObject({ code: "CAMPAIGN_NOT_ACTIVE" });
-    await expect(client.campaigns.analytics({ id: uuidv7() })).resolves.toEqual({
+      client.automations.enroll({ id: uuidv7(), contactId: uuidv7() }),
+    ).rejects.toMatchObject({ code: "AUTOMATION_NOT_ACTIVE" });
+    await expect(client.automations.analytics({ id: uuidv7() })).resolves.toEqual({
       enrollments: [],
       deliveries: [],
     });

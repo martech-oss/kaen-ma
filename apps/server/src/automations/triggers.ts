@@ -1,7 +1,7 @@
-import type { CampaignDefinition } from "@kaenma/orpc";
+import type { AutomationDefinition } from "@kaenma/orpc";
 
-export function campaignTrigger(
-  config: Extract<CampaignDefinition["nodes"][number], { type: "source" }>["config"],
+export function automationTrigger(
+  config: Extract<AutomationDefinition["nodes"][number], { type: "source" }>["config"],
 ): { eventType: string | null; resourceId: string | null; inactivityDays: number | null } {
   switch (config.source) {
     case "contact_created":

@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -9,10 +10,10 @@ import {
   UserMinus,
   UsersRound,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-import { AppDialog, EmptyState, ErrorAlert, PageLayout } from "@/components/app-ui";
+import { AppDialog, EmptyState, PageLayout } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,28 +35,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  loadAccountDetail,
-  type AccountContact,
-  type AccountDetail,
-  type AccountDetailData,
-  type AccountSummary,
-  type ContactOption,
-} from "@/features/accounts/account-api";
+  companiesQueryOptions,
+  companyContactOptionsQueryOptions,
+  companyQueryOptions,
+  type CompanyContactDto,
+} from "@/features/companies/company-api";
 import { formatDate } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 
-import { AccountForm, AddAccountContactForm } from "./account-forms";
+import { AddCompanyContactForm, CompanyForm } from "./company-forms";
 
-export function AccountsPage({
-  accounts,
-  initialQuery,
-}: {
-  accounts: AccountSummary[];
-  initialQuery: string;
-}): ReactNode {
+export function CompaniesPage({ initialQuery }: { initialQuery: string }): ReactNode {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { data: companies } = useSuspenseQuery(companiesQueryOptions(initialQuery));
   const [query, setQuery] = useState(initialQuery);
   const [showCreate, setShowCreate] = useState(false);
-  const navigate = useNavigate();
+  const createCompany = useMutation(orpcQuery.companies.create.mutationOptions());
 
   useEffect(() => {
     setQuery(initialQuery);
@@ -65,7 +61,7 @@ export function AccountsPage({
     if (query === initialQuery) return;
     const timer = window.setTimeout(() => {
       void navigate({
-        to: "/contacts/accounts",
+        to: "/contacts/companies",
         search: { q: query },
         replace: true,
       });
@@ -75,11 +71,11 @@ export function AccountsPage({
 
   return (
     <PageLayout
-      title="アカウント"
+      title="会社"
       action={
         <Button onClick={() => setShowCreate(true)}>
           <Plus data-icon="inline-start" />
-          アカウントを作成
+          会社を作成
         </Button>
       }
     >
@@ -89,7 +85,7 @@ export function AccountsPage({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="会社名またはドメインで検索"
-            aria-label="アカウントを検索"
+            aria-label="会社を検索"
           />
           <InputGroupAddon>
             <Search />
@@ -98,15 +94,15 @@ export function AccountsPage({
       </div>
       <Card>
         <CardHeader className="border-b">
-          <CardTitle>すべてのアカウント</CardTitle>
+          <CardTitle>すべての会社</CardTitle>
           <CardDescription>会社情報と所属する連絡先数を確認できます。</CardDescription>
           <CardAction>
-            <Badge variant="secondary">{accounts.length}社</Badge>
+            <Badge variant="secondary">{companies.length}社</Badge>
           </CardAction>
         </CardHeader>
         <CardContent className="px-0">
           <Table>
-            <TableCaption className="sr-only">アカウント一覧</TableCaption>
+            <TableCaption className="sr-only">会社一覧</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead className="px-4">会社名</TableHead>
@@ -116,47 +112,47 @@ export function AccountsPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {accounts.map((account) => (
-                <TableRow key={account.id}>
+              {companies.map((company) => (
+                <TableRow key={company.id}>
                   <TableCell className="px-4 font-medium">
                     <Button
                       variant="link"
                       className="h-auto p-0"
                       nativeButton={false}
-                      render={<Link to="/contacts/accounts/$id" params={{ id: account.id }} />}
+                      render={<Link to="/contacts/companies/$id" params={{ id: company.id }} />}
                     >
-                      {account.name}
+                      {company.name}
                     </Button>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {account.domain ?? "未設定"}
+                    {company.domain ?? "未設定"}
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary">
-                      {Number(account.contactCount).toLocaleString()}人
+                      {Number(company.contactCount).toLocaleString()}人
                     </Badge>
                   </TableCell>
                   <TableCell className="px-4 text-right text-muted-foreground">
-                    {formatDate(account.updatedAt)}
+                    {formatDate(company.updatedAt)}
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
-          {accounts.length === 0 ? (
+          {companies.length === 0 ? (
             <EmptyState
               compact
               title={query ? "条件に一致する会社がありません" : "会社がまだありません"}
               description={
                 query
                   ? "検索条件を変更してください。"
-                  : "最初のアカウントを作成し、連絡先を会社単位で整理しましょう。"
+                  : "最初の会社を作成し、連絡先を会社単位で整理しましょう。"
               }
               action={
                 query ? undefined : (
                   <Button variant="outline" onClick={() => setShowCreate(true)}>
                     <Building2 data-icon="inline-start" />
-                    アカウントを作成
+                    会社を作成
                   </Button>
                 )
               }
@@ -167,18 +163,19 @@ export function AccountsPage({
       <AppDialog
         open={showCreate}
         onOpenChange={setShowCreate}
-        title="アカウントを作成"
+        title="会社を作成"
         description="会社名とメールドメインを登録します。"
       >
-        <AccountForm
+        <CompanyForm
           submitLabel="作成"
           onSubmit={async (values) => {
-            const account = await orpc.companies.create(values);
-            toast.success("アカウントを作成しました");
+            const company = await createCompany.mutateAsync(values);
+            await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+            toast.success("会社を作成しました");
             setShowCreate(false);
             await navigate({
-              to: "/contacts/accounts/$id",
-              params: { id: account.id },
+              to: "/contacts/companies/$id",
+              params: { id: company.id },
             });
           }}
         />
@@ -187,54 +184,23 @@ export function AccountsPage({
   );
 }
 
-export function AccountDetailPage({
-  accountId,
-  initialData,
-}: {
-  accountId: string;
-  initialData: AccountDetailData;
-}): ReactNode {
-  const [account, setAccount] = useState<AccountDetail | null>(initialData.account);
-  const [contacts, setContacts] = useState<ContactOption[]>(initialData.contacts);
-  const [error, setError] = useState("");
+export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNode {
+  const queryClient = useQueryClient();
+  const { data: company } = useSuspenseQuery(companyQueryOptions(companyId));
+  const { data: contactOptions } = useSuspenseQuery(companyContactOptionsQueryOptions());
   const [showEdit, setShowEdit] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
+  const updateCompany = useMutation(orpcQuery.companies.update.mutationOptions());
+  const removeContact = useMutation(orpcQuery.companies.removeContact.mutationOptions());
+  const assignContact = useMutation(orpcQuery.companies.assignContact.mutationOptions());
 
-  const load = useCallback(async () => {
-    setError("");
-    try {
-      const result = await loadAccountDetail(accountId);
-      setAccount(result.account);
-      setContacts(result.contacts);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "アカウントを読み込めませんでした");
-    }
-  }, [accountId]);
-
-  if (!account) {
-    return (
-      <PageLayout title="アカウント">
-        <ErrorAlert>{error || "アカウントが見つかりません"}</ErrorAlert>
-        <Button
-          variant="outline"
-          className="self-start"
-          nativeButton={false}
-          render={<Link to="/contacts/accounts" />}
-        >
-          <ArrowLeft data-icon="inline-start" />
-          一覧へ戻る
-        </Button>
-      </PageLayout>
-    );
-  }
-
-  const assignedIds = new Set(account.contacts.map((contact) => contact.id));
+  const assignedIds = new Set(company.contacts.map((contact) => contact.id));
   return (
     <PageLayout
-      title={account.name}
+      title={company.name}
       action={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/accounts" />}>
+          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/companies" />}>
             <ArrowLeft data-icon="inline-start" />
             一覧
           </Button>
@@ -249,13 +215,12 @@ export function AccountDetailPage({
         </div>
       }
     >
-      {error ? <ErrorAlert>{error}</ErrorAlert> : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardHeader>
             <CardDescription>会社ドメイン</CardDescription>
-            <CardTitle>{account.domain ?? "未設定"}</CardTitle>
-            {account.domain ? (
+            <CardTitle>{company.domain ?? "未設定"}</CardTitle>
+            {company.domain ? (
               <CardAction>
                 <Button
                   variant="ghost"
@@ -263,10 +228,10 @@ export function AccountDetailPage({
                   nativeButton={false}
                   render={
                     <a
-                      href={`https://${account.domain}`}
+                      href={`https://${company.domain}`}
                       target="_blank"
                       rel="noreferrer"
-                      aria-label={`${account.domain}を開く`}
+                      aria-label={`${company.domain}を開く`}
                     />
                   }
                 >
@@ -280,7 +245,7 @@ export function AccountDetailPage({
           <CardHeader>
             <CardDescription>所属する連絡先</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
-              {account.contacts.length.toLocaleString()}人
+              {company.contacts.length.toLocaleString()}人
             </CardTitle>
           </CardHeader>
         </Card>
@@ -292,12 +257,12 @@ export function AccountDetailPage({
             この会社に所属する担当者と役職、主担当関係を管理します。
           </CardDescription>
           <CardAction>
-            <Badge variant="secondary">{account.contacts.length}人</Badge>
+            <Badge variant="secondary">{company.contacts.length}人</Badge>
           </CardAction>
         </CardHeader>
         <CardContent className="px-0">
           <Table>
-            <TableCaption className="sr-only">{account.name}に所属する連絡先</TableCaption>
+            <TableCaption className="sr-only">{company.name}に所属する連絡先</TableCaption>
             <TableHeader>
               <TableRow>
                 <TableHead className="px-4">連絡先</TableHead>
@@ -308,7 +273,7 @@ export function AccountDetailPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {account.contacts.map((contact) => (
+              {company.contacts.map((contact) => (
                 <TableRow key={contact.id}>
                   <TableCell className="px-4">
                     <div className="flex flex-col gap-0.5">
@@ -337,11 +302,16 @@ export function AccountDetailPage({
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        void orpc.companies
-                          .removeContact({ id: account.id, contactId: contact.id })
+                        void removeContact
+                          .mutateAsync({ id: company.id, contactId: contact.id })
                           .then(async () => {
-                            toast.success("アカウントとの関連を解除しました");
-                            await load();
+                            toast.success("会社との関連を解除しました");
+                            await queryClient.invalidateQueries({
+                              queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+                            });
+                            await queryClient.invalidateQueries({
+                              queryKey: orpcQuery.companies.list.key(),
+                            });
                           });
                       }}
                     >
@@ -353,7 +323,7 @@ export function AccountDetailPage({
               ))}
             </TableBody>
           </Table>
-          {account.contacts.length === 0 ? (
+          {company.contacts.length === 0 ? (
             <EmptyState
               compact
               title="所属する連絡先がありません"
@@ -371,22 +341,25 @@ export function AccountDetailPage({
       <AppDialog
         open={showEdit}
         onOpenChange={setShowEdit}
-        title="アカウントを編集"
+        title="会社を編集"
         description="会社名とドメインを更新します。"
       >
-        <AccountForm
-          initialName={account.name}
-          initialDomain={account.domain ?? ""}
+        <CompanyForm
+          initialName={company.name}
+          initialDomain={company.domain ?? ""}
           submitLabel="変更を保存"
           onSubmit={async (values) => {
-            await orpc.companies.update({
-              id: account.id,
+            await updateCompany.mutateAsync({
+              id: company.id,
               name: values.name,
               domain: values.domain || null,
             });
-            toast.success("アカウントを更新しました");
+            await queryClient.invalidateQueries({
+              queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+            });
+            await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+            toast.success("会社を更新しました");
             setShowEdit(false);
-            await load();
           }}
         />
       </AppDialog>
@@ -394,15 +367,18 @@ export function AccountDetailPage({
         open={showAddContact}
         onOpenChange={setShowAddContact}
         title="連絡先を追加"
-        description={`${account.name}へ既存の連絡先を関連付けます。`}
+        description={`${company.name}へ既存の連絡先を関連付けます。`}
       >
-        <AddAccountContactForm
-          contacts={contacts.filter((contact) => !assignedIds.has(contact.id))}
+        <AddCompanyContactForm
+          contacts={contactOptions.items.filter((contact) => !assignedIds.has(contact.id))}
           onSubmit={async (values) => {
-            await orpc.companies.assignContact({ id: account.id, ...values });
-            toast.success("連絡先をアカウントへ追加しました");
+            await assignContact.mutateAsync({ id: company.id, ...values });
+            await queryClient.invalidateQueries({
+              queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+            });
+            await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+            toast.success("連絡先を会社へ追加しました");
             setShowAddContact(false);
-            await load();
           }}
         />
       </AppDialog>
@@ -410,7 +386,7 @@ export function AccountDetailPage({
   );
 }
 
-function contactName(contact: AccountContact): string {
+function contactName(contact: CompanyContactDto): string {
   const name = [contact.lastName, contact.firstName].filter(Boolean).join(" ");
   return name || contact.email || "名前未設定";
 }

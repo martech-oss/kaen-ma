@@ -64,13 +64,13 @@ const dashboardNavigation = linkOptions([
 
 const contactNavigation = linkOptions([
   { to: "/contacts", label: "連絡先", icon: UsersRound },
-  { to: "/contacts/accounts", label: "アカウント", icon: Building2 },
+  { to: "/contacts/companies", label: "会社", icon: Building2 },
   { to: "/contacts/tags", label: "タグ", icon: Tags },
   { to: "/contacts/segments", label: "セグメント", icon: Shapes },
 ]);
 
 const automationNavigation = linkOptions([
-  { to: "/campaigns", label: "オートメーション", icon: GitBranch },
+  { to: "/automations", label: "オートメーション", icon: GitBranch },
 ]);
 
 const dealNavigation = linkOptions([{ to: "/deals", label: "Deals", icon: BriefcaseBusiness }]);

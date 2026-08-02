@@ -1,4 +1,4 @@
-import { useRouter } from "@tanstack/react-router";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Plus, Shapes } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 
@@ -15,6 +15,7 @@ import {
   SimpleEmpty,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
+import { segmentsQueryOptions } from "@/features/segments/segment-api";
 import {
   createSegmentCondition,
   getSegmentOperatorOptions,
@@ -23,16 +24,21 @@ import {
   segmentFieldOptions,
 } from "@/features/segments/segment-fields";
 import { formatDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
-import type { SegmentRow } from "@kaenma/orpc";
-import type { SegmentFilter } from "@kaenma/orpc";
+import {
+  getSegmentFieldDefinition,
+  type SegmentField,
+  type SegmentFilter,
+  type SegmentOperator,
+  type SegmentRow,
+} from "@kaenma/orpc";
 
 export type { SegmentRow };
-import { getSegmentFieldDefinition, type SegmentField, type SegmentOperator } from "@kaenma/orpc";
 
-export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNode {
-  const router = useRouter();
+export function SegmentsPage(): ReactNode {
+  const queryClient = useQueryClient();
+  const { data: segments } = useSuspenseQuery(segmentsQueryOptions());
   const [showForm, setShowForm] = useState(false);
 
   return (
@@ -66,7 +72,7 @@ export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNod
         <SegmentForm
           onSaved={async () => {
             setShowForm(false);
-            await router.invalidate({ sync: true });
+            await queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });
           }}
         />
       </AppDialog>
@@ -75,6 +81,7 @@ export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNod
 }
 
 function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
+  const createSegment = useMutation(orpcQuery.segments.create.mutationOptions());
   const [kind, setKind] = useState<"static" | "dynamic">("static");
   const [field, setField] = useState<SegmentField>("stage");
   const [operator, setOperator] = useState<SegmentOperator>("eq");
@@ -95,7 +102,7 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
     setBusy(true);
     setError("");
     try {
-      await orpc.segments.create({
+      await createSegment.mutateAsync({
         name,
         slug: slugify(name),
         kind,

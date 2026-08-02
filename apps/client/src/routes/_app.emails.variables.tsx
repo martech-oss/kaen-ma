@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RouteError, RoutePending } from "@/components/route-status";
-import { emailVariablesQueryOptions } from "@/features/emails/email-api";
+import { emailVariablesListQueryOptions } from "@/features/emails/email-api";
 import { EmailVariablesPage } from "@/features/emails/email-pages";
 
 export const Route = createFileRoute("/_app/emails/variables")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(emailVariablesQueryOptions()),
+  loader: ({ context }) => context.queryClient.ensureQueryData(emailVariablesListQueryOptions()),
   pendingComponent: RoutePending,
   errorComponent: RouteError,
   component: EmailVariablesRoute,

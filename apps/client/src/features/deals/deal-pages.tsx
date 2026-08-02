@@ -1,4 +1,5 @@
-import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
   ArrowLeft,
@@ -38,44 +39,36 @@ import {
 } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
-  archiveDeal,
-  createDeal,
-  createDealTask,
-  type DealDetailData,
-  type DealListData,
-  type DealOptions,
+  dealDetailQueryOptions,
+  dealOptionsQueryOptions,
+  dealsQueryOptions,
   type DealSearch,
   type DealStatus,
   type DealTask,
-  deleteDealTask,
-  moveDeal,
-  updateDeal,
-  updateDealTask,
 } from "@/features/deals/deal-api";
 import { formatDate, formatMoney, formatMonthDayTime } from "@/lib/format";
+import { orpcQuery } from "@/lib/orpc";
 
 import { DealBoard } from "./deal-board";
 import { DealForm, DealTaskForm, TaskRow } from "./deal-forms";
 import { contactLabel, statusLabel } from "./deal-labels";
 import { DealStatusBadge, DetailItem, MetricCard } from "./deal-widgets";
 
-export function DealsPage({
-  initialData,
-  search,
-}: {
-  initialData: { deals: DealListData; options: DealOptions };
-  search: DealSearch;
-}): ReactNode {
+export function DealsPage({ search }: { search: DealSearch }): ReactNode {
   const navigate = useNavigate();
-  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: options } = useSuspenseQuery(dealOptionsQueryOptions());
+  const { data: deals } = useSuspenseQuery(dealsQueryOptions(search));
   const [query, setQuery] = useState(search.q);
   const [showCreate, setShowCreate] = useState(false);
   const [movingId, setMovingId] = useState<string | null>(null);
-  const options = initialData.options;
   const activePipeline =
     options.pipelines.find((pipeline) => pipeline.id === search.pipelineId) ??
     options.pipelines.find((pipeline) => pipeline.isDefault) ??
     options.pipelines[0];
+
+  const createDeal = useMutation(orpcQuery.deals.create.mutationOptions());
+  const moveDeal = useMutation(orpcQuery.deals.move.mutationOptions());
 
   useEffect(() => {
     setQuery(search.q);
@@ -96,8 +89,8 @@ export function DealsPage({
   async function move(dealId: string, stageId: string): Promise<void> {
     setMovingId(dealId);
     try {
-      await moveDeal(dealId, stageId);
-      await router.invalidate({ sync: true });
+      await moveDeal.mutateAsync({ id: dealId, stageId });
+      await queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() });
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "ステージを変更できませんでした");
     } finally {
@@ -118,19 +111,19 @@ export function DealsPage({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="進行中の商談"
-          value={`${initialData.deals.summary.openCount.toLocaleString()}件`}
-          detail={formatMoney(initialData.deals.summary.openValue, "JPY")}
+          value={`${deals.summary.openCount.toLocaleString()}件`}
+          detail={formatMoney(deals.summary.openValue, "JPY")}
           icon={<BriefcaseBusiness />}
         />
         <MetricCard
           label="獲得済み"
-          value={`${initialData.deals.summary.wonCount.toLocaleString()}件`}
-          detail={formatMoney(initialData.deals.summary.wonValue, "JPY")}
+          value={`${deals.summary.wonCount.toLocaleString()}件`}
+          detail={formatMoney(deals.summary.wonValue, "JPY")}
           icon={<CircleDollarSign />}
         />
         <MetricCard
           label="失注"
-          value={`${initialData.deals.summary.lostCount.toLocaleString()}件`}
+          value={`${deals.summary.lostCount.toLocaleString()}件`}
           detail="パイプライン累計"
           icon={<CircleX />}
         />
@@ -206,7 +199,7 @@ export function DealsPage({
       {activePipeline ? (
         <DealBoard
           pipeline={activePipeline}
-          deals={initialData.deals.items}
+          deals={deals.items}
           movingId={movingId}
           onMove={move}
           onCreate={() => setShowCreate(true)}
@@ -231,7 +224,8 @@ export function DealsPage({
             initialPipelineId={activePipeline.id}
             submitLabel="商談を作成"
             onSubmit={async (values) => {
-              const deal = await createDeal(values);
+              const deal = await createDeal.mutateAsync(values);
+              await queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() });
               toast.success("商談を作成しました");
               setShowCreate(false);
               await navigate({ to: "/deals/$id", params: { id: deal.id } });
@@ -243,29 +237,34 @@ export function DealsPage({
   );
 }
 
-export function DealDetailPage({
-  dealId,
-  initialData,
-}: {
-  dealId: string;
-  initialData: { detail: DealDetailData; options: DealOptions };
-}): ReactNode {
-  const router = useRouter();
+export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: detail } = useSuspenseQuery(dealDetailQueryOptions(dealId));
+  const { data: options } = useSuspenseQuery(dealOptionsQueryOptions());
   const [showEdit, setShowEdit] = useState(false);
   const [showTask, setShowTask] = useState(false);
   const [editingTask, setEditingTask] = useState<DealTask | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const { deal, tasks } = initialData.detail;
+  const { deal, tasks } = detail;
+
+  const updateDeal = useMutation(orpcQuery.deals.update.mutationOptions());
+  const archiveDeal = useMutation(orpcQuery.deals.archive.mutationOptions());
+  const createDealTask = useMutation(orpcQuery.deals.createTask.mutationOptions());
+  const updateDealTask = useMutation(orpcQuery.deals.updateTask.mutationOptions());
+  const deleteDealTask = useMutation(orpcQuery.deals.deleteTask.mutationOptions());
 
   async function refresh(): Promise<void> {
-    await router.invalidate({ sync: true });
+    await queryClient.invalidateQueries({
+      queryKey: orpcQuery.deals.get.key({ input: { id: dealId } }),
+    });
+    await queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() });
   }
 
   async function changeStatus(status: DealStatus): Promise<void> {
     setBusyAction(status);
     try {
-      await updateDeal(deal.id, { status });
+      await updateDeal.mutateAsync({ id: deal.id, status });
       toast.success(
         status === "won"
           ? "商談を獲得にしました"
@@ -284,7 +283,7 @@ export function DealDetailPage({
   async function removeTask(task: DealTask): Promise<void> {
     if (!window.confirm(`「${task.title}」を削除しますか？`)) return;
     try {
-      await deleteDealTask(deal.id, task.id);
+      await deleteDealTask.mutateAsync({ dealId: deal.id, taskId: task.id });
       toast.success("タスクを削除しました");
       await refresh();
     } catch (caught) {
@@ -396,7 +395,9 @@ export function DealDetailPage({
                 onEdit={() => setEditingTask(task)}
                 onToggle={async () => {
                   try {
-                    await updateDealTask(deal.id, task.id, {
+                    await updateDealTask.mutateAsync({
+                      dealId: deal.id,
+                      taskId: task.id,
                       status: task.status === "open" ? "completed" : "open",
                     });
                     await refresh();
@@ -455,9 +456,11 @@ export function DealDetailPage({
             className="self-start"
             onClick={() => {
               if (!window.confirm(`「${deal.name}」をアーカイブしますか？`)) return;
-              void archiveDeal(deal.id)
+              void archiveDeal
+                .mutateAsync({ id: deal.id })
                 .then(async () => {
                   toast.success("商談をアーカイブしました");
+                  await queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() });
                   await navigate({ to: "/deals" });
                 })
                 .catch((caught: unknown) => {
@@ -481,11 +484,11 @@ export function DealDetailPage({
         className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
       >
         <DealForm
-          options={initialData.options}
+          options={options}
           deal={deal}
           submitLabel="変更を保存"
           onSubmit={async (values) => {
-            await updateDeal(deal.id, values);
+            await updateDeal.mutateAsync({ id: deal.id, ...values });
             toast.success("商談を更新しました");
             setShowEdit(false);
             await refresh();
@@ -500,10 +503,10 @@ export function DealDetailPage({
         description="商談に対する次のアクションを登録します。"
       >
         <DealTaskForm
-          members={initialData.options.members}
+          members={options.members}
           submitLabel="タスクを追加"
           onSubmit={async (values) => {
-            await createDealTask(dealId, values);
+            await createDealTask.mutateAsync({ dealId, ...values });
             toast.success("タスクを追加しました");
             setShowTask(false);
             await refresh();
@@ -520,11 +523,11 @@ export function DealDetailPage({
       >
         {editingTask ? (
           <DealTaskForm
-            members={initialData.options.members}
+            members={options.members}
             task={editingTask}
             submitLabel="変更を保存"
             onSubmit={async (values) => {
-              await updateDealTask(dealId, editingTask.id, values);
+              await updateDealTask.mutateAsync({ dealId, taskId: editingTask.id, ...values });
               toast.success("タスクを更新しました");
               setEditingTask(null);
               await refresh();

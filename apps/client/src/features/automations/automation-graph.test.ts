@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import type { CampaignDefinition, CampaignEdge, CampaignNode } from "@kaenma/orpc";
+import type { AutomationDefinition, AutomationEdge, AutomationNode } from "@kaenma/orpc";
 
 import {
   chainEdges,
   connectionBranches,
   connectionCreatesCycle,
   isBranch,
-  toCampaignEdge,
-  withCampaignConnection,
-} from "./campaign-graph";
+  toAutomationEdge,
+  withAutomationConnection,
+} from "./automation-graph";
 
 const at = { x: 0, y: 0 };
 
-function sourceNode(id: string): CampaignNode {
+function sourceNode(id: string): AutomationNode {
   return {
     id,
     type: "source",
@@ -22,7 +22,7 @@ function sourceNode(id: string): CampaignNode {
   };
 }
 
-function actionNode(id: string): CampaignNode {
+function actionNode(id: string): AutomationNode {
   return {
     id,
     type: "action",
@@ -31,7 +31,7 @@ function actionNode(id: string): CampaignNode {
   };
 }
 
-function conditionNode(id: string): CampaignNode {
+function conditionNode(id: string): AutomationNode {
   return {
     id,
     type: "condition",
@@ -43,12 +43,12 @@ function conditionNode(id: string): CampaignNode {
 function edge(
   source: string,
   target: string,
-  branch: CampaignEdge["branch"] = "next",
-): CampaignEdge {
+  branch: AutomationEdge["branch"] = "next",
+): AutomationEdge {
   return { id: `${source}-${target}-${branch}`, source, target, branch };
 }
 
-function definition(nodes: CampaignNode[], edges: CampaignEdge[]): CampaignDefinition {
+function definition(nodes: AutomationNode[], edges: AutomationEdge[]): AutomationDefinition {
   return { name: "t", description: "", timezone: "UTC", nodes, edges };
 }
 
@@ -110,43 +110,43 @@ describe("connectionCreatesCycle", () => {
   });
 });
 
-describe("withCampaignConnection", () => {
+describe("withAutomationConnection", () => {
   const nodes = [sourceNode("s"), actionNode("a"), actionNode("b")];
 
   it("adds an edge on a valid branch", () => {
-    const result = withCampaignConnection(definition(nodes, []), "s", "a", "next");
+    const result = withAutomationConnection(definition(nodes, []), "s", "a", "next");
     expect(result?.edges).toHaveLength(1);
     expect(result?.edges[0]).toMatchObject({ source: "s", target: "a", branch: "next" });
   });
 
   it("replaces the existing edge for the same source and branch, keeping its id", () => {
     const existing = edge("s", "a");
-    const result = withCampaignConnection(definition(nodes, [existing]), "s", "b", "next");
+    const result = withAutomationConnection(definition(nodes, [existing]), "s", "b", "next");
     expect(result?.edges).toHaveLength(1);
     expect(result?.edges[0]).toMatchObject({ id: existing.id, target: "b" });
   });
 
   it("removes the edge when the target is null", () => {
-    const result = withCampaignConnection(definition(nodes, [edge("s", "a")]), "s", null, "next");
+    const result = withAutomationConnection(definition(nodes, [edge("s", "a")]), "s", null, "next");
     expect(result?.edges).toEqual([]);
   });
 
   it("rejects a branch the source node does not offer", () => {
-    expect(withCampaignConnection(definition(nodes, []), "a", "b", "timeout")).toBeNull();
+    expect(withAutomationConnection(definition(nodes, []), "a", "b", "timeout")).toBeNull();
   });
 
   it("rejects an unknown source or target", () => {
-    expect(withCampaignConnection(definition(nodes, []), "missing", "a", "next")).toBeNull();
-    expect(withCampaignConnection(definition(nodes, []), "s", "missing", "next")).toBeNull();
+    expect(withAutomationConnection(definition(nodes, []), "missing", "a", "next")).toBeNull();
+    expect(withAutomationConnection(definition(nodes, []), "s", "missing", "next")).toBeNull();
   });
 
   it("rejects targeting a source node, which cannot be entered", () => {
-    expect(withCampaignConnection(definition(nodes, []), "a", "s", "next")).toBeNull();
+    expect(withAutomationConnection(definition(nodes, []), "a", "s", "next")).toBeNull();
   });
 
   it("rejects a connection that would create a cycle", () => {
     const withPath = definition(nodes, [edge("a", "b")]);
-    expect(withCampaignConnection(withPath, "b", "a", "next")).toBeNull();
+    expect(withAutomationConnection(withPath, "b", "a", "next")).toBeNull();
   });
 });
 
@@ -157,9 +157,11 @@ describe("isBranch", () => {
   });
 });
 
-describe("toCampaignEdge", () => {
+describe("toAutomationEdge", () => {
   it("reads the branch out of edge data", () => {
-    expect(toCampaignEdge({ id: "e", source: "a", target: "b", data: { branch: "yes" } })).toEqual({
+    expect(
+      toAutomationEdge({ id: "e", source: "a", target: "b", data: { branch: "yes" } }),
+    ).toEqual({
       id: "e",
       source: "a",
       target: "b",
@@ -168,9 +170,9 @@ describe("toCampaignEdge", () => {
   });
 
   it("falls back to next when the branch is missing or invalid", () => {
-    expect(toCampaignEdge({ id: "e", source: "a", target: "b" }).branch).toBe("next");
+    expect(toAutomationEdge({ id: "e", source: "a", target: "b" }).branch).toBe("next");
     expect(
-      toCampaignEdge({ id: "e", source: "a", target: "b", data: { branch: "bogus" } }).branch,
+      toAutomationEdge({ id: "e", source: "a", target: "b", data: { branch: "bogus" } }).branch,
     ).toBe("next");
   });
 });
