@@ -1,5 +1,7 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Activity, Gauge, Send, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { PageLayout, SimpleEmpty } from "@/components/app-ui";
 import {
@@ -11,12 +13,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { formatDateTime } from "@/lib/format";
+import {
+  dashboardQueryOptions,
+  deliveryTrendQueryOptions,
+  toDeliveryHealthTrend,
+} from "@/features/dashboard/dashboard-api";
+import { formatDateTime, formatShortDate } from "@/lib/format";
 import type { Dashboard as DashboardData } from "@kaenma/orpc";
 
 export type { DashboardData };
 
-export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
+export function DashboardPage(): ReactNode {
+  const { data } = useSuspenseQuery(dashboardQueryOptions());
+  const { data: trendReport } = useSuspenseQuery(deliveryTrendQueryOptions());
+  const deliveryHealth = toDeliveryHealthTrend(trendReport.trend);
   const deliveredRate =
     data.deliveries.sent > 0
       ? Math.round((data.deliveries.delivered / data.deliveries.sent) * 1000) / 10
@@ -61,23 +71,52 @@ export function DashboardPage({ data }: { data: DashboardData }): ReactNode {
         <Card className="min-h-80">
           <CardHeader>
             <CardTitle>配信ヘルス</CardTitle>
-            <CardDescription>直近7期間の配信到達率</CardDescription>
+            <CardDescription>直近7日間の配信到達率</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex h-44 items-end gap-3">
-              {[45, 56, 38, 70, 62, 83, Math.max(12, deliveredRate)].map((height, index) => (
-                <div key={index} className="flex flex-1 flex-col items-center gap-2">
-                  <div
-                    className="w-full rounded-t-md bg-primary"
-                    style={{
-                      height: `${height}%`,
-                      opacity: 0.45 + index * 0.08,
-                    }}
-                  />
-                  <span className="text-xs text-muted-foreground">{index + 1}</span>
-                </div>
-              ))}
-            </div>
+            {deliveryHealth.every((point) => point.deliveryRate === 0) ? (
+              <SimpleEmpty compact label="この期間の配信データはありません" />
+            ) : (
+              <div className="h-44 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={deliveryHealth}
+                    margin={{ top: 8, right: 4, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid stroke="var(--border)" vertical={false} />
+                    <XAxis
+                      dataKey="day"
+                      tickFormatter={(value: string) => formatShortDate(value)}
+                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                      tickLine={false}
+                      axisLine={{ stroke: "var(--border)" }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={36}
+                      unit="%"
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      cursor={{ fill: "var(--muted)" }}
+                      labelFormatter={(value) =>
+                        formatShortDate(typeof value === "string" ? value : "")
+                      }
+                      formatter={(value) => [`${Number(value)}%`, "配信到達率"]}
+                      contentStyle={{
+                        backgroundColor: "var(--popover)",
+                        borderColor: "var(--border)",
+                        borderRadius: "var(--radius)",
+                        fontSize: 12,
+                      }}
+                    />
+                    <Bar dataKey="deliveryRate" fill="var(--primary)" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>

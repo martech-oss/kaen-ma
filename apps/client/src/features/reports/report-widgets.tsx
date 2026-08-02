@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { EmptyState } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,42 @@ export function Metric({
   );
 }
 
+function TrendTooltip({
+  active,
+  payload,
+  label,
+  series,
+}: {
+  active?: boolean;
+  payload?: Array<{ dataKey?: string | number; value?: string | number }>;
+  label?: string;
+  series: Array<{ key: string; label: string; color: string }>;
+}): ReactNode {
+  if (!active || !payload || payload.length === 0) return null;
+  return (
+    <div className="rounded-lg border bg-popover px-3 py-2 text-xs shadow-md">
+      <p className="mb-1.5 font-medium">{formatShortDate(label ?? "")}</p>
+      <div className="flex flex-col gap-1">
+        {series.map((item) => {
+          const entry = payload.find((point) => point.dataKey === item.key);
+          if (!entry) return null;
+          return (
+            <div key={item.key} className="flex items-center justify-between gap-4">
+              <span className="flex items-center gap-1.5 text-muted-foreground">
+                <span className="size-2 rounded-full" style={{ backgroundColor: item.color }} />
+                {item.label}
+              </span>
+              <span className="font-medium tabular-nums">
+                {Number(entry.value ?? 0).toLocaleString()}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function TrendCard({
   title,
   description,
@@ -56,11 +93,6 @@ export function TrendCard({
   data: Array<Record<string, string | number>>;
   series: Array<{ key: string; label: string; color: string }>;
 }): ReactNode {
-  const maximum = Math.max(
-    1,
-    ...data.flatMap((row) => series.map((item) => Number(row[item.key] ?? 0))),
-  );
-  const interval = Math.max(1, Math.ceil(data.length / 8));
   return (
     <Card>
       <CardHeader>
@@ -81,39 +113,41 @@ export function TrendCard({
         {data.length === 0 ? (
           <NoReportData />
         ) : (
-          <div className="overflow-x-auto">
-            <div
-              className="flex h-56 items-end gap-2 border-b pt-6"
-              style={{ minWidth: `${Math.max(640, data.length * 34)}px` }}
-            >
-              {data.map((row, index) => (
-                <div
-                  key={String(row["day"])}
-                  className="flex h-full min-w-6 flex-1 flex-col justify-end"
-                  title={series
-                    .map((item) => `${item.label}: ${Number(row[item.key] ?? 0).toLocaleString()}`)
-                    .join(" / ")}
-                >
-                  <div className="flex h-44 items-end justify-center gap-px">
-                    {series.map((item) => (
-                      <div
-                        key={item.key}
-                        className="min-h-px flex-1 rounded-t-sm"
-                        style={{
-                          backgroundColor: item.color,
-                          height: `${(Number(row[item.key] ?? 0) / maximum) * 100}%`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span className="mt-2 h-4 text-center text-[10px] text-muted-foreground">
-                    {index % interval === 0 || index === data.length - 1
-                      ? formatShortDate(String(row["day"]))
-                      : ""}
-                  </span>
-                </div>
-              ))}
-            </div>
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} margin={{ top: 8, right: 4, left: -20, bottom: 0 }}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis
+                  dataKey="day"
+                  tickFormatter={(value: string) => formatShortDate(value)}
+                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={{ stroke: "var(--border)" }}
+                  interval="preserveStartEnd"
+                  minTickGap={24}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={36}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  content={<TrendTooltip series={series} />}
+                  cursor={{ fill: "var(--muted)" }}
+                />
+                {series.map((item) => (
+                  <Bar
+                    key={item.key}
+                    dataKey={item.key}
+                    name={item.label}
+                    fill={item.color}
+                    radius={[2, 2, 0, 0]}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         )}
       </CardContent>

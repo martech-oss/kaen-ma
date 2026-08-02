@@ -1,19 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RouteError, RoutePending } from "@/components/route-status";
+import {
+  dashboardQueryOptions,
+  deliveryTrendQueryOptions,
+} from "@/features/dashboard/dashboard-api";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
-import { orpc } from "@/lib/orpc";
 
 export const Route = createFileRoute("/_app/dashboard")({
-  loader: async ({ abortController }) => {
-    return orpc.operations.dashboard(undefined, { signal: abortController.signal });
-  },
+  loader: ({ context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(dashboardQueryOptions()),
+      context.queryClient.ensureQueryData(deliveryTrendQueryOptions()),
+    ]),
   pendingComponent: RoutePending,
   errorComponent: RouteError,
-  component: DashboardRoute,
+  component: DashboardPage,
 });
-
-function DashboardRoute() {
-  const data = Route.useLoaderData();
-  return <DashboardPage data={data} />;
-}
