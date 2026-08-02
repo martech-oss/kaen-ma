@@ -1,4 +1,5 @@
 import { and, asc, count, eq, inArray, or, sql } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 
 import type { WorkspaceContext } from "@kaenma/orpc";
 
@@ -6,7 +7,19 @@ import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../cli
 import { contacts } from "../contacts/schema";
 import { deliveries } from "../messaging/schema";
 import { uuidv7 } from "../shared/uuid";
-import { contactSubscriptions, subscriptionTopics, suppressions } from "./schema";
+import { consentEvents, contactSubscriptions, subscriptionTopics, suppressions } from "./schema";
+
+export interface PreferenceCenterTopic {
+  id: string;
+  name: string;
+  description: string;
+  status: string;
+}
+
+export interface PreferenceCenterState {
+  topics: PreferenceCenterTopic[];
+  globallySuppressed: boolean;
+}
 
 export type SubscriptionTopicRecord = typeof subscriptionTopics.$inferSelect;
 
@@ -69,6 +82,157 @@ export class ConsentRepository {
       return { kind: "conflict" };
     }
     return { kind: "created", id };
+  }
+
+  /**
+   * Loads everything the visitor-facing preference center renders in one
+   * atomic D1 batch: every topic joined to this contact's subscription status
+   * (defaulting to "unsubscribed" when no row exists), and whether the
+   * contact is globally suppressed.
+   */
+  public async readPreferenceCenterState(contactId: string): Promise<PreferenceCenterState> {
+    const workspaceId = this.context.workspaceId;
+    const orm = this.database.orm;
+    const [topicRows, suppressionRows] = await orm.batch([
+      orm
+        .select({
+          id: subscriptionTopics.id,
+          name: subscriptionTopics.name,
+          description: subscriptionTopics.description,
+          status: sql<string>`coalesce(${contactSubscriptions.status}, 'unsubscribed')`,
+        })
+        .from(subscriptionTopics)
+        .leftJoin(
+          contactSubscriptions,
+          and(
+            eq(contactSubscriptions.workspaceId, subscriptionTopics.workspaceId),
+            eq(contactSubscriptions.topicId, subscriptionTopics.id),
+            eq(contactSubscriptions.contactId, contactId),
+          ),
+        )
+        .where(eq(subscriptionTopics.workspaceId, workspaceId))
+        .orderBy(asc(subscriptionTopics.name)),
+      orm
+        .select({ id: suppressions.id })
+        .from(suppressions)
+        .where(
+          and(
+            eq(suppressions.workspaceId, workspaceId),
+            eq(suppressions.contactId, contactId),
+            eq(suppressions.reason, "global_unsubscribe"),
+          ),
+        )
+        .limit(1),
+    ]);
+    return { topics: topicRows, globallySuppressed: suppressionRows.length > 0 };
+  }
+
+  /**
+   * Applies a one-click unsubscribe atomically (one D1 batch): a
+   * global-unsubscribe suppression (ignored if one already exists — nothing
+   * else on this table is unique for this insert, matching the prior
+   * `INSERT OR IGNORE`) plus the consent-event record.
+   */
+  public async applyOneClickUnsubscribe(contactId: string): Promise<void> {
+    const workspaceId = this.context.workspaceId;
+    const now = new Date().toISOString();
+    const orm = this.database.orm;
+    await orm.batch([
+      orm
+        .insert(suppressions)
+        .values({
+          id: uuidv7(),
+          workspaceId,
+          contactId,
+          reason: "global_unsubscribe",
+          createdAt: now,
+        })
+        .onConflictDoNothing(),
+      orm.insert(consentEvents).values({
+        id: uuidv7(),
+        workspaceId,
+        contactId,
+        action: "unsubscribed",
+        source: "one_click",
+        createdAt: now,
+      }),
+    ]);
+  }
+
+  /**
+   * Applies a preference-center save atomically (one D1 batch): one
+   * upsert per workspace topic (subscribed/unsubscribed per the selection),
+   * the global suppression insert-or-delete, and the consent-event record.
+   */
+  public async applyPreferenceCenterUpdate(input: {
+    contactId: string;
+    selectedTopicIds: string[];
+    globalStop: boolean;
+  }): Promise<void> {
+    const workspaceId = this.context.workspaceId;
+    const now = new Date().toISOString();
+    const orm = this.database.orm;
+    const selected = new Set(input.selectedTopicIds);
+    const topics = await this.listTopics();
+    const statements: BatchItem<"sqlite">[] = [];
+    for (const topic of topics) {
+      const status = selected.has(topic.id) ? "subscribed" : "unsubscribed";
+      statements.push(
+        orm
+          .insert(contactSubscriptions)
+          .values({
+            workspaceId,
+            contactId: input.contactId,
+            topicId: topic.id,
+            status,
+            source: "preference_center",
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [
+              contactSubscriptions.workspaceId,
+              contactSubscriptions.contactId,
+              contactSubscriptions.topicId,
+            ],
+            set: { status, source: "preference_center", updatedAt: now },
+          }),
+      );
+    }
+    statements.push(
+      input.globalStop
+        ? orm
+            .insert(suppressions)
+            .values({
+              id: uuidv7(),
+              workspaceId,
+              contactId: input.contactId,
+              reason: "global_unsubscribe",
+              createdAt: now,
+            })
+            .onConflictDoNothing()
+        : orm
+            .delete(suppressions)
+            .where(
+              and(
+                eq(suppressions.workspaceId, workspaceId),
+                eq(suppressions.contactId, input.contactId),
+                eq(suppressions.reason, "global_unsubscribe"),
+              ),
+            ),
+    );
+    statements.push(
+      orm.insert(consentEvents).values({
+        id: uuidv7(),
+        workspaceId,
+        contactId: input.contactId,
+        action: input.globalStop ? "unsubscribed" : "granted",
+        source: "preference_center",
+        proof: JSON.stringify({ topics: [...selected] }),
+        createdAt: now,
+      }),
+    );
+    const [first, ...rest] = statements;
+    if (first) await orm.batch([first, ...rest]);
   }
 
   /**

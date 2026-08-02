@@ -35,14 +35,6 @@ export function isoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-export function rows(result: D1Result | undefined): Record<string, unknown>[] {
-  return (result?.results ?? []) as Record<string, unknown>[];
-}
-
-export function firstRow(result: D1Result | undefined): Record<string, unknown> {
-  return rows(result)[0] ?? {};
-}
-
 export function toNumber(value: unknown): number {
   return typeof value === "number" ? value : Number(value ?? 0);
 }

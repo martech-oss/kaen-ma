@@ -1,6 +1,8 @@
 import type { Hono } from "hono";
 import * as z from "zod";
 
+import { WebRepository } from "@kaenma/database";
+
 import { apiError } from "../auth/access";
 import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
@@ -62,18 +64,14 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
     }
     const visitorId = parsed.data.visitorId ?? crypto.randomUUID();
     const now = new Date().toISOString();
-    const contact = parsed.data.email
-      ? await database
-          .prepare(
-            `SELECT id FROM contacts
-           WHERE workspace_id = ? AND email = ? AND status != 'archived'`,
-          )
-          .bind(workspace.id, parsed.data.email.toLowerCase())
-          .first<{ id: string }>()
+    const contactId = parsed.data.email
+      ? await new WebRepository(database, { workspaceId: workspace.id }).findActiveContactIdByEmail(
+          parsed.data.email.toLowerCase(),
+        )
       : null;
     await recordContactEvent(database, {
       workspaceId: workspace.id,
-      contactId: contact?.id ?? null,
+      contactId,
       visitorId,
       type: parsed.data.type,
       resourceType: "page",
@@ -86,7 +84,7 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
         data: {
           accepted: true,
           visitorId,
-          identified: Boolean(contact),
+          identified: Boolean(contactId),
           identityIssued: true,
         },
       },

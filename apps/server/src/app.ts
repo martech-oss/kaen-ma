@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
@@ -28,10 +29,11 @@ app.use("/api/rpc/*", createOrpcRequestHandler());
 app.use("/api/v1/*", createOpenApiRequestHandler());
 app.get("/api/health", async (context) => {
   try {
+    // d1_migrations is Wrangler-managed, outside our Drizzle schema, so this
+    // is a raw tagged-template query rather than a schema table reference.
     const result = await context
       .get("database")
-      .prepare("SELECT COUNT(*) AS count FROM d1_migrations")
-      .first<{ count: number }>();
+      .first<{ count: number }>(sql`SELECT COUNT(*) AS count FROM d1_migrations`);
     return context.json({
       data: {
         status: "ok",

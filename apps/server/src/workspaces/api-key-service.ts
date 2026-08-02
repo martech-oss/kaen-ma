@@ -1,4 +1,4 @@
-import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
+import { ApiKeyRepository, uuidv7, type KaenmaDatabase } from "@kaenma/database";
 import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
 
 import { randomIdentifier, randomString, sha256Hex } from "../platform/crypto";
@@ -11,23 +11,16 @@ export async function createApiKey(
   const prefix = randomIdentifier(12);
   const token = `kaenma_${prefix}_${randomString(40)}`;
   const id = uuidv7();
-  await database
-    .prepare(
-      `INSERT INTO api_keys
-       (id, workspace_id, created_by_user_id, name, prefix, key_hash, role, expires_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      workspace.workspaceId,
-      workspace.userId,
-      input.name,
-      prefix,
-      await sha256Hex(token),
-      input.role,
-      input.expiresAt ?? null,
-      new Date().toISOString(),
-    )
-    .run();
+  await new ApiKeyRepository(database).create({
+    id,
+    workspaceId: workspace.workspaceId,
+    createdByUserId: workspace.userId,
+    name: input.name,
+    prefix,
+    keyHash: await sha256Hex(token),
+    role: input.role,
+    expiresAt: input.expiresAt ?? null,
+    createdAt: new Date().toISOString(),
+  });
   return { id, token, prefix };
 }

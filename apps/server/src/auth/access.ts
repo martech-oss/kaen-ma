@@ -1,8 +1,9 @@
 import { createMiddleware } from "hono/factory";
 
 import { timingSafeEqual } from "@kaenma/channels";
-import { createDatabase, resolveMemberContext, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
+import { ApiKeyRepository, createDatabase, resolveMemberContext } from "@kaenma/database";
+import type { KaenmaDatabase } from "@kaenma/database";
+import type { WorkspaceContext } from "@kaenma/orpc";
 
 import type { AppEnvironment, SessionValue } from "../env";
 import { sha256Hex } from "../platform/crypto";
@@ -71,11 +72,7 @@ export async function resolveWorkspaceAccess({
       throw new WorkspaceAccessError(401, "invalid_api_key", "APIキーが無効です");
     }
     executionContext.waitUntil(
-      database
-        .prepare("UPDATE api_keys SET last_used_at = ? WHERE id = ?")
-        .bind(new Date().toISOString(), apiContext.apiKeyId)
-        .run()
-        .then(() => undefined),
+      new ApiKeyRepository(database).touchLastUsed(apiContext.apiKeyId, new Date().toISOString()),
     );
     return { workspace: apiContext, session: null };
   }
@@ -135,28 +132,17 @@ async function resolveApiKey(database: KaenmaDatabase, token: string) {
   const match = token.match(/^kaenma_([A-Za-z0-9]{12})_([A-Za-z0-9-]{20,})$/);
   if (!match) return null;
   const prefix = match[1];
-  const row = await database
-    .prepare(
-      `SELECT id, workspace_id, created_by_user_id, role, key_hash
-       FROM api_keys
-       WHERE prefix = ? AND revoked_at IS NULL
-         AND (expires_at IS NULL OR expires_at > ?)
-       LIMIT 1`,
-    )
-    .bind(prefix, new Date().toISOString())
-    .first<{
-      id: string;
-      workspace_id: string;
-      created_by_user_id: string;
-      role: WorkspaceRole;
-      key_hash: string;
-    }>();
+  if (!prefix) return null;
+  const row = await new ApiKeyRepository(database).findActiveByPrefix(
+    prefix,
+    new Date().toISOString(),
+  );
   if (!row) return null;
   const hash = await sha256Hex(token);
-  if (!timingSafeEqual(hash, row.key_hash)) return null;
+  if (!timingSafeEqual(hash, row.keyHash)) return null;
   return {
-    workspaceId: row.workspace_id,
-    userId: row.created_by_user_id,
+    workspaceId: row.workspaceId,
+    userId: row.createdByUserId,
     role: row.role,
     apiKeyId: row.id,
   };

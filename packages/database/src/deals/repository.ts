@@ -1,0 +1,778 @@
+import { and, asc, count, desc, eq, isNull, like, min, ne, or, sql, type SQL } from "drizzle-orm";
+
+import type {
+  DealCreate,
+  DealStatus,
+  DealTaskCreate,
+  DealTaskStatus,
+  DealTaskType,
+  WorkspaceContext,
+} from "@kaenma/orpc";
+
+import { member, user } from "../auth/schema";
+import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { companies, contacts } from "../contacts/schema";
+import { uuidv7 } from "../shared/uuid";
+import { dealPipelines, dealStages, deals, dealTasks } from "./schema";
+
+/** Seed stages for a workspace's first (default) pipeline. */
+const DEFAULT_STAGES = [
+  { name: "新規", color: "#64748b", probability: 10 },
+  { name: "連絡済み", color: "#3b82f6", probability: 25 },
+  { name: "提案", color: "#8b5cf6", probability: 50 },
+  { name: "交渉", color: "#f59e0b", probability: 75 },
+  { name: "最終確認", color: "#10b981", probability: 90 },
+] as const;
+
+/**
+ * One deal row joined with its pipeline/stage/owner/contact/account names and
+ * open-task counters. Field names are snake_case (mirrors {@link CampaignJobRow})
+ * because this is the long-standing shape apps/server's `serializeDeal` maps
+ * from.
+ */
+export interface DealRow {
+  id: string;
+  workspace_id: string;
+  pipeline_id: string;
+  pipeline_name: string;
+  stage_id: string;
+  stage_name: string;
+  stage_color: string;
+  stage_position: number;
+  stage_probability: number;
+  name: string;
+  value: number;
+  currency: string;
+  status: DealStatus;
+  owner_user_id: string | null;
+  owner_name: string | null;
+  owner_email: string | null;
+  contact_id: string | null;
+  contact_email: string | null;
+  contact_first_name: string | null;
+  contact_last_name: string | null;
+  account_id: string | null;
+  account_name: string | null;
+  expected_close_date: string | null;
+  description: string;
+  won_at: string | null;
+  lost_at: string | null;
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+  open_task_count: number;
+  next_task_at: string | null;
+}
+
+/** A deal task joined with its assignee's name/email. Mirrors {@link DealRow}'s snake_case contract. */
+export interface DealTaskRow {
+  id: string;
+  deal_id: string;
+  type: DealTaskType;
+  title: string;
+  notes: string;
+  due_at: string | null;
+  status: DealTaskStatus;
+  assigned_user_id: string | null;
+  assignee_name: string | null;
+  assignee_email: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DealListSummaryRow {
+  open_count: number;
+  open_value: number;
+  won_count: number;
+  won_value: number;
+  lost_count: number;
+}
+
+export interface DealPipelineRow {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
+export interface DealStageRow {
+  id: string;
+  pipelineId: string;
+  name: string;
+  color: string;
+  position: number;
+  probability: number;
+}
+
+export interface DealContactOptionRow {
+  id: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+}
+
+export interface DealAccountOptionRow {
+  id: string;
+  name: string;
+  domain: string | null;
+}
+
+export interface DealMemberOptionRow {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface DealOptionRows {
+  pipelines: DealPipelineRow[];
+  stages: DealStageRow[];
+  contacts: DealContactOptionRow[];
+  accounts: DealAccountOptionRow[];
+  members: DealMemberOptionRow[];
+}
+
+/**
+ * Deals CRM: pipelines, stages, deals and their tasks.
+ *
+ * Scoped by workspace id only (not the full {@link WorkspaceContext}), because
+ * some call sites only resolve a workspace id. A full context is assignable
+ * wherever this scope is expected.
+ */
+export class DealRepository {
+  private readonly database: KaenmaDatabase;
+
+  public constructor(
+    database: DatabaseSource,
+    public readonly context: WorkspaceContext | Pick<WorkspaceContext, "workspaceId">,
+  ) {
+    this.database = createDatabase(database);
+  }
+
+  /**
+   * Returns the id of the workspace's default pipeline, creating it (with its
+   * five seed stages) in one atomic batch if none exists yet. Tolerant of a
+   * concurrent creator: if the batch insert loses a unique-name race, the
+   * winner's pipeline is looked up and returned instead of failing.
+   */
+  public async ensureDefaultPipeline(): Promise<string> {
+    const workspaceId = this.context.workspaceId;
+    const existing = await this.findDefaultPipeline();
+    if (existing) return existing.id;
+
+    const pipelineId = uuidv7();
+    const now = new Date().toISOString();
+    const orm = this.database.orm;
+    const statements = [
+      orm.insert(dealPipelines).values({
+        id: pipelineId,
+        workspaceId,
+        name: "セールスパイプライン",
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      }),
+      ...DEFAULT_STAGES.map((stage, position) =>
+        orm.insert(dealStages).values({
+          id: uuidv7(),
+          workspaceId,
+          pipelineId,
+          name: stage.name,
+          color: stage.color,
+          position,
+          probability: stage.probability,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ),
+    ];
+    const [first, ...rest] = statements;
+    try {
+      if (!first) throw new Error("no seed statements");
+      await orm.batch([first, ...rest]);
+      return pipelineId;
+    } catch {
+      const raced = await this.findDefaultPipeline();
+      if (raced) return raced.id;
+      throw new Error("デフォルトの商談パイプラインを作成できませんでした");
+    }
+  }
+
+  /**
+   * Checks that a deal's would-be pipeline/stage/contact/account/owner
+   * references are all valid, returning the first violation as a
+   * user-facing message, or `null` when everything resolves.
+   */
+  public async validateDealReferences(
+    input: Pick<DealCreate, "pipelineId" | "stageId" | "contactId" | "accountId" | "ownerUserId">,
+  ): Promise<string | null> {
+    const workspaceId = this.context.workspaceId;
+    const orm = this.database.orm;
+    const stage = await orm
+      .select({ id: dealStages.id })
+      .from(dealStages)
+      .innerJoin(
+        dealPipelines,
+        and(
+          eq(dealPipelines.workspaceId, dealStages.workspaceId),
+          eq(dealPipelines.id, dealStages.pipelineId),
+        ),
+      )
+      .where(
+        and(
+          eq(dealStages.workspaceId, workspaceId),
+          eq(dealStages.pipelineId, input.pipelineId),
+          eq(dealStages.id, input.stageId),
+          isNull(dealPipelines.archivedAt),
+        ),
+      )
+      .get();
+    if (!stage) return "パイプラインまたはステージが見つかりません";
+
+    if (input.contactId) {
+      const contact = await orm
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(
+          and(
+            eq(contacts.workspaceId, workspaceId),
+            eq(contacts.id, input.contactId),
+            ne(contacts.status, "archived"),
+          ),
+        )
+        .get();
+      if (!contact) return "連絡先が見つかりません";
+    }
+
+    if (input.accountId) {
+      const account = await orm
+        .select({ id: companies.id })
+        .from(companies)
+        .where(and(eq(companies.workspaceId, workspaceId), eq(companies.id, input.accountId)))
+        .get();
+      if (!account) return "アカウントが見つかりません";
+    }
+
+    if (input.ownerUserId && !(await this.memberExists(input.ownerUserId))) {
+      return "担当者が見つかりません";
+    }
+    return null;
+  }
+
+  public async pipelineExists(pipelineId: string): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: dealPipelines.id })
+      .from(dealPipelines)
+      .where(
+        and(
+          eq(dealPipelines.workspaceId, this.context.workspaceId),
+          eq(dealPipelines.id, pipelineId),
+          isNull(dealPipelines.archivedAt),
+        ),
+      )
+      .get();
+    return row !== undefined;
+  }
+
+  public async dealExists(dealId: string): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: deals.id })
+      .from(deals)
+      .where(
+        and(
+          eq(deals.workspaceId, this.context.workspaceId),
+          eq(deals.id, dealId),
+          isNull(deals.archivedAt),
+        ),
+      )
+      .get();
+    return row !== undefined;
+  }
+
+  public async memberExists(userId: string): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: member.id })
+      .from(member)
+      .where(and(eq(member.organizationId, this.context.workspaceId), eq(member.userId, userId)))
+      .get();
+    return row !== undefined;
+  }
+
+  /** Loads every filter option for the deals list/board page in one atomic batch. */
+  public async getDealOptionRows(): Promise<DealOptionRows> {
+    const workspaceId = this.context.workspaceId;
+    const orm = this.database.orm;
+    const [pipelineRows, stageRows, contactRows, accountRows, memberRows] = await orm.batch([
+      orm
+        .select({
+          id: dealPipelines.id,
+          name: dealPipelines.name,
+          isDefault: dealPipelines.isDefault,
+        })
+        .from(dealPipelines)
+        .where(and(eq(dealPipelines.workspaceId, workspaceId), isNull(dealPipelines.archivedAt)))
+        .orderBy(desc(dealPipelines.isDefault), asc(dealPipelines.name)),
+      orm
+        .select({
+          id: dealStages.id,
+          pipelineId: dealStages.pipelineId,
+          name: dealStages.name,
+          color: dealStages.color,
+          position: dealStages.position,
+          probability: dealStages.probability,
+        })
+        .from(dealStages)
+        .where(eq(dealStages.workspaceId, workspaceId))
+        .orderBy(asc(dealStages.pipelineId), asc(dealStages.position)),
+      orm
+        .select({
+          id: contacts.id,
+          email: contacts.email,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+        })
+        .from(contacts)
+        .where(and(eq(contacts.workspaceId, workspaceId), ne(contacts.status, "archived")))
+        .orderBy(
+          asc(
+            sql`coalesce(${contacts.lastName}, ${contacts.firstName}, ${contacts.email}, ${contacts.id})`,
+          ),
+        )
+        .limit(500),
+      orm
+        .select({ id: companies.id, name: companies.name, domain: companies.domain })
+        .from(companies)
+        .where(eq(companies.workspaceId, workspaceId))
+        .orderBy(asc(companies.name))
+        .limit(500),
+      orm
+        .select({ id: user.id, name: user.name, email: user.email })
+        .from(member)
+        .innerJoin(user, eq(user.id, member.userId))
+        .where(eq(member.organizationId, workspaceId))
+        .orderBy(asc(user.name), asc(user.email)),
+    ]);
+    return {
+      pipelines: pipelineRows,
+      stages: stageRows,
+      contacts: contactRows,
+      accounts: accountRows,
+      members: memberRows,
+    };
+  }
+
+  public async getDeal(id: string): Promise<DealRow | null> {
+    const row = await this.dealQuery()
+      .where(
+        and(
+          eq(deals.workspaceId, this.context.workspaceId),
+          eq(deals.id, id),
+          isNull(deals.archivedAt),
+        ),
+      )
+      .get();
+    return (row as DealRow | undefined) ?? null;
+  }
+
+  /**
+   * A page of deals for one pipeline (list SQL) plus the pipeline-wide status
+   * summary (a second, independent SQL: it always covers every non-archived
+   * deal of the pipeline, unfiltered by `status`/`q`).
+   */
+  public async listDeals(input: {
+    pipelineId: string;
+    status: "open" | "won" | "lost" | "all";
+    q?: string | undefined;
+  }): Promise<{ items: DealRow[]; summary: DealListSummaryRow | undefined }> {
+    const workspaceId = this.context.workspaceId;
+    const conditions: SQL[] = [
+      eq(deals.workspaceId, workspaceId),
+      eq(deals.pipelineId, input.pipelineId),
+      isNull(deals.archivedAt),
+    ];
+    if (input.status !== "all") conditions.push(eq(deals.status, input.status));
+    if (input.q) {
+      const pattern = `%${input.q}%`;
+      conditions.push(
+        or(
+          like(deals.name, pattern),
+          like(contacts.email, pattern),
+          like(contacts.firstName, pattern),
+          like(contacts.lastName, pattern),
+          like(companies.name, pattern),
+        )!,
+      );
+    }
+
+    const [items, summary] = await Promise.all([
+      this.dealQuery()
+        .where(and(...conditions))
+        .orderBy(asc(dealStages.position), desc(deals.updatedAt)),
+      this.database.orm
+        .select({
+          open_count: sql<number>`count(case when ${deals.status} = 'open' then 1 end)`.mapWith(
+            Number,
+          ),
+          open_value:
+            sql<number>`coalesce(sum(case when ${deals.status} = 'open' then ${deals.value} else 0 end), 0)`.mapWith(
+              Number,
+            ),
+          won_count: sql<number>`count(case when ${deals.status} = 'won' then 1 end)`.mapWith(
+            Number,
+          ),
+          won_value:
+            sql<number>`coalesce(sum(case when ${deals.status} = 'won' then ${deals.value} else 0 end), 0)`.mapWith(
+              Number,
+            ),
+          lost_count: sql<number>`count(case when ${deals.status} = 'lost' then 1 end)`.mapWith(
+            Number,
+          ),
+        })
+        .from(deals)
+        .where(
+          and(
+            eq(deals.workspaceId, workspaceId),
+            eq(deals.pipelineId, input.pipelineId),
+            isNull(deals.archivedAt),
+          ),
+        )
+        .get(),
+    ]);
+    return { items: items as DealRow[], summary };
+  }
+
+  public async listDealTasks(dealId: string): Promise<DealTaskRow[]> {
+    const rows = await this.taskQuery()
+      .where(and(eq(dealTasks.workspaceId, this.context.workspaceId), eq(dealTasks.dealId, dealId)))
+      .orderBy(
+        sql`case when ${dealTasks.status} = 'open' then 0 else 1 end`,
+        sql`case when ${dealTasks.dueAt} is null then 1 else 0 end`,
+        asc(dealTasks.dueAt),
+        desc(dealTasks.createdAt),
+      );
+    return rows as DealTaskRow[];
+  }
+
+  /** Inserts a deal (caller has already validated its references) and returns the joined row. */
+  public async createDeal(input: DealCreate): Promise<DealRow> {
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await this.database.orm.insert(deals).values({
+      id,
+      workspaceId: this.context.workspaceId,
+      pipelineId: input.pipelineId,
+      stageId: input.stageId,
+      name: input.name,
+      value: input.value,
+      currency: input.currency,
+      status: input.status,
+      ownerUserId: input.ownerUserId ?? null,
+      contactId: input.contactId ?? null,
+      accountId: input.accountId ?? null,
+      expectedCloseDate: input.expectedCloseDate ?? null,
+      description: input.description,
+      wonAt: input.status === "won" ? now : null,
+      lostAt: input.status === "lost" ? now : null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const deal = await this.getDeal(id);
+    if (!deal) throw new Error("Created deal could not be loaded");
+    return deal;
+  }
+
+  /** Overwrites every mutable deal column (caller resolves patch/merge semantics) and returns the fresh row. */
+  public async updateDeal(
+    id: string,
+    input: DealCreate & { wonAt: string | null; lostAt: string | null; updatedAt: string },
+  ): Promise<DealRow | null> {
+    await this.database.orm
+      .update(deals)
+      .set({
+        pipelineId: input.pipelineId,
+        stageId: input.stageId,
+        name: input.name,
+        value: input.value,
+        currency: input.currency,
+        status: input.status,
+        ownerUserId: input.ownerUserId ?? null,
+        contactId: input.contactId ?? null,
+        accountId: input.accountId ?? null,
+        expectedCloseDate: input.expectedCloseDate ?? null,
+        description: input.description,
+        wonAt: input.wonAt,
+        lostAt: input.lostAt,
+        updatedAt: input.updatedAt,
+      })
+      .where(
+        and(
+          eq(deals.workspaceId, this.context.workspaceId),
+          eq(deals.id, id),
+          isNull(deals.archivedAt),
+        ),
+      );
+    return this.getDeal(id);
+  }
+
+  /** True when `stageId` belongs to `pipelineId` in this workspace (no archived-pipeline check, matching moveDeal's historical behavior). */
+  public async stageExistsInPipeline(pipelineId: string, stageId: string): Promise<boolean> {
+    const row = await this.database.orm
+      .select({ id: dealStages.id })
+      .from(dealStages)
+      .where(
+        and(
+          eq(dealStages.workspaceId, this.context.workspaceId),
+          eq(dealStages.pipelineId, pipelineId),
+          eq(dealStages.id, stageId),
+        ),
+      )
+      .get();
+    return row !== undefined;
+  }
+
+  public async moveDeal(id: string, stageId: string): Promise<DealRow | null> {
+    await this.database.orm
+      .update(deals)
+      .set({ stageId, updatedAt: new Date().toISOString() })
+      .where(
+        and(
+          eq(deals.workspaceId, this.context.workspaceId),
+          eq(deals.id, id),
+          isNull(deals.archivedAt),
+        ),
+      );
+    return this.getDeal(id);
+  }
+
+  public async archiveDeal(id: string): Promise<boolean> {
+    const now = new Date().toISOString();
+    const result = await this.database.orm
+      .update(deals)
+      .set({ archivedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(deals.workspaceId, this.context.workspaceId),
+          eq(deals.id, id),
+          isNull(deals.archivedAt),
+        ),
+      );
+    return result.meta.changes > 0;
+  }
+
+  public async getTask(dealId: string, taskId: string): Promise<DealTaskRow | null> {
+    const row = await this.taskQuery()
+      .where(
+        and(
+          eq(dealTasks.workspaceId, this.context.workspaceId),
+          eq(dealTasks.dealId, dealId),
+          eq(dealTasks.id, taskId),
+        ),
+      )
+      .get();
+    return (row as DealTaskRow | undefined) ?? null;
+  }
+
+  /** Inserts a deal task (caller has already validated the deal/assignee) and returns the joined row. */
+  public async createDealTask(dealId: string, input: DealTaskCreate): Promise<DealTaskRow> {
+    const id = uuidv7();
+    const now = new Date().toISOString();
+    await this.database.orm.insert(dealTasks).values({
+      id,
+      workspaceId: this.context.workspaceId,
+      dealId,
+      type: input.type,
+      title: input.title,
+      notes: input.notes,
+      dueAt: input.dueAt ?? null,
+      status: "open",
+      assignedUserId: input.assignedUserId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const task = await this.getTask(dealId, id);
+    if (!task) throw new Error("Created deal task could not be loaded");
+    return task;
+  }
+
+  /** Overwrites every mutable task column (caller resolves patch semantics) and returns the fresh row. */
+  public async updateDealTask(
+    dealId: string,
+    taskId: string,
+    input: {
+      type: DealTaskType;
+      title: string;
+      notes: string;
+      dueAt: string | null;
+      status: DealTaskStatus;
+      assignedUserId: string | null;
+      completedAt: string | null;
+      updatedAt: string;
+    },
+  ): Promise<DealTaskRow | null> {
+    await this.database.orm
+      .update(dealTasks)
+      .set({
+        type: input.type,
+        title: input.title,
+        notes: input.notes,
+        dueAt: input.dueAt,
+        status: input.status,
+        assignedUserId: input.assignedUserId,
+        completedAt: input.completedAt,
+        updatedAt: input.updatedAt,
+      })
+      .where(
+        and(
+          eq(dealTasks.workspaceId, this.context.workspaceId),
+          eq(dealTasks.dealId, dealId),
+          eq(dealTasks.id, taskId),
+        ),
+      );
+    return this.getTask(dealId, taskId);
+  }
+
+  public async deleteDealTask(dealId: string, taskId: string): Promise<boolean> {
+    const result = await this.database.orm
+      .delete(dealTasks)
+      .where(
+        and(
+          eq(dealTasks.workspaceId, this.context.workspaceId),
+          eq(dealTasks.dealId, dealId),
+          eq(dealTasks.id, taskId),
+        ),
+      );
+    return result.meta.changes > 0;
+  }
+
+  private async findDefaultPipeline(): Promise<{ id: string } | null> {
+    const row = await this.database.orm
+      .select({ id: dealPipelines.id })
+      .from(dealPipelines)
+      .where(
+        and(
+          eq(dealPipelines.workspaceId, this.context.workspaceId),
+          isNull(dealPipelines.archivedAt),
+        ),
+      )
+      .orderBy(desc(dealPipelines.isDefault), asc(dealPipelines.createdAt))
+      .limit(1)
+      .get();
+    return row ?? null;
+  }
+
+  /**
+   * The deal+pipeline+stage+owner+contact+account join, with the two
+   * per-deal task counters. `open_task_count`/`next_task_at` are correlated
+   * scalar subqueries built with the query builder (not raw `${column}`
+   * interpolation in a select field) — that form renders the correlation
+   * columns unqualified in this drizzle version, silently comparing a table
+   * to itself. Verified via `.toSQL()`: the emitted WHERE clauses read
+   * `"deal_tasks"."workspace_id" = "deals"."workspace_id"` and
+   * `"deal_tasks"."deal_id" = "deals"."id"`, fully qualified both sides.
+   */
+  private dealSelection() {
+    const openTaskCount = this.database.orm
+      .select({ value: count().as("value") })
+      .from(dealTasks)
+      .where(
+        and(
+          eq(dealTasks.workspaceId, deals.workspaceId),
+          eq(dealTasks.dealId, deals.id),
+          eq(dealTasks.status, "open"),
+        ),
+      );
+    const nextTaskAt = this.database.orm
+      .select({ value: min(dealTasks.dueAt).as("value") })
+      .from(dealTasks)
+      .where(
+        and(
+          eq(dealTasks.workspaceId, deals.workspaceId),
+          eq(dealTasks.dealId, deals.id),
+          eq(dealTasks.status, "open"),
+        ),
+      );
+    return {
+      id: deals.id,
+      workspace_id: deals.workspaceId,
+      pipeline_id: deals.pipelineId,
+      pipeline_name: dealPipelines.name,
+      stage_id: deals.stageId,
+      stage_name: dealStages.name,
+      stage_color: dealStages.color,
+      stage_position: dealStages.position,
+      stage_probability: dealStages.probability,
+      name: deals.name,
+      value: deals.value,
+      currency: deals.currency,
+      status: deals.status,
+      owner_user_id: deals.ownerUserId,
+      owner_name: user.name,
+      owner_email: user.email,
+      contact_id: deals.contactId,
+      contact_email: contacts.email,
+      contact_first_name: contacts.firstName,
+      contact_last_name: contacts.lastName,
+      account_id: deals.accountId,
+      account_name: companies.name,
+      expected_close_date: deals.expectedCloseDate,
+      description: deals.description,
+      won_at: deals.wonAt,
+      lost_at: deals.lostAt,
+      archived_at: deals.archivedAt,
+      created_at: deals.createdAt,
+      updated_at: deals.updatedAt,
+      open_task_count: sql<number>`${openTaskCount}`.mapWith(Number).as("open_task_count"),
+      next_task_at: sql<string | null>`${nextTaskAt}`.as("next_task_at"),
+    };
+  }
+
+  private dealQuery() {
+    return this.database.orm
+      .select(this.dealSelection())
+      .from(deals)
+      .innerJoin(
+        dealPipelines,
+        and(
+          eq(dealPipelines.workspaceId, deals.workspaceId),
+          eq(dealPipelines.id, deals.pipelineId),
+        ),
+      )
+      .innerJoin(
+        dealStages,
+        and(eq(dealStages.workspaceId, deals.workspaceId), eq(dealStages.id, deals.stageId)),
+      )
+      .leftJoin(user, eq(user.id, deals.ownerUserId))
+      .leftJoin(
+        contacts,
+        and(eq(contacts.workspaceId, deals.workspaceId), eq(contacts.id, deals.contactId)),
+      )
+      .leftJoin(
+        companies,
+        and(eq(companies.workspaceId, deals.workspaceId), eq(companies.id, deals.accountId)),
+      );
+  }
+
+  private taskSelection() {
+    return {
+      id: dealTasks.id,
+      deal_id: dealTasks.dealId,
+      type: dealTasks.type,
+      title: dealTasks.title,
+      notes: dealTasks.notes,
+      due_at: dealTasks.dueAt,
+      status: dealTasks.status,
+      assigned_user_id: dealTasks.assignedUserId,
+      assignee_name: user.name,
+      assignee_email: user.email,
+      completed_at: dealTasks.completedAt,
+      created_at: dealTasks.createdAt,
+      updated_at: dealTasks.updatedAt,
+    };
+  }
+
+  private taskQuery() {
+    return this.database.orm
+      .select(this.taskSelection())
+      .from(dealTasks)
+      .leftJoin(user, eq(user.id, dealTasks.assignedUserId));
+  }
+}

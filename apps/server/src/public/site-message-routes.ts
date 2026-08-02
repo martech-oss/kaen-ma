@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import * as z from "zod";
 
-import { uuidv7 } from "@kaenma/database";
+import { WebRepository } from "@kaenma/database";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
@@ -25,37 +25,22 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
     if (origin && !originAllowed(origin, workspace.allowedDomains)) {
       return context.json({ data: [] });
     }
-    const identity = await database
-      .prepare(
-        `SELECT contact_id FROM contact_events
-       WHERE workspace_id = ? AND visitor_id = ? AND contact_id IS NOT NULL
-       ORDER BY occurred_at DESC LIMIT 1`,
-      )
-      .bind(workspace.id, visitorId)
-      .first<{ contact_id: string }>();
-    if (!identity) return context.json({ data: [] });
-    const result = await database
-      .prepare(
-        `SELECT id, headline, body, cta_label, cta_url, page_pattern
-       FROM site_messages
-       WHERE workspace_id = ? AND status = 'published'
-         AND (starts_at IS NULL OR starts_at <= ?)
-         AND (ends_at IS NULL OR ends_at >= ?)
-       ORDER BY updated_at DESC LIMIT 20`,
-      )
-      .bind(workspace.id, new Date().toISOString(), new Date().toISOString())
-      .all<{
-        id: string;
-        headline: string;
-        body: string;
-        cta_label: string;
-        cta_url: string | null;
-        page_pattern: string;
-      }>();
+    const repository = new WebRepository(database, { workspaceId: workspace.id });
+    const contactId = await repository.findVisitorContactId(visitorId);
+    if (!contactId) return context.json({ data: [] });
+    const messages = await repository.listActiveSiteMessagesForVisitor(new Date().toISOString());
     return context.json({
-      data: result.results
-        .filter((message) => pagePatternMatches(pageUrl, message.page_pattern))
-        .slice(0, 1),
+      data: messages
+        .filter((message) => pagePatternMatches(pageUrl, message.pagePattern))
+        .slice(0, 1)
+        .map((message) => ({
+          id: message.id,
+          headline: message.headline,
+          body: message.body,
+          cta_label: message.ctaLabel,
+          cta_url: message.ctaUrl,
+          page_pattern: message.pagePattern,
+        })),
     });
   });
 
@@ -77,46 +62,20 @@ export function registerPublicSiteMessageRoutes(publicApp: Hono<AppEnvironment>)
       })
       .safeParse(await safeJson(context));
     if (!parsed.success) return context.json({ data: { accepted: false } }, 202);
-    const identity = await database
-      .prepare(
-        `SELECT contact_id FROM contact_events
-         WHERE workspace_id = ? AND visitor_id = ? AND contact_id IS NOT NULL
-         ORDER BY occurred_at DESC LIMIT 1`,
-      )
-      .bind(workspace.id, parsed.data.visitorId)
-      .first<{ contact_id: string }>();
-    if (!identity) return context.json({ data: { accepted: false } }, 202);
-    const now = new Date().toISOString();
+    const repository = new WebRepository(database, { workspaceId: workspace.id });
+    const contactId = await repository.findVisitorContactId(parsed.data.visitorId);
+    if (!contactId) return context.json({ data: { accepted: false } }, 202);
     const messageId = context.req.param("messageId");
-    const counter = parsed.data.type === "impression" ? "impression_count" : "click_count";
-    const result = await database
-      .prepare(
-        `UPDATE site_messages SET ${counter} = ${counter} + 1, updated_at = updated_at
-         WHERE workspace_id = ? AND id = ? AND status = 'published'`,
-      )
-      .bind(workspace.id, messageId)
-      .run();
-    if (result.meta.changes !== 1) {
+    const updated = await repository.incrementSiteMessageCounter(messageId, parsed.data.type);
+    if (!updated) {
       return context.json({ data: { accepted: false } }, 202);
     }
-    await database
-      .prepare(
-        `INSERT INTO contact_events
-         (id, workspace_id, contact_id, visitor_id, type, resource_type,
-          resource_id, properties, occurred_at, created_at)
-         VALUES (?, ?, ?, ?, ?, 'site_message', ?, '{}', ?, ?)`,
-      )
-      .bind(
-        uuidv7(),
-        workspace.id,
-        identity.contact_id,
-        parsed.data.visitorId,
-        parsed.data.type === "impression" ? "site_message_viewed" : "site_message_clicked",
-        messageId,
-        now,
-        now,
-      )
-      .run();
+    await repository.recordSiteMessageEvent({
+      contactId,
+      visitorId: parsed.data.visitorId,
+      messageId,
+      type: parsed.data.type,
+    });
     return context.json({ data: { accepted: true } }, 202);
   });
 }

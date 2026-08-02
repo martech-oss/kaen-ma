@@ -1,9 +1,10 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, or } from "drizzle-orm";
 
 import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
 
 import { member } from "../auth/schema";
 import { createDatabase, type DatabaseSource } from "../client";
+import { apiKeys } from "./schema";
 
 export async function resolveMemberContext(
   database: DatabaseSource,
@@ -26,4 +27,59 @@ export async function resolveMemberContext(
 
 function isWorkspaceRole(value: string): value is WorkspaceRole {
   return ["owner", "admin", "marketer", "analyst", "viewer"].includes(value);
+}
+
+export interface ApiKeyAuthRow {
+  id: string;
+  workspaceId: string;
+  createdByUserId: string;
+  role: WorkspaceRole;
+  keyHash: string;
+}
+
+/** Repository for the api_keys table: auth-boundary lookups and admin CRUD. */
+export class ApiKeyRepository {
+  public constructor(private readonly database: DatabaseSource) {}
+
+  public async findActiveByPrefix(prefix: string, now: string): Promise<ApiKeyAuthRow | null> {
+    const [row] = await createDatabase(this.database)
+      .orm.select({
+        id: apiKeys.id,
+        workspaceId: apiKeys.workspaceId,
+        createdByUserId: apiKeys.createdByUserId,
+        role: apiKeys.role,
+        keyHash: apiKeys.keyHash,
+      })
+      .from(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.prefix, prefix),
+          isNull(apiKeys.revokedAt),
+          or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, now)),
+        ),
+      )
+      .limit(1);
+    return row && isWorkspaceRole(row.role) ? { ...row, role: row.role } : null;
+  }
+
+  public async touchLastUsed(apiKeyId: string, now: string): Promise<void> {
+    await createDatabase(this.database)
+      .orm.update(apiKeys)
+      .set({ lastUsedAt: now })
+      .where(eq(apiKeys.id, apiKeyId));
+  }
+
+  public async create(input: {
+    id: string;
+    workspaceId: string;
+    createdByUserId: string;
+    name: string;
+    prefix: string;
+    keyHash: string;
+    role: WorkspaceRole;
+    expiresAt: string | null;
+    createdAt: string;
+  }): Promise<void> {
+    await createDatabase(this.database).orm.insert(apiKeys).values(input);
+  }
 }

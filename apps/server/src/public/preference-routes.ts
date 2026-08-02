@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 
-import { uuidv7 } from "@kaenma/database";
+import { ConsentRepository } from "@kaenma/database";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
@@ -18,23 +18,9 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
     if (!payload?.contactId) {
       return apiError(context, 400, "invalid_unsubscribe_token", "解除リンクが無効です");
     }
-    const now = new Date().toISOString();
-    await database.batch([
-      database
-        .prepare(
-          `INSERT OR IGNORE INTO suppressions
-         (id, workspace_id, contact_id, reason, created_at)
-         VALUES (?, ?, ?, 'global_unsubscribe', ?)`,
-        )
-        .bind(uuidv7(), payload.workspaceId, payload.contactId, now),
-      database
-        .prepare(
-          `INSERT INTO consent_events
-         (id, workspace_id, contact_id, action, source, created_at)
-         VALUES (?, ?, ?, 'unsubscribed', 'one_click', ?)`,
-        )
-        .bind(uuidv7(), payload.workspaceId, payload.contactId, now),
-    ]);
+    await new ConsentRepository(database, {
+      workspaceId: payload.workspaceId,
+    }).applyOneClickUnsubscribe(payload.contactId);
     return context.html(
       '<!doctype html><html lang="ja"><meta charset="utf-8"><title>配信停止</title><body><main><h1>配信を停止しました</h1><p>設定はすぐに反映されます。</p></main></body></html>',
     );
@@ -54,25 +40,10 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
     if (!payload?.contactId) {
       return apiError(context, 400, "invalid_preference_token", "設定リンクが無効です");
     }
-    const topics = await database
-      .prepare(
-        `SELECT st.id, st.name, st.description,
-              COALESCE(cs.status, 'unsubscribed') AS status
-       FROM subscription_topics st
-       LEFT JOIN contact_subscriptions cs
-         ON cs.workspace_id = st.workspace_id AND cs.topic_id = st.id AND cs.contact_id = ?
-       WHERE st.workspace_id = ? ORDER BY st.name`,
-      )
-      .bind(payload.contactId, payload.workspaceId)
-      .all<{ id: string; name: string; description: string; status: string }>();
-    const globalSuppression = await database
-      .prepare(
-        `SELECT id FROM suppressions
-       WHERE workspace_id = ? AND contact_id = ? AND reason = 'global_unsubscribe' LIMIT 1`,
-      )
-      .bind(payload.workspaceId, payload.contactId)
-      .first();
-    const rows = topics.results
+    const state = await new ConsentRepository(database, {
+      workspaceId: payload.workspaceId,
+    }).readPreferenceCenterState(payload.contactId);
+    const rows = state.topics
       .map(
         (topic) => `<label style="display:block;padding:16px 0;border-bottom:1px solid #e2e8f0">
           <input type="checkbox" name="topic" value="${escapeHtml(topic.id)}" ${topic.status === "subscribed" ? "checked" : ""}>
@@ -85,7 +56,7 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
       <body style="margin:0;background:#f5f7fb;font-family:system-ui;color:#172033"><main style="max-width:640px;margin:48px auto;background:white;padding:32px;border-radius:16px">
       <h1>配信設定</h1><p style="color:#64748b">受け取りたいトピックを選択してください。</p>
       <form method="post">${rows}
-      <label style="display:block;padding:20px 0"><input type="checkbox" name="globalStop" ${globalSuppression ? "checked" : ""}> すべてのマーケティングメールを停止</label>
+      <label style="display:block;padding:20px 0"><input type="checkbox" name="globalStop" ${state.globallySuppressed ? "checked" : ""}> すべてのマーケティングメールを停止</label>
       <button style="border:0;border-radius:10px;background:#6d4aff;color:white;padding:12px 20px;font-weight:700">設定を保存</button>
       </form></main></body></html>`);
   });
@@ -101,69 +72,16 @@ export function registerPublicPreferenceRoutes(publicApp: Hono<AppEnvironment>):
       return apiError(context, 400, "invalid_preference_token", "設定リンクが無効です");
     }
     const form = await context.req.formData();
-    const selected = new Set(
-      form.getAll("topic").filter((value): value is string => typeof value === "string"),
-    );
-    const topics = await database
-      .prepare("SELECT id FROM subscription_topics WHERE workspace_id = ?")
-      .bind(payload.workspaceId)
-      .all<{ id: string }>();
-    const now = new Date().toISOString();
-    const statements = topics.results.map((topic) =>
-      database
-        .prepare(
-          `INSERT INTO contact_subscriptions
-         (workspace_id, contact_id, topic_id, status, source, updated_at)
-         VALUES (?, ?, ?, ?, 'preference_center', ?)
-         ON CONFLICT(workspace_id, contact_id, topic_id)
-         DO UPDATE SET status = excluded.status, source = excluded.source,
-           updated_at = excluded.updated_at`,
-        )
-        .bind(
-          payload.workspaceId,
-          payload.contactId,
-          topic.id,
-          selected.has(topic.id) ? "subscribed" : "unsubscribed",
-          now,
-        ),
-    );
-    if (form.get("globalStop")) {
-      statements.push(
-        database
-          .prepare(
-            `INSERT OR IGNORE INTO suppressions
-           (id, workspace_id, contact_id, reason, created_at)
-           VALUES (?, ?, ?, 'global_unsubscribe', ?)`,
-          )
-          .bind(uuidv7(), payload.workspaceId, payload.contactId, now),
-      );
-    } else {
-      statements.push(
-        database
-          .prepare(
-            `DELETE FROM suppressions
-           WHERE workspace_id = ? AND contact_id = ? AND reason = 'global_unsubscribe'`,
-          )
-          .bind(payload.workspaceId, payload.contactId),
-      );
-    }
-    statements.push(
-      database
-        .prepare(
-          `INSERT INTO consent_events
-         (id, workspace_id, contact_id, action, source, proof, created_at)
-         VALUES (?, ?, ?, ?, 'preference_center', ?, ?)`,
-        )
-        .bind(
-          uuidv7(),
-          payload.workspaceId,
-          payload.contactId,
-          form.get("globalStop") ? "unsubscribed" : "granted",
-          JSON.stringify({ topics: [...selected] }),
-          now,
-        ),
-    );
-    await database.batch(statements);
+    const selectedTopicIds = form
+      .getAll("topic")
+      .filter((value): value is string => typeof value === "string");
+    await new ConsentRepository(database, {
+      workspaceId: payload.workspaceId,
+    }).applyPreferenceCenterUpdate({
+      contactId: payload.contactId,
+      selectedTopicIds,
+      globalStop: Boolean(form.get("globalStop")),
+    });
     return context.html(
       '<!doctype html><html lang="ja"><meta charset="utf-8"><body><main><h1>設定を保存しました</h1><p>変更は次回の送信判定から反映されます。</p></main></body></html>',
     );

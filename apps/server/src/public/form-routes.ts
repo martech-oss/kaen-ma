@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import * as z from "zod";
 
-import { uuidv7 } from "@kaenma/database";
+import { PublicFormRepository, uuidv7 } from "@kaenma/database";
 
 import { apiError } from "../auth/access";
 import { recordContactEvent } from "../contacts/event-service";
@@ -14,27 +14,16 @@ import { formEmbedScript, renderPublicForm } from "./templates";
 
 export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/api/public/forms/:workspaceSlug/:formSlug/embed.js", async (context) => {
-    const form = await context
-      .get("database")
-      .prepare(
-        `SELECT f.name, f.definition
-         FROM forms f JOIN organization o ON o.id = f.workspace_id
-         WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
-      )
-      .bind(context.req.param("workspaceSlug"), context.req.param("formSlug"))
-      .first<{ name: string; definition: string }>();
+    const form = await new PublicFormRepository(context.get("database")).findPublishedForm(
+      context.req.param("workspaceSlug"),
+      context.req.param("formSlug"),
+    );
     if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
     let style = "inline";
-    try {
-      const definition = JSON.parse(form.definition) as unknown;
-      if (
-        isRecord(definition) &&
-        ["inline", "floating-bar", "floating-box", "modal"].includes(String(definition["style"]))
-      ) {
-        style = String(definition["style"]);
-      }
-    } catch {
-      // Use the inline fallback for old definitions.
+    if (
+      ["inline", "floating-bar", "floating-box", "modal"].includes(String(form.definition["style"]))
+    ) {
+      style = String(form.definition["style"]);
     }
     const formUrl = new URL(
       `/f/${context.req.param("workspaceSlug")}/${context.req.param("formSlug")}`,
@@ -50,24 +39,12 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
   });
 
   publicApp.get("/f/:workspaceSlug/:formSlug", async (context) => {
-    const form = await context
-      .get("database")
-      .prepare(
-        `SELECT f.name, f.definition, f.allowed_domains
-       FROM forms f JOIN organization o ON o.id = f.workspace_id
-       WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
-      )
-      .bind(context.req.param("workspaceSlug"), context.req.param("formSlug"))
-      .first<{ name: string; definition: string; allowed_domains: string }>();
+    const form = await new PublicFormRepository(context.get("database")).findPublishedForm(
+      context.req.param("workspaceSlug"),
+      context.req.param("formSlug"),
+    );
     if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
-    let definition: Record<string, unknown> = {};
-    try {
-      const parsed = JSON.parse(form.definition) as unknown;
-      if (isRecord(parsed)) definition = parsed;
-    } catch {
-      // Render the required email field when an old definition cannot be parsed.
-    }
-    const domains = JSON.parse(form.allowed_domains) as string[];
+    const domains = form.allowedDomains;
     const frameAncestors =
       domains.length > 0
         ? domains.flatMap((domain) => [
@@ -81,27 +58,18 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       "Content-Security-Policy",
       `default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'self' ${frameAncestors.join(" ")}`,
     );
-    return context.html(renderPublicForm(form.name, definition, context.req.url));
+    return context.html(renderPublicForm(form.name, form.definition, context.req.url));
   });
 
   publicApp.post("/f/:workspaceSlug/:formSlug", async (context) => {
     const database = context.get("database");
-    const form = await database
-      .prepare(
-        `SELECT f.id, f.workspace_id, f.allowed_domains, f.turnstile_enabled, f.success_message
-       FROM forms f JOIN organization o ON o.id = f.workspace_id
-       WHERE o.slug = ? AND f.slug = ? AND f.status = 'published'`,
-      )
-      .bind(context.req.param("workspaceSlug"), context.req.param("formSlug"))
-      .first<{
-        id: string;
-        workspace_id: string;
-        allowed_domains: string;
-        turnstile_enabled: number;
-        success_message: string;
-      }>();
+    const repository = new PublicFormRepository(database);
+    const form = await repository.findPublishedForm(
+      context.req.param("workspaceSlug"),
+      context.req.param("formSlug"),
+    );
     if (!form) return apiError(context, 404, "form_not_found", "フォームが見つかりません");
-    const allowedDomains = JSON.parse(form.allowed_domains) as string[];
+    const allowedDomains = form.allowedDomains;
     const origin = context.req.header("origin");
     const requestHostname = new URL(context.req.url).hostname;
     if (
@@ -116,7 +84,7 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
     if (!isRecord(body)) return apiError(context, 422, "invalid_payload", "入力が不正です");
     if (body["_website"]) return context.json({ data: { accepted: true } }, 202);
     if (
-      form.turnstile_enabled === 1 &&
+      form.turnstileEnabled &&
       context.env.TURNSTILE_SECRET &&
       !(await verifyTurnstile(
         context.env.TURNSTILE_SECRET,
@@ -136,53 +104,32 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
     let contactId: string | null = null;
     let contactCreated = false;
     if (email && z.email().safeParse(email).success) {
-      const existing = await database
-        .prepare("SELECT id FROM contacts WHERE workspace_id = ? AND email = ?")
-        .bind(form.workspace_id, email)
-        .first<{ id: string }>();
-      contactId = existing?.id ?? uuidv7();
-      if (existing) {
-        await database
-          .prepare(
-            `UPDATE contacts SET first_name = COALESCE(?, first_name),
-           last_name = COALESCE(?, last_name), phone = COALESCE(?, phone),
-           updated_at = ?
-           WHERE workspace_id = ? AND id = ?`,
-          )
-          .bind(
-            stringOrNull(body["firstName"]),
-            stringOrNull(body["lastName"]),
-            stringOrNull(body["phone"]),
-            now,
-            form.workspace_id,
-            contactId,
-          )
-          .run();
+      const existingContactId = await repository.findContactIdByEmail(form.workspaceId, email);
+      contactId = existingContactId ?? uuidv7();
+      const contactFields = {
+        firstName: stringOrNull(body["firstName"]),
+        lastName: stringOrNull(body["lastName"]),
+        phone: stringOrNull(body["phone"]),
+      };
+      if (existingContactId) {
+        await repository.updateContactFromFormSubmission(
+          form.workspaceId,
+          contactId,
+          contactFields,
+        );
       } else {
         contactCreated = true;
-        await database
-          .prepare(
-            `INSERT INTO contacts
-           (id, workspace_id, email, first_name, last_name, phone, stage, score,
-            status, custom_fields, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'lead', 0, 'active', '{}', ?, ?)`,
-          )
-          .bind(
-            contactId,
-            form.workspace_id,
-            email,
-            stringOrNull(body["firstName"]),
-            stringOrNull(body["lastName"]),
-            stringOrNull(body["phone"]),
-            now,
-            now,
-          )
-          .run();
+        await repository.createContactFromFormSubmission(
+          form.workspaceId,
+          contactId,
+          email,
+          contactFields,
+        );
       }
     }
     if (contactCreated && contactId) {
       await recordContactEvent(database, {
-        workspaceId: form.workspace_id,
+        workspaceId: form.workspaceId,
         contactId,
         type: "contact_created",
         resourceType: "contact",
@@ -191,28 +138,19 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       });
     }
     try {
-      await database
-        .prepare(
-          `INSERT INTO form_submissions
-           (id, workspace_id, form_id, contact_id, idempotency_key, payload, ip_hash, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          uuidv7(),
-          form.workspace_id,
-          form.id,
-          contactId,
-          idempotencyKey,
-          JSON.stringify(redactFormPayload(body)),
-          await hashIp(context.req.header("cf-connecting-ip")),
-          now,
-        )
-        .run();
+      await repository.insertFormSubmission({
+        workspaceId: form.workspaceId,
+        formId: form.id,
+        contactId,
+        idempotencyKey,
+        payload: redactFormPayload(body),
+        ipHash: await hashIp(context.req.header("cf-connecting-ip")),
+      });
     } catch {
       return context.json({ data: { accepted: true, duplicate: true } }, 202);
     }
     await recordContactEvent(database, {
-      workspaceId: form.workspace_id,
+      workspaceId: form.workspaceId,
       contactId,
       type: "form_submitted",
       resourceType: "form",
@@ -220,6 +158,6 @@ export function registerPublicFormRoutes(publicApp: Hono<AppEnvironment>): void 
       properties: { formId: form.id },
       occurredAt: now,
     });
-    return context.json({ data: { accepted: true, message: form.success_message } }, 202);
+    return context.json({ data: { accepted: true, message: form.successMessage } }, 202);
   });
 }

@@ -1,39 +1,27 @@
-import { uuidv7, type KaenmaDatabase } from "@kaenma/database";
+import { WebRepository, type KaenmaDatabase } from "@kaenma/database";
 import type { WorkspaceContext } from "@kaenma/orpc";
 import type { SiteMessage, SiteMessageWrite } from "@kaenma/orpc";
-
-import { nullablePrimitiveString, numericValue, primitiveString } from "../platform/values";
 
 export async function listSiteMessages(
   database: KaenmaDatabase,
   workspace: WorkspaceContext,
 ): Promise<SiteMessage[]> {
-  const result = await database
-    .prepare(
-      `SELECT id, name, status, headline, body, cta_label, cta_url,
-              page_pattern, starts_at, ends_at, impression_count, click_count,
-              created_at, updated_at
-       FROM site_messages
-       WHERE workspace_id = ? AND status != 'archived'
-       ORDER BY updated_at DESC`,
-    )
-    .bind(workspace.workspaceId)
-    .all<Record<string, unknown>>();
-  return result.results.map((row) => ({
-    id: primitiveString(row["id"]),
-    name: primitiveString(row["name"]),
-    status: publishedStatus(row["status"]),
-    headline: primitiveString(row["headline"]),
-    body: primitiveString(row["body"]),
-    ctaLabel: primitiveString(row["cta_label"]),
-    ctaUrl: nullablePrimitiveString(row["cta_url"]),
-    pagePattern: primitiveString(row["page_pattern"]),
-    startsAt: nullablePrimitiveString(row["starts_at"]),
-    endsAt: nullablePrimitiveString(row["ends_at"]),
-    impressionCount: numericValue(row["impression_count"]),
-    clickCount: numericValue(row["click_count"]),
-    createdAt: primitiveString(row["created_at"]),
-    updatedAt: primitiveString(row["updated_at"]),
+  const rows = await new WebRepository(database, workspace).listSiteMessages();
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    status: publishedStatus(row.status),
+    headline: row.headline,
+    body: row.body,
+    ctaLabel: row.ctaLabel,
+    ctaUrl: row.ctaUrl,
+    pagePattern: row.pagePattern,
+    startsAt: row.startsAt,
+    endsAt: row.endsAt,
+    impressionCount: row.impressionCount,
+    clickCount: row.clickCount,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   }));
 }
 
@@ -42,32 +30,7 @@ export async function createSiteMessage(
   workspace: WorkspaceContext,
   input: SiteMessageWrite,
 ): Promise<{ id: string }> {
-  const id = uuidv7();
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `INSERT INTO site_messages
-       (id, workspace_id, name, status, headline, body, cta_label, cta_url,
-        page_pattern, starts_at, ends_at, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      workspace.workspaceId,
-      input.name,
-      input.status,
-      input.headline,
-      input.body,
-      input.ctaLabel,
-      input.ctaUrl,
-      input.pagePattern,
-      input.startsAt,
-      input.endsAt,
-      now,
-      now,
-    )
-    .run();
-  return { id };
+  return new WebRepository(database, workspace).createSiteMessage(input);
 }
 
 export async function updateSiteMessage(
@@ -76,29 +39,7 @@ export async function updateSiteMessage(
   id: string,
   input: SiteMessageWrite,
 ): Promise<boolean> {
-  const result = await database
-    .prepare(
-      `UPDATE site_messages
-       SET name = ?, status = ?, headline = ?, body = ?, cta_label = ?,
-           cta_url = ?, page_pattern = ?, starts_at = ?, ends_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
-    )
-    .bind(
-      input.name,
-      input.status,
-      input.headline,
-      input.body,
-      input.ctaLabel,
-      input.ctaUrl,
-      input.pagePattern,
-      input.startsAt,
-      input.endsAt,
-      new Date().toISOString(),
-      workspace.workspaceId,
-      id,
-    )
-    .run();
-  return result.meta.changes === 1;
+  return new WebRepository(database, workspace).updateSiteMessage(id, input);
 }
 
 export async function archiveSiteMessage(
@@ -106,16 +47,7 @@ export async function archiveSiteMessage(
   workspace: WorkspaceContext,
   id: string,
 ): Promise<boolean> {
-  const now = new Date().toISOString();
-  const result = await database
-    .prepare(
-      `UPDATE site_messages
-       SET status = 'archived', archived_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ? AND status != 'archived'`,
-    )
-    .bind(now, now, workspace.workspaceId, id)
-    .run();
-  return result.meta.changes === 1;
+  return new WebRepository(database, workspace).archiveSiteMessage(id);
 }
 
 function publishedStatus(value: unknown): "draft" | "published" {

@@ -1,5 +1,4 @@
-import { uuidv7, writeAuditLog, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
+import { DealRepository, writeAuditLog, type KaenmaDatabase } from "@kaenma/database";
 import type {
   DealCreate,
   DealDetailData,
@@ -10,28 +9,10 @@ import type {
   DealTaskCreate,
   DealTaskUpdate,
   DealUpdate,
+  WorkspaceContext,
 } from "@kaenma/orpc";
 
-import { primitiveString } from "../platform/values";
-import {
-  dealSelectSql,
-  getDeal,
-  getTask,
-  serializeDeal,
-  serializeStage,
-  serializeTask,
-  type DealRow,
-  type PipelineRow,
-  type StageRow,
-  type TaskRow,
-} from "./records";
-import {
-  dealExists,
-  ensureDefaultPipeline,
-  memberExists,
-  pipelineExists,
-  validateDealReferences,
-} from "./repository";
+import { serializeDeal, serializeStage, serializeTask } from "./records";
 
 /** Deals list needs a pipeline; a missing one is distinct from an empty list. */
 export type DealListOutcome = { kind: "pipeline_not_found" } | { kind: "ok"; data: DealListData };
@@ -48,94 +29,35 @@ export type DealTaskOutcome =
   | { kind: "invalid_assignee" }
   | { kind: "ok"; task: DealTask };
 
+interface Background {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
 export async function getDealOptions(
   database: KaenmaDatabase,
   workspace: WorkspaceContext,
 ): Promise<DealOptions> {
-  const workspaceId = workspace.workspaceId;
-  await ensureDefaultPipeline(database, workspaceId);
-  const results = await database.batch([
-    database
-      .prepare(
-        `SELECT id, name, is_default
-           FROM deal_pipelines
-           WHERE workspace_id = ? AND archived_at IS NULL
-           ORDER BY is_default DESC, name ASC`,
-      )
-      .bind(workspaceId),
-    database
-      .prepare(
-        `SELECT id, pipeline_id, name, color, position, probability
-           FROM deal_stages
-           WHERE workspace_id = ?
-           ORDER BY pipeline_id, position`,
-      )
-      .bind(workspaceId),
-    database
-      .prepare(
-        `SELECT id, email, first_name, last_name
-           FROM contacts
-           WHERE workspace_id = ? AND status != 'archived'
-           ORDER BY COALESCE(last_name, first_name, email, id) ASC
-           LIMIT 500`,
-      )
-      .bind(workspaceId),
-    database
-      .prepare(
-        `SELECT id, name, domain
-           FROM companies
-           WHERE workspace_id = ?
-           ORDER BY name ASC
-           LIMIT 500`,
-      )
-      .bind(workspaceId),
-    database
-      .prepare(
-        `SELECT u.id, u.name, u.email
-           FROM member m
-           JOIN user u ON u.id = m.user_id
-           WHERE m.organization_id = ?
-           ORDER BY u.name ASC, u.email ASC`,
-      )
-      .bind(workspaceId),
-  ] as const);
+  const repository = new DealRepository(database, workspace);
+  await repository.ensureDefaultPipeline();
+  const rows = await repository.getDealOptionRows();
 
-  const stagesByPipeline = new Map<string, StageRow[]>();
-  for (const stage of (results[1]?.results ?? []) as StageRow[]) {
-    const stages = stagesByPipeline.get(stage.pipeline_id) ?? [];
+  const stagesByPipeline = new Map<string, typeof rows.stages>();
+  for (const stage of rows.stages) {
+    const stages = stagesByPipeline.get(stage.pipelineId) ?? [];
     stages.push(stage);
-    stagesByPipeline.set(stage.pipeline_id, stages);
+    stagesByPipeline.set(stage.pipelineId, stages);
   }
-  const contacts = (results[2]?.results ?? []) as Array<Record<string, unknown>>;
-  const accounts = (results[3]?.results ?? []) as Array<Record<string, unknown>>;
-  const members = (results[4]?.results ?? []) as Array<Record<string, unknown>>;
-  const str = (value: unknown): string => primitiveString(value);
-  const nullable = (value: unknown): string | null =>
-    value === null || value === undefined ? null : primitiveString(value);
 
   return {
-    pipelines: ((results[0]?.results ?? []) as PipelineRow[]).map((pipeline) => ({
+    pipelines: rows.pipelines.map((pipeline) => ({
       id: pipeline.id,
       name: pipeline.name,
-      isDefault: Boolean(pipeline.is_default),
+      isDefault: Boolean(pipeline.isDefault),
       stages: (stagesByPipeline.get(pipeline.id) ?? []).map(serializeStage),
     })),
-    contacts: contacts.map((row) => ({
-      id: str(row["id"]),
-      email: nullable(row["email"]),
-      firstName: nullable(row["first_name"]),
-      lastName: nullable(row["last_name"]),
-    })),
-    accounts: accounts.map((row) => ({
-      id: str(row["id"]),
-      name: str(row["name"]),
-      domain: nullable(row["domain"]),
-    })),
-    members: members.map((row) => ({
-      id: str(row["id"]),
-      name: str(row["name"]),
-      email: str(row["email"]),
-    })),
+    contacts: rows.contacts,
+    accounts: rows.accounts,
+    members: rows.members,
   };
 }
 
@@ -148,59 +70,23 @@ export async function listDeals(
     q?: string | undefined;
   },
 ): Promise<DealListOutcome> {
-  const workspaceId = workspace.workspaceId;
-  const defaultPipelineId = await ensureDefaultPipeline(database, workspaceId);
+  const repository = new DealRepository(database, workspace);
+  const defaultPipelineId = await repository.ensureDefaultPipeline();
   const pipelineId = input.pipelineId ?? defaultPipelineId;
-  if (!(await pipelineExists(database, workspaceId, pipelineId))) {
+  if (!(await repository.pipelineExists(pipelineId))) {
     return { kind: "pipeline_not_found" };
   }
 
-  const conditions = ["d.workspace_id = ?", "d.pipeline_id = ?", "d.archived_at IS NULL"];
-  const bindings: unknown[] = [workspaceId, pipelineId];
-  if (input.status !== "all") {
-    conditions.push("d.status = ?");
-    bindings.push(input.status);
-  }
-  if (input.q) {
-    conditions.push(
-      `(d.name LIKE ? OR c.email LIKE ? OR c.first_name LIKE ?
-        OR c.last_name LIKE ? OR co.name LIKE ?)`,
-    );
-    const query = `%${input.q}%`;
-    bindings.push(query, query, query, query, query);
-  }
-
-  const [dealResult, summary] = await Promise.all([
-    database
-      .prepare(`${dealSelectSql} WHERE ${conditions.join(" AND ")}
-        ORDER BY ds.position ASC, d.updated_at DESC`)
-      .bind(...bindings)
-      .all<DealRow>(),
-    database
-      .prepare(
-        `SELECT
-           COUNT(CASE WHEN status = 'open' THEN 1 END) AS open_count,
-           COALESCE(SUM(CASE WHEN status = 'open' THEN value ELSE 0 END), 0) AS open_value,
-           COUNT(CASE WHEN status = 'won' THEN 1 END) AS won_count,
-           COALESCE(SUM(CASE WHEN status = 'won' THEN value ELSE 0 END), 0) AS won_value,
-           COUNT(CASE WHEN status = 'lost' THEN 1 END) AS lost_count
-         FROM deals
-         WHERE workspace_id = ? AND pipeline_id = ? AND archived_at IS NULL`,
-      )
-      .bind(workspaceId, pipelineId)
-      .first<{
-        open_count: number;
-        open_value: number;
-        won_count: number;
-        won_value: number;
-        lost_count: number;
-      }>(),
-  ]);
+  const { items, summary } = await repository.listDeals({
+    pipelineId,
+    status: input.status,
+    q: input.q,
+  });
 
   return {
     kind: "ok",
     data: {
-      items: dealResult.results.map(serializeDeal),
+      items: items.map(serializeDeal),
       summary: {
         openCount: Number(summary?.open_count ?? 0),
         openValue: Number(summary?.open_value ?? 0),
@@ -217,28 +103,11 @@ export async function getDealDetail(
   workspace: WorkspaceContext,
   id: string,
 ): Promise<DealDetailData | null> {
-  const workspaceId = workspace.workspaceId;
-  const deal = await getDeal(database, workspaceId, id);
+  const repository = new DealRepository(database, workspace);
+  const deal = await repository.getDeal(id);
   if (!deal) return null;
-  const tasks = await database
-    .prepare(
-      `SELECT dt.*, u.name AS assignee_name, u.email AS assignee_email
-       FROM deal_tasks dt
-       LEFT JOIN user u ON u.id = dt.assigned_user_id
-       WHERE dt.workspace_id = ? AND dt.deal_id = ?
-       ORDER BY
-         CASE WHEN dt.status = 'open' THEN 0 ELSE 1 END,
-         CASE WHEN dt.due_at IS NULL THEN 1 ELSE 0 END,
-         dt.due_at ASC,
-         dt.created_at DESC`,
-    )
-    .bind(workspaceId, deal.id)
-    .all<TaskRow>();
-  return { deal: serializeDeal(deal), tasks: tasks.results.map(serializeTask) };
-}
-
-interface Background {
-  waitUntil(promise: Promise<unknown>): void;
+  const tasks = await repository.listDealTasks(deal.id);
+  return { deal: serializeDeal(deal), tasks: tasks.map(serializeTask) };
 }
 
 export async function createDeal(
@@ -247,48 +116,19 @@ export async function createDeal(
   input: DealCreate,
   background: Background,
 ): Promise<DealWriteOutcome> {
-  const referenceError = await validateDealReferences(database, workspace.workspaceId, input);
+  const repository = new DealRepository(database, workspace);
+  const referenceError = await repository.validateDealReferences(input);
   if (referenceError) return { kind: "invalid_reference", message: referenceError };
 
-  const id = uuidv7();
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `INSERT INTO deals (
-         id, workspace_id, pipeline_id, stage_id, name, value, currency, status,
-         owner_user_id, contact_id, account_id, expected_close_date, description,
-         won_at, lost_at, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      workspace.workspaceId,
-      input.pipelineId,
-      input.stageId,
-      input.name,
-      input.value,
-      input.currency,
-      input.status,
-      input.ownerUserId ?? null,
-      input.contactId ?? null,
-      input.accountId ?? null,
-      input.expectedCloseDate ?? null,
-      input.description,
-      input.status === "won" ? now : null,
-      input.status === "lost" ? now : null,
-      now,
-      now,
-    )
-    .run();
+  const deal = await repository.createDeal(input);
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "deal.create",
       resourceType: "deal",
-      resourceId: id,
+      resourceId: deal.id,
     }),
   );
-  const deal = await getDeal(database, workspace.workspaceId, id);
-  return { kind: "ok", deal: serializeDeal(deal!) };
+  return { kind: "ok", deal: serializeDeal(deal) };
 }
 
 /** Patch semantics: unset fields keep the stored value, so the merge happens here. */
@@ -299,7 +139,8 @@ export async function updateDeal(
   input: DealUpdate,
   background: Background,
 ): Promise<DealWriteOutcome> {
-  const current = await getDeal(database, workspace.workspaceId, id);
+  const repository = new DealRepository(database, workspace);
+  const current = await repository.getDeal(id);
   if (!current) return { kind: "not_found" };
 
   const merged: DealCreate = {
@@ -316,40 +157,14 @@ export async function updateDeal(
       input.expectedCloseDate === undefined ? current.expected_close_date : input.expectedCloseDate,
     description: input.description ?? current.description,
   };
-  const referenceError = await validateDealReferences(database, workspace.workspaceId, merged);
+  const referenceError = await repository.validateDealReferences(merged);
   if (referenceError) return { kind: "invalid_reference", message: referenceError };
 
   const now = new Date().toISOString();
   const wonAt = merged.status === "won" ? (current.status === "won" ? current.won_at : now) : null;
   const lostAt =
     merged.status === "lost" ? (current.status === "lost" ? current.lost_at : now) : null;
-  await database
-    .prepare(
-      `UPDATE deals SET
-         pipeline_id = ?, stage_id = ?, name = ?, value = ?, currency = ?, status = ?,
-         owner_user_id = ?, contact_id = ?, account_id = ?, expected_close_date = ?,
-         description = ?, won_at = ?, lost_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
-    )
-    .bind(
-      merged.pipelineId,
-      merged.stageId,
-      merged.name,
-      merged.value,
-      merged.currency,
-      merged.status,
-      merged.ownerUserId ?? null,
-      merged.contactId ?? null,
-      merged.accountId ?? null,
-      merged.expectedCloseDate ?? null,
-      merged.description,
-      wonAt,
-      lostAt,
-      now,
-      workspace.workspaceId,
-      current.id,
-    )
-    .run();
+  await repository.updateDeal(current.id, { ...merged, wonAt, lostAt, updatedAt: now });
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: current.status === merged.status ? "deal.update" : "deal.status_change",
@@ -360,7 +175,7 @@ export async function updateDeal(
         : { metadata: { previousStatus: current.status, status: merged.status } }),
     }),
   );
-  const deal = await getDeal(database, workspace.workspaceId, current.id);
+  const deal = await repository.getDeal(current.id);
   return { kind: "ok", deal: serializeDeal(deal!) };
 }
 
@@ -371,24 +186,13 @@ export async function moveDeal(
   stageId: string,
   background: Background,
 ): Promise<DealMoveOutcome> {
-  const workspaceId = workspace.workspaceId;
-  const deal = await getDeal(database, workspaceId, id);
+  const repository = new DealRepository(database, workspace);
+  const deal = await repository.getDeal(id);
   if (!deal) return { kind: "not_found" };
-  const stage = await database
-    .prepare(
-      `SELECT id FROM deal_stages
-       WHERE workspace_id = ? AND pipeline_id = ? AND id = ?`,
-    )
-    .bind(workspaceId, deal.pipeline_id, stageId)
-    .first();
-  if (!stage) return { kind: "invalid_stage" };
-  await database
-    .prepare(
-      `UPDATE deals SET stage_id = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
-    )
-    .bind(stageId, new Date().toISOString(), workspaceId, deal.id)
-    .run();
+  if (!(await repository.stageExistsInPipeline(deal.pipeline_id, stageId))) {
+    return { kind: "invalid_stage" };
+  }
+  const updated = await repository.moveDeal(deal.id, stageId);
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "deal.move",
@@ -397,7 +201,6 @@ export async function moveDeal(
       metadata: { previousStageId: deal.stage_id, stageId },
     }),
   );
-  const updated = await getDeal(database, workspaceId, deal.id);
   return { kind: "ok", deal: serializeDeal(updated!) };
 }
 
@@ -407,15 +210,8 @@ export async function archiveDeal(
   id: string,
   background: Background,
 ): Promise<boolean> {
-  const now = new Date().toISOString();
-  const result = await database
-    .prepare(
-      `UPDATE deals SET archived_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND id = ? AND archived_at IS NULL`,
-    )
-    .bind(now, now, workspace.workspaceId, id)
-    .run();
-  if (result.meta.changes === 0) return false;
+  const repository = new DealRepository(database, workspace);
+  if (!(await repository.archiveDeal(id))) return false;
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "deal.archive",
@@ -432,35 +228,13 @@ export async function createDealTask(
   dealId: string,
   input: DealTaskCreate,
 ): Promise<DealTaskOutcome> {
-  const workspaceId = workspace.workspaceId;
-  if (!(await dealExists(database, workspaceId, dealId))) return { kind: "not_found" };
-  if (input.assignedUserId && !(await memberExists(database, workspaceId, input.assignedUserId))) {
+  const repository = new DealRepository(database, workspace);
+  if (!(await repository.dealExists(dealId))) return { kind: "not_found" };
+  if (input.assignedUserId && !(await repository.memberExists(input.assignedUserId))) {
     return { kind: "invalid_assignee" };
   }
-  const id = uuidv7();
-  const now = new Date().toISOString();
-  await database
-    .prepare(
-      `INSERT INTO deal_tasks (
-         id, workspace_id, deal_id, type, title, notes, due_at, status,
-         assigned_user_id, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
-    )
-    .bind(
-      id,
-      workspaceId,
-      dealId,
-      input.type,
-      input.title,
-      input.notes,
-      input.dueAt ?? null,
-      input.assignedUserId ?? null,
-      now,
-      now,
-    )
-    .run();
-  const task = await getTask(database, workspaceId, dealId, id);
-  return { kind: "ok", task: serializeTask(task!) };
+  const task = await repository.createDealTask(dealId, input);
+  return { kind: "ok", task: serializeTask(task) };
 }
 
 export async function updateDealTask(
@@ -470,12 +244,12 @@ export async function updateDealTask(
   taskId: string,
   input: DealTaskUpdate,
 ): Promise<DealTaskOutcome> {
-  const workspaceId = workspace.workspaceId;
-  const current = await getTask(database, workspaceId, dealId, taskId);
+  const repository = new DealRepository(database, workspace);
+  const current = await repository.getTask(dealId, taskId);
   if (!current) return { kind: "not_found" };
   const assignedUserId =
     input.assignedUserId === undefined ? current.assigned_user_id : input.assignedUserId;
-  if (assignedUserId && !(await memberExists(database, workspaceId, assignedUserId))) {
+  if (assignedUserId && !(await repository.memberExists(assignedUserId))) {
     return { kind: "invalid_assignee" };
   }
   const status = input.status ?? current.status;
@@ -483,28 +257,16 @@ export async function updateDealTask(
   // Keep the original completion time when a task was already completed.
   const completedAt =
     status === "completed" ? (current.status === "completed" ? current.completed_at : now) : null;
-  await database
-    .prepare(
-      `UPDATE deal_tasks SET
-         type = ?, title = ?, notes = ?, due_at = ?, status = ?,
-         assigned_user_id = ?, completed_at = ?, updated_at = ?
-       WHERE workspace_id = ? AND deal_id = ? AND id = ?`,
-    )
-    .bind(
-      input.type ?? current.type,
-      input.title ?? current.title,
-      input.notes ?? current.notes,
-      input.dueAt === undefined ? current.due_at : input.dueAt,
-      status,
-      assignedUserId,
-      completedAt,
-      now,
-      workspaceId,
-      dealId,
-      taskId,
-    )
-    .run();
-  const task = await getTask(database, workspaceId, dealId, taskId);
+  const task = await repository.updateDealTask(dealId, taskId, {
+    type: input.type ?? current.type,
+    title: input.title ?? current.title,
+    notes: input.notes ?? current.notes,
+    dueAt: input.dueAt === undefined ? current.due_at : input.dueAt,
+    status,
+    assignedUserId,
+    completedAt,
+    updatedAt: now,
+  });
   return { kind: "ok", task: serializeTask(task!) };
 }
 
@@ -514,12 +276,6 @@ export async function deleteDealTask(
   dealId: string,
   taskId: string,
 ): Promise<boolean> {
-  const result = await database
-    .prepare(
-      `DELETE FROM deal_tasks
-       WHERE workspace_id = ? AND deal_id = ? AND id = ?`,
-    )
-    .bind(workspace.workspaceId, dealId, taskId)
-    .run();
-  return result.meta.changes > 0;
+  const repository = new DealRepository(database, workspace);
+  return repository.deleteDealTask(dealId, taskId);
 }
