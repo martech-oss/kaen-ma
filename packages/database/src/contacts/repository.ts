@@ -50,7 +50,7 @@ export class ContactRepository {
     stage?: string | undefined;
     tagId?: string | undefined;
     listId?: string | undefined;
-    accountId?: string | undefined;
+    companyId?: string | undefined;
     segmentId?: string | undefined;
     scoreMin?: number | undefined;
     scoreMax?: number | undefined;
@@ -125,7 +125,7 @@ export class ContactRepository {
         ),
       );
     }
-    if (input.accountId) {
+    if (input.companyId) {
       conditions.push(
         exists(
           this.database.orm
@@ -135,7 +135,7 @@ export class ContactRepository {
               and(
                 eq(companyContacts.workspaceId, contacts.workspaceId),
                 eq(companyContacts.contactId, contacts.id),
-                eq(companyContacts.companyId, input.accountId),
+                eq(companyContacts.companyId, input.companyId),
               ),
             ),
         ),

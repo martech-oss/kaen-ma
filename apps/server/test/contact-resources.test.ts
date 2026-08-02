@@ -57,9 +57,9 @@ describe("contact resources over oRPC", () => {
 
   it("maps the profile to camelCase, including the account relation", async () => {
     const client = await seedWorkspace();
-    const account = await client.accounts.create({ name: "Globex" });
+    const account = await client.companies.create({ name: "Globex" });
     const contact = await client.contacts.create({ email: "p@example.com", customFields: {} });
-    await client.accounts.assignContact({
+    await client.companies.assignContact({
       id: account.id,
       contactId: contact.id,
       title: "VP",
@@ -72,7 +72,7 @@ describe("contact resources over oRPC", () => {
     });
 
     const profile = await client.contactResources.profile({ contactId: contact.id });
-    expect(profile.accounts).toEqual([
+    expect(profile.companies).toEqual([
       { id: account.id, name: "Globex", domain: null, title: "VP", isPrimary: true },
     ]);
     expect(profile.scoreEvents).toEqual([

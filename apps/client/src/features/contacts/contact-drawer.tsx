@@ -186,7 +186,7 @@ export function ContactDrawer({
                 <StatCard label="スコア" value={profile.contact.score} icon={<Zap />} />
                 <StatCard label="タグ" value={profile.tags.length} icon={<Tag />} />
                 <StatCard label="リスト" value={profile.lists.length} icon={<ListPlus />} />
-                <StatCard label="会社" value={profile.accounts.length} icon={<Building2 />} />
+                <StatCard label="会社" value={profile.companies.length} icon={<Building2 />} />
               </div>
 
               <ProfileEditForm
@@ -225,8 +225,8 @@ export function ContactDrawer({
 
               <AccountEditor
                 contactId={contactId}
-                accounts={profile.accounts}
-                options={options.accounts}
+                accounts={profile.companies}
+                options={options.companies}
                 disabled={profile.contact.status === "archived"}
                 onChanged={changed}
               />

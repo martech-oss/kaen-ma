@@ -1,7 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 
 import { user } from "../auth/schema";
-import { campaignEnrollments, campaigns } from "../automations/schema";
+import { automationEnrollments, automations } from "../automations/schema";
 import { broadcasts } from "../broadcasts/schema";
 import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
 import {
@@ -124,7 +124,7 @@ export interface SiteSummaryData {
 
 export interface DashboardSummaryData {
   contacts: ReportRow;
-  campaigns: ReportRow;
+  automations: ReportRow;
   deliveries: ReportRow;
   events: ReportRow[];
 }
@@ -340,15 +340,15 @@ export class ReportsRepository {
     const [automationRows, trendRows] = await this.runBatch(
       sql`
         SELECT
-          ${campaigns.id}, ${campaigns.name}, ${campaigns.status},
+          ${automations.id}, ${automations.name}, ${automations.status},
           COUNT(DISTINCT CASE
-            WHEN ${campaignEnrollments.enteredAt} >= ${range.fromTimestamp} AND ${campaignEnrollments.enteredAt} < ${range.toExclusiveTimestamp} THEN ${campaignEnrollments.id}
+            WHEN ${automationEnrollments.enteredAt} >= ${range.fromTimestamp} AND ${automationEnrollments.enteredAt} < ${range.toExclusiveTimestamp} THEN ${automationEnrollments.id}
           END) AS entries,
           COUNT(DISTINCT CASE
-            WHEN ${campaignEnrollments.completedAt} >= ${range.fromTimestamp} AND ${campaignEnrollments.completedAt} < ${range.toExclusiveTimestamp} THEN ${campaignEnrollments.id}
+            WHEN ${automationEnrollments.completedAt} >= ${range.fromTimestamp} AND ${automationEnrollments.completedAt} < ${range.toExclusiveTimestamp} THEN ${automationEnrollments.id}
           END) AS completions,
           COUNT(DISTINCT CASE
-            WHEN ${campaignEnrollments.status} = 'active' THEN ${campaignEnrollments.id}
+            WHEN ${automationEnrollments.status} = 'active' THEN ${automationEnrollments.id}
           END) AS active_contacts,
           COUNT(DISTINCT CASE
             WHEN ${deliveries.createdAt} >= ${range.fromTimestamp} AND ${deliveries.createdAt} < ${range.toExclusiveTimestamp} AND ${deliveries.channel} = 'email'
@@ -366,26 +366,26 @@ export class ReportsRepository {
               AND ${deliveries.status} IN ('accepted', 'delivered', 'failed')
               AND ${deliveryEvents.type} = 'clicked' THEN ${deliveries.id}
           END) AS clicks
-        FROM ${campaigns}
-        LEFT JOIN ${campaignEnrollments}
-          ON ${campaignEnrollments.workspaceId} = ${campaigns.workspaceId} AND ${campaignEnrollments.campaignId} = ${campaigns.id}
+        FROM ${automations}
+        LEFT JOIN ${automationEnrollments}
+          ON ${automationEnrollments.workspaceId} = ${automations.workspaceId} AND ${automationEnrollments.automationId} = ${automations.id}
         LEFT JOIN ${deliveries}
-          ON ${deliveries.workspaceId} = ${campaignEnrollments.workspaceId} AND ${deliveries.enrollmentId} = ${campaignEnrollments.id}
+          ON ${deliveries.workspaceId} = ${automationEnrollments.workspaceId} AND ${deliveries.enrollmentId} = ${automationEnrollments.id}
         LEFT JOIN ${deliveryEvents}
           ON ${deliveryEvents.workspaceId} = ${deliveries.workspaceId} AND ${deliveryEvents.deliveryId} = ${deliveries.id}
-        WHERE ${campaigns.workspaceId} = ${workspaceId} AND ${campaigns.status} != 'archived'
-        GROUP BY ${campaigns.id}
-        ORDER BY entries DESC, ${campaigns.updatedAt} DESC
+        WHERE ${automations.workspaceId} = ${workspaceId} AND ${automations.status} != 'archived'
+        GROUP BY ${automations.id}
+        ORDER BY entries DESC, ${automations.updatedAt} DESC
       `,
       sql`
         WITH activity AS (
-          SELECT date(${campaignEnrollments.enteredAt}) AS day, 1 AS entries, 0 AS completions
-          FROM ${campaignEnrollments}
-          WHERE ${campaignEnrollments.workspaceId} = ${workspaceId} AND ${campaignEnrollments.enteredAt} >= ${range.fromTimestamp} AND ${campaignEnrollments.enteredAt} < ${range.toExclusiveTimestamp}
+          SELECT date(${automationEnrollments.enteredAt}) AS day, 1 AS entries, 0 AS completions
+          FROM ${automationEnrollments}
+          WHERE ${automationEnrollments.workspaceId} = ${workspaceId} AND ${automationEnrollments.enteredAt} >= ${range.fromTimestamp} AND ${automationEnrollments.enteredAt} < ${range.toExclusiveTimestamp}
           UNION ALL
-          SELECT date(${campaignEnrollments.completedAt}) AS day, 0 AS entries, 1 AS completions
-          FROM ${campaignEnrollments}
-          WHERE ${campaignEnrollments.workspaceId} = ${workspaceId} AND ${campaignEnrollments.completedAt} >= ${range.fromTimestamp} AND ${campaignEnrollments.completedAt} < ${range.toExclusiveTimestamp}
+          SELECT date(${automationEnrollments.completedAt}) AS day, 0 AS entries, 1 AS completions
+          FROM ${automationEnrollments}
+          WHERE ${automationEnrollments.workspaceId} = ${workspaceId} AND ${automationEnrollments.completedAt} >= ${range.fromTimestamp} AND ${automationEnrollments.completedAt} < ${range.toExclusiveTimestamp}
         )
         SELECT day, SUM(entries) AS entries, SUM(completions) AS completions
         FROM activity
@@ -440,11 +440,11 @@ export class ReportsRepository {
       `,
       sql`
         SELECT
-          COALESCE(${broadcasts.id}, ${campaigns.id}, ${emailTemplates.id}, 'other') AS source_id,
-          COALESCE(${broadcasts.name}, ${campaigns.name}, ${emailTemplates.name}, 'その他のメール') AS source_name,
+          COALESCE(${broadcasts.id}, ${automations.id}, ${emailTemplates.id}, 'other') AS source_id,
+          COALESCE(${broadcasts.name}, ${automations.name}, ${emailTemplates.name}, 'その他のメール') AS source_name,
           CASE
             WHEN ${broadcasts.id} IS NOT NULL THEN 'broadcast'
-            WHEN ${campaigns.id} IS NOT NULL THEN 'automation'
+            WHEN ${automations.id} IS NOT NULL THEN 'automation'
             ELSE 'transactional'
           END AS source_type,
           COUNT(DISTINCT ${deliveries.id}) AS sends,
@@ -460,10 +460,10 @@ export class ReportsRepository {
           ON ${deliveryEvents.workspaceId} = ${deliveries.workspaceId} AND ${deliveryEvents.deliveryId} = ${deliveries.id}
         LEFT JOIN ${broadcasts}
           ON ${broadcasts.workspaceId} = ${deliveries.workspaceId} AND ${broadcasts.id} = ${deliveries.broadcastId}
-        LEFT JOIN ${campaignEnrollments}
-          ON ${campaignEnrollments.workspaceId} = ${deliveries.workspaceId} AND ${campaignEnrollments.id} = ${deliveries.enrollmentId}
-        LEFT JOIN ${campaigns}
-          ON ${campaigns.workspaceId} = ${campaignEnrollments.workspaceId} AND ${campaigns.id} = ${campaignEnrollments.campaignId}
+        LEFT JOIN ${automationEnrollments}
+          ON ${automationEnrollments.workspaceId} = ${deliveries.workspaceId} AND ${automationEnrollments.id} = ${deliveries.enrollmentId}
+        LEFT JOIN ${automations}
+          ON ${automations.workspaceId} = ${automationEnrollments.workspaceId} AND ${automations.id} = ${automationEnrollments.automationId}
         LEFT JOIN ${emailTemplates}
           ON ${emailTemplates.workspaceId} = ${deliveries.workspaceId} AND ${emailTemplates.id} = ${deliveries.templateId}
         WHERE ${deliveries.workspaceId} = ${workspaceId} AND ${deliveries.channel} = 'email'
@@ -558,12 +558,12 @@ export class ReportsRepository {
 
   /** Feeds the `operations.dashboard` procedure - 4 independent queries run concurrently. */
   public async dashboardSummary(workspaceId: string): Promise<DashboardSummaryData> {
-    const [contactRows, campaignRows, deliveryRows, eventRows] = await this.runBatch(
+    const [contactRows, automationRows, deliveryRows, eventRows] = await this.runBatch(
       sql`
         SELECT COUNT(*) AS count FROM ${contacts} WHERE ${contacts.workspaceId} = ${workspaceId} AND ${contacts.status} = 'active'
       `,
       sql`
-        SELECT COUNT(*) AS count FROM ${campaigns} WHERE ${campaigns.workspaceId} = ${workspaceId} AND ${campaigns.status} = 'active'
+        SELECT COUNT(*) AS count FROM ${automations} WHERE ${automations.workspaceId} = ${workspaceId} AND ${automations.status} = 'active'
       `,
       sql`
         SELECT COUNT(*) AS sent,
@@ -578,7 +578,7 @@ export class ReportsRepository {
     );
     return {
       contacts: contactRows[0] ?? {},
-      campaigns: campaignRows[0] ?? {},
+      automations: automationRows[0] ?? {},
       deliveries: deliveryRows[0] ?? {},
       events: eventRows,
     };

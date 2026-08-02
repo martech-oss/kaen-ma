@@ -1,9 +1,8 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { workspaceRoleSchema } from "../shared/schema";
-
 import { authedErrors, workspaceErrors } from "../shared/errors";
+import { workspaceRoleSchema } from "../shared/schema";
 
 export const CSV_MAX_BYTES = 25 * 1024 * 1024;
 

@@ -53,7 +53,7 @@ export function ContactCreateForm({
           ? orpc.contactResources.addList({ contactId: contact.id, resourceId: listId })
           : Promise.resolve(),
         accountId
-          ? orpc.accounts.assignContact({
+          ? orpc.companies.assignContact({
               id: accountId,
               contactId: contact.id,
               isPrimary: true,
@@ -85,7 +85,7 @@ export function ContactCreateForm({
         <InputField label="ステージ" name="stage" defaultValue="lead" />
         <SelectInput label="アカウント" name="accountId">
           <NativeSelectOption value="">指定なし</NativeSelectOption>
-          {options.accounts.map((account) => (
+          {options.companies.map((account) => (
             <NativeSelectOption key={account.id} value={account.id}>
               {account.name}
             </NativeSelectOption>

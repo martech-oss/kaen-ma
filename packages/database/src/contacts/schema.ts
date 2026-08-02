@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { organization } from "../auth/schema";
+import { automationEnrollments } from "../automations/schema";
 
 export const companies = sqliteTable(
   "companies",
@@ -116,14 +117,17 @@ export const customFieldDefinitions = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("custom_fields_workspace_entity_key_unique").on(
+    uniqueIndex("custom_field_definitions_workspace_entity_key_unique").on(
       table.workspaceId,
       table.entityType,
       table.key,
     ),
-    check("custom_fields_entity_type_check", sql`${table.entityType} IN ('contact', 'company')`),
     check(
-      "custom_fields_data_type_check",
+      "custom_field_definitions_entity_type_check",
+      sql`${table.entityType} IN ('contact', 'company')`,
+    ),
+    check(
+      "custom_field_definitions_data_type_check",
       sql`${table.dataType} IN ('text', 'number', 'boolean', 'date', 'select')`,
     ),
   ],
@@ -180,7 +184,10 @@ export const scoreEvents = sqliteTable(
     delta: integer().notNull(),
     total: integer().notNull(),
     reason: text().notNull(),
-    campaignEnrollmentId: text("campaign_enrollment_id"),
+    automationEnrollmentId: text("automation_enrollment_id").references(
+      () => automationEnrollments.id,
+      { onDelete: "set null" },
+    ),
     createdAt: text("created_at").notNull(),
   },
   (table) => [

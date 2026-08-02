@@ -69,7 +69,7 @@ describe("oRPC API", () => {
         id: created.id,
         tags: [],
         lists: [],
-        accounts: [],
+        companies: [],
       }),
     ]);
 

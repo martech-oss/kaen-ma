@@ -62,7 +62,7 @@ export const segmentMemberships = sqliteTable(
     }),
     check(
       "segment_memberships_source_check",
-      sql`${table.source} IN ('static', 'dynamic', 'campaign')`,
+      sql`${table.source} IN ('static', 'dynamic', 'automation')`,
     ),
   ],
 );

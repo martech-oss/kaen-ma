@@ -437,7 +437,7 @@ export function DealDetailPage({
                 value={contactLabel(deal) || "未設定"}
                 detail={deal.contactEmail}
               />
-              <DetailItem label="アカウント" value={deal.accountName ?? "未設定"} />
+              <DetailItem label="会社" value={deal.companyName ?? "未設定"} />
             </CardContent>
           </Card>
           <Card>

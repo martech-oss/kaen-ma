@@ -2,9 +2,8 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import { contactSchema } from "../contacts/contact-schema";
-import { segmentFilterSchema } from "./schema";
-
 import { workspaceErrors } from "../shared/errors";
+import { segmentFilterSchema } from "./schema";
 
 const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },

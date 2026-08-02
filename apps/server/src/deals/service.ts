@@ -56,7 +56,7 @@ export async function getDealOptions(
       stages: (stagesByPipeline.get(pipeline.id) ?? []).map(serializeStage),
     })),
     contacts: rows.contacts,
-    accounts: rows.accounts,
+    companies: rows.companies,
     members: rows.members,
   };
 }
@@ -152,7 +152,7 @@ export async function updateDeal(
     status: input.status ?? current.status,
     ownerUserId: input.ownerUserId === undefined ? current.owner_user_id : input.ownerUserId,
     contactId: input.contactId === undefined ? current.contact_id : input.contactId,
-    accountId: input.accountId === undefined ? current.account_id : input.accountId,
+    companyId: input.companyId === undefined ? current.company_id : input.companyId,
     expectedCloseDate:
       input.expectedCloseDate === undefined ? current.expected_close_date : input.expectedCloseDate,
     description: input.description ?? current.description,

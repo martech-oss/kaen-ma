@@ -270,7 +270,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
               onValueChange={setAccountId}
               placeholder="すべてのアカウント"
               className="min-w-44"
-              options={options.accounts.map((account) => ({
+              options={options.companies.map((account) => ({
                 value: account.id,
                 label: account.name,
               }))}
@@ -501,7 +501,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                       </TableCell>
                       <TableCell className="max-w-80">
                         <div className="flex flex-wrap gap-1">
-                          {contact.accounts.slice(0, 1).map((account) => (
+                          {contact.companies.slice(0, 1).map((account) => (
                             <Badge key={account.id} variant="secondary">
                               <Building2 />
                               {account.name}
@@ -515,7 +515,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                               {list.name}
                             </Badge>
                           ))}
-                          {contact.accounts.length + contact.tags.length + contact.lists.length ===
+                          {contact.companies.length + contact.tags.length + contact.lists.length ===
                             0 && <span className="text-xs text-muted-foreground">未分類</span>}
                         </div>
                       </TableCell>

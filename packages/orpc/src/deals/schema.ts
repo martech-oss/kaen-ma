@@ -24,7 +24,7 @@ const dealFieldsSchema = z.object({
   status: dealStatusSchema,
   ownerUserId: nullableIdSchema,
   contactId: nullableIdSchema,
-  accountId: nullableIdSchema,
+  companyId: nullableIdSchema,
   expectedCloseDate: z.iso.date().nullable().optional(),
   description: z.string().trim().max(10_000),
 });
@@ -88,7 +88,7 @@ export const dealContactOptionSchema = z.object({
   lastName: z.string().nullable(),
 });
 
-export const dealAccountOptionSchema = z.object({
+export const dealCompanyOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   domain: z.string().nullable(),
@@ -103,7 +103,7 @@ export const dealMemberOptionSchema = z.object({
 export const dealOptionsSchema = z.object({
   pipelines: z.array(dealPipelineSchema),
   contacts: z.array(dealContactOptionSchema),
-  accounts: z.array(dealAccountOptionSchema),
+  companies: z.array(dealCompanyOptionSchema),
   members: z.array(dealMemberOptionSchema),
 });
 export type DealOptions = z.infer<typeof dealOptionsSchema>;
@@ -129,8 +129,8 @@ export const dealSummarySchema = z.object({
   contactEmail: z.string().nullable(),
   contactFirstName: z.string().nullable(),
   contactLastName: z.string().nullable(),
-  accountId: z.string().nullable(),
-  accountName: z.string().nullable(),
+  companyId: z.string().nullable(),
+  companyName: z.string().nullable(),
   expectedCloseDate: z.string().nullable(),
   description: z.string(),
   wonAt: z.string().nullable(),

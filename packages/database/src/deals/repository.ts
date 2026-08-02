@@ -25,8 +25,8 @@ const DEFAULT_STAGES = [
 ] as const;
 
 /**
- * One deal row joined with its pipeline/stage/owner/contact/account names and
- * open-task counters. Field names are snake_case (mirrors {@link CampaignJobRow})
+ * One deal row joined with its pipeline/stage/owner/contact/company names and
+ * open-task counters. Field names are snake_case (mirrors {@link AutomationJobRow})
  * because this is the long-standing shape apps/server's `serializeDeal` maps
  * from.
  */
@@ -51,8 +51,8 @@ export interface DealRow {
   contact_email: string | null;
   contact_first_name: string | null;
   contact_last_name: string | null;
-  account_id: string | null;
-  account_name: string | null;
+  company_id: string | null;
+  company_name: string | null;
   expected_close_date: string | null;
   description: string;
   won_at: string | null;
@@ -111,7 +111,7 @@ export interface DealContactOptionRow {
   lastName: string | null;
 }
 
-export interface DealAccountOptionRow {
+export interface DealCompanyOptionRow {
   id: string;
   name: string;
   domain: string | null;
@@ -127,7 +127,7 @@ export interface DealOptionRows {
   pipelines: DealPipelineRow[];
   stages: DealStageRow[];
   contacts: DealContactOptionRow[];
-  accounts: DealAccountOptionRow[];
+  companies: DealCompanyOptionRow[];
   members: DealMemberOptionRow[];
 }
 
@@ -198,12 +198,12 @@ export class DealRepository {
   }
 
   /**
-   * Checks that a deal's would-be pipeline/stage/contact/account/owner
+   * Checks that a deal's would-be pipeline/stage/contact/company/owner
    * references are all valid, returning the first violation as a
    * user-facing message, or `null` when everything resolves.
    */
   public async validateDealReferences(
-    input: Pick<DealCreate, "pipelineId" | "stageId" | "contactId" | "accountId" | "ownerUserId">,
+    input: Pick<DealCreate, "pipelineId" | "stageId" | "contactId" | "companyId" | "ownerUserId">,
   ): Promise<string | null> {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
@@ -243,13 +243,13 @@ export class DealRepository {
       if (!contact) return "連絡先が見つかりません";
     }
 
-    if (input.accountId) {
-      const account = await orm
+    if (input.companyId) {
+      const company = await orm
         .select({ id: companies.id })
         .from(companies)
-        .where(and(eq(companies.workspaceId, workspaceId), eq(companies.id, input.accountId)))
+        .where(and(eq(companies.workspaceId, workspaceId), eq(companies.id, input.companyId)))
         .get();
-      if (!account) return "アカウントが見つかりません";
+      if (!company) return "会社が見つかりません";
     }
 
     if (input.ownerUserId && !(await this.memberExists(input.ownerUserId))) {
@@ -301,7 +301,7 @@ export class DealRepository {
   public async getDealOptionRows(): Promise<DealOptionRows> {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
-    const [pipelineRows, stageRows, contactRows, accountRows, memberRows] = await orm.batch([
+    const [pipelineRows, stageRows, contactRows, companyRows, memberRows] = await orm.batch([
       orm
         .select({
           id: dealPipelines.id,
@@ -355,7 +355,7 @@ export class DealRepository {
       pipelines: pipelineRows,
       stages: stageRows,
       contacts: contactRows,
-      accounts: accountRows,
+      companies: companyRows,
       members: memberRows,
     };
   }
@@ -467,7 +467,7 @@ export class DealRepository {
       status: input.status,
       ownerUserId: input.ownerUserId ?? null,
       contactId: input.contactId ?? null,
-      accountId: input.accountId ?? null,
+      companyId: input.companyId ?? null,
       expectedCloseDate: input.expectedCloseDate ?? null,
       description: input.description,
       wonAt: input.status === "won" ? now : null,
@@ -496,7 +496,7 @@ export class DealRepository {
         status: input.status,
         ownerUserId: input.ownerUserId ?? null,
         contactId: input.contactId ?? null,
-        accountId: input.accountId ?? null,
+        companyId: input.companyId ?? null,
         expectedCloseDate: input.expectedCloseDate ?? null,
         description: input.description,
         wonAt: input.wonAt,
@@ -660,7 +660,7 @@ export class DealRepository {
   }
 
   /**
-   * The deal+pipeline+stage+owner+contact+account join, with the two
+   * The deal+pipeline+stage+owner+contact+company join, with the two
    * per-deal task counters. `open_task_count`/`next_task_at` are correlated
    * scalar subqueries built with the query builder (not raw `${column}`
    * interpolation in a select field) — that form renders the correlation
@@ -711,8 +711,8 @@ export class DealRepository {
       contact_email: contacts.email,
       contact_first_name: contacts.firstName,
       contact_last_name: contacts.lastName,
-      account_id: deals.accountId,
-      account_name: companies.name,
+      company_id: deals.companyId,
+      company_name: companies.name,
       expected_close_date: deals.expectedCloseDate,
       description: deals.description,
       won_at: deals.wonAt,
@@ -747,7 +747,7 @@ export class DealRepository {
       )
       .leftJoin(
         companies,
-        and(eq(companies.workspaceId, deals.workspaceId), eq(companies.id, deals.accountId)),
+        and(eq(companies.workspaceId, deals.workspaceId), eq(companies.id, deals.companyId)),
       );
   }
 

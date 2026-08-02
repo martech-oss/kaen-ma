@@ -523,7 +523,7 @@ export class ContactResourceRepository {
           delta: sql<number>`${input.delta}`.as("delta"),
           total: contacts.score,
           reason: sql<string>`${input.reason}`.as("reason"),
-          campaignEnrollmentId: sql<string | null>`null`.as("campaign_enrollment_id"),
+          automationEnrollmentId: sql<string | null>`null`.as("automation_enrollment_id"),
           createdAt: sql<string>`${now}`.as("created_at"),
         })
         .from(contacts)

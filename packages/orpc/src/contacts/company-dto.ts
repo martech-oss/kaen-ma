@@ -1,6 +1,6 @@
 import * as z from "zod";
 
-const accountFieldsSchema = z.object({
+const companyFieldsSchema = z.object({
   name: z.string().trim().min(1).max(191),
   domain: z
     .string()
@@ -13,15 +13,15 @@ const accountFieldsSchema = z.object({
     .optional(),
 });
 
-export const accountCreateSchema = accountFieldsSchema;
-export type AccountCreate = z.infer<typeof accountCreateSchema>;
+export const companyCreateSchema = companyFieldsSchema;
+export type CompanyCreate = z.infer<typeof companyCreateSchema>;
 
-export const accountUpdateSchema = accountFieldsSchema.partial().extend({
-  domain: accountFieldsSchema.shape.domain.unwrap().nullable().optional(),
+export const companyUpdateSchema = companyFieldsSchema.partial().extend({
+  domain: companyFieldsSchema.shape.domain.unwrap().nullable().optional(),
 });
-export type AccountUpdate = z.infer<typeof accountUpdateSchema>;
+export type CompanyUpdate = z.infer<typeof companyUpdateSchema>;
 
-export const accountSchema = z.object({
+export const companySchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   name: z.string(),
@@ -29,15 +29,15 @@ export const accountSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-export type Account = z.infer<typeof accountSchema>;
+export type Company = z.infer<typeof companySchema>;
 
-export const accountSummarySchema = accountSchema.extend({
+export const companySummarySchema = companySchema.extend({
   contactCount: z.number().int().nonnegative(),
 });
-export type AccountSummary = z.infer<typeof accountSummarySchema>;
+export type CompanySummary = z.infer<typeof companySummarySchema>;
 
 /** A contact as listed on an account, with its account-specific role fields. */
-export const accountContactSchema = z.object({
+export const companyContactDtoSchema = z.object({
   id: z.string(),
   email: z.string().nullable(),
   firstName: z.string().nullable(),
@@ -48,9 +48,9 @@ export const accountContactSchema = z.object({
   title: z.string().nullable(),
   isPrimary: z.boolean(),
 });
-export type AccountContact = z.infer<typeof accountContactSchema>;
+export type CompanyContactDto = z.infer<typeof companyContactDtoSchema>;
 
-export const accountDetailSchema = accountSchema.extend({
-  contacts: z.array(accountContactSchema),
+export const companyDetailSchema = companySchema.extend({
+  contacts: z.array(companyContactDtoSchema),
 });
-export type AccountDetail = z.infer<typeof accountDetailSchema>;
+export type CompanyDetail = z.infer<typeof companyDetailSchema>;

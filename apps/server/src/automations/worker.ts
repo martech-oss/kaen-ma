@@ -1,10 +1,10 @@
 import { PermanentChannelError } from "@kaenma/channels";
 import { computeDueAt, outgoingEdges } from "@kaenma/core";
 import {
-  CampaignEngineRepository,
+  AutomationEngineRepository,
   createDatabase,
   type AutomationContactColumn,
-  type CampaignJobRow,
+  type AutomationJobRow,
 } from "@kaenma/database";
 import {
   campaignDefinitionSchema,
@@ -19,14 +19,14 @@ import { createEmailDelivery, createWebhookDelivery } from "../messaging/deliver
 import { parseJsonRecord } from "../platform/values";
 import { primitiveString } from "../platform/values";
 
-export type { CampaignJobRow };
+export type { AutomationJobRow };
 
 export async function processCampaignJob(
   jobId: string,
   leaseId: string,
   env: RuntimeEnv,
 ): Promise<void> {
-  const engine = new CampaignEngineRepository(createDatabase(env.DB));
+  const engine = new AutomationEngineRepository(createDatabase(env.DB));
   const job = await engine.findJobForProcessing(jobId, leaseId);
   if (!job) return;
   const started = await engine.startLeasedJob(jobId, leaseId, new Date().toISOString());
@@ -60,7 +60,7 @@ export async function processCampaignJob(
 export async function executeNode(
   node: CampaignNode,
   definition: CampaignDefinition,
-  job: CampaignJobRow,
+  job: AutomationJobRow,
   env: RuntimeEnv,
 ): Promise<{ branch?: CampaignEdge["branch"]; waitUntil?: string }> {
   if (node.type === "source") return { branch: "next" };
@@ -74,7 +74,7 @@ export async function executeNode(
     return { branch: (await evaluateCondition(node, job, env)) ? "yes" : "no" };
   }
   const database = createDatabase(env.DB);
-  const engine = new CampaignEngineRepository(database);
+  const engine = new AutomationEngineRepository(database);
   if (node.type === "decision") {
     const eventType = {
       opened: "email_opened",
@@ -86,7 +86,7 @@ export async function executeNode(
     }[node.config.event];
     const found = await engine.hasContactEventSince(
       job.workspace_id,
-      job.recipient_id,
+      job.contact_id,
       eventType,
       job.entered_at,
       node.config.resourceId ?? null,
@@ -109,23 +109,23 @@ export async function executeNode(
       await createWebhookDelivery(action.endpointId, job, env);
       break;
     case "add_tag":
-      await engine.addContactTag(job.workspace_id, job.recipient_id, action.tagId, now);
+      await engine.addContactTag(job.workspace_id, job.contact_id, action.tagId, now);
       break;
     case "remove_tag":
-      await engine.removeContactTag(job.workspace_id, job.recipient_id, action.tagId);
+      await engine.removeContactTag(job.workspace_id, job.contact_id, action.tagId);
       break;
     case "add_segment":
       if (
-        await engine.addCampaignSegmentMembership(
+        await engine.addAutomationSegmentMembership(
           job.workspace_id,
           action.segmentId,
-          job.recipient_id,
+          job.contact_id,
           now,
         )
       ) {
         await recordContactEvent(database, {
           workspaceId: job.workspace_id,
-          contactId: job.recipient_id,
+          contactId: job.contact_id,
           type: "segment_joined",
           resourceType: "segment",
           resourceId: action.segmentId,
@@ -133,12 +133,12 @@ export async function executeNode(
       }
       break;
     case "remove_segment":
-      await engine.removeSegmentMembership(job.workspace_id, action.segmentId, job.recipient_id);
+      await engine.removeSegmentMembership(job.workspace_id, action.segmentId, job.contact_id);
       break;
     case "change_score":
       await engine.adjustContactScoreForEnrollment(
         job.workspace_id,
-        job.recipient_id,
+        job.contact_id,
         job.enrollment_id,
         action.amount,
         now,
@@ -152,13 +152,13 @@ export async function executeNode(
 }
 
 export async function finishNode(
-  job: CampaignJobRow,
+  job: AutomationJobRow,
   leaseId: string,
   definition: CampaignDefinition,
   branch: CampaignEdge["branch"] | undefined,
   env: RuntimeEnv,
 ): Promise<void> {
-  const engine = new CampaignEngineRepository(createDatabase(env.DB));
+  const engine = new AutomationEngineRepository(createDatabase(env.DB));
   const next = outgoingEdges(definition, job.node_id, branch ?? "next")[0];
   const now = new Date().toISOString();
   if (!next) {
@@ -170,7 +170,7 @@ export async function finishNode(
 
 export async function evaluateCondition(
   node: Extract<CampaignNode, { type: "condition" }>,
-  job: CampaignJobRow,
+  job: AutomationJobRow,
   env: RuntimeEnv,
 ): Promise<boolean> {
   const fieldMap: Record<string, unknown> = {
@@ -183,10 +183,10 @@ export async function evaluateCondition(
     ...parseJsonRecord(job.custom_fields),
   };
   if (node.config.field === "tag") {
-    const engine = new CampaignEngineRepository(createDatabase(env.DB));
+    const engine = new AutomationEngineRepository(createDatabase(env.DB));
     const tagged = await engine.contactHasTagWithSlug(
       job.workspace_id,
-      job.recipient_id,
+      job.contact_id,
       String(node.config.value ?? ""),
     );
     return compare(tagged, node.config.operator, true);
@@ -215,12 +215,12 @@ export function compare(left: unknown, operator: string, right: unknown): boolea
 }
 
 export async function updateContactField(
-  job: CampaignJobRow,
+  job: AutomationJobRow,
   field: string,
   value: unknown,
   env: RuntimeEnv,
 ): Promise<void> {
-  const engine = new CampaignEngineRepository(createDatabase(env.DB));
+  const engine = new AutomationEngineRepository(createDatabase(env.DB));
   const columns: Record<string, AutomationContactColumn> = {
     first_name: "first_name",
     last_name: "last_name",
@@ -232,7 +232,7 @@ export async function updateContactField(
   if (column) {
     await engine.updateContactColumn(
       job.workspace_id,
-      job.recipient_id,
+      job.contact_id,
       column,
       primitiveString(value),
       new Date().toISOString(),
@@ -246,7 +246,7 @@ export async function updateContactField(
   fields[field] = value;
   await engine.replaceContactCustomFields(
     job.workspace_id,
-    job.recipient_id,
+    job.contact_id,
     JSON.stringify(fields),
     new Date().toISOString(),
   );

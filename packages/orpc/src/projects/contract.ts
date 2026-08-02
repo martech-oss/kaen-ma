@@ -14,13 +14,7 @@ export const projectRowSchema = z.object({
 });
 export type ProjectRow = z.infer<typeof projectRowSchema>;
 
-export const projectResourceTypeSchema = z.enum([
-  "campaign",
-  "email",
-  "form",
-  "page",
-  "segment",
-]);
+export const projectResourceTypeSchema = z.enum(["campaign", "email", "form", "page", "segment"]);
 
 export const projectsContract = {
   list: oc

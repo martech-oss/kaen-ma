@@ -44,7 +44,7 @@ export async function getContactOptions(
       memberCount: row.memberCount,
       evaluatedAt: row.evaluatedAt,
     })),
-    accounts: rows.accounts,
+    companies: rows.accounts,
     stages: rows.stages,
   };
 }
@@ -70,7 +70,7 @@ export async function getContactProfile(
       source: row.source,
       joinedAt: row.joinedAt,
     })),
-    accounts: rows.accounts.map((row) => ({
+    companies: rows.accounts.map((row) => ({
       id: row.id,
       name: row.name,
       domain: row.domain,

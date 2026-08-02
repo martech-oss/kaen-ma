@@ -4,8 +4,8 @@ import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-o
 import { organization } from "../auth/schema";
 import { contacts } from "../contacts/schema";
 
-export const campaigns = sqliteTable(
-  "campaigns",
+export const automations = sqliteTable(
+  "automations",
   {
     id: text().primaryKey().notNull(),
     workspaceId: text("workspace_id")
@@ -20,28 +20,28 @@ export const campaigns = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    index("campaigns_workspace_status_updated_idx").on(
+    index("automations_workspace_status_updated_idx").on(
       table.workspaceId,
       table.status,
       table.updatedAt,
     ),
     check(
-      "campaigns_status_check",
+      "automations_status_check",
       sql`${table.status} IN ('draft', 'active', 'paused', 'archived')`,
     ),
   ],
 );
 
-export const campaignVersions = sqliteTable(
-  "campaign_versions",
+export const automationVersions = sqliteTable(
+  "automation_versions",
   {
     id: text().primaryKey().notNull(),
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    campaignId: text("campaign_id")
+    automationId: text("automation_id")
       .notNull()
-      .references(() => campaigns.id, { onDelete: "cascade" }),
+      .references(() => automations.id, { onDelete: "cascade" }),
     version: integer().notNull(),
     status: text().default("draft").notNull(),
     timezone: text().default("UTC").notNull(),
@@ -50,28 +50,28 @@ export const campaignVersions = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("campaign_versions_workspace_campaign_version_unique").on(
+    uniqueIndex("automation_versions_workspace_automation_version_unique").on(
       table.workspaceId,
-      table.campaignId,
+      table.automationId,
       table.version,
     ),
-    check("campaign_versions_status_check", sql`${table.status} IN ('draft', 'published')`),
+    check("automation_versions_status_check", sql`${table.status} IN ('draft', 'published')`),
   ],
 );
 
-export const campaignTriggers = sqliteTable(
-  "campaign_triggers",
+export const automationTriggers = sqliteTable(
+  "automation_triggers",
   {
-    campaignVersionId: text("campaign_version_id")
+    automationVersionId: text("automation_version_id")
       .primaryKey()
       .notNull()
-      .references(() => campaignVersions.id, { onDelete: "cascade" }),
+      .references(() => automationVersions.id, { onDelete: "cascade" }),
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    campaignId: text("campaign_id")
+    automationId: text("automation_id")
       .notNull()
-      .references(() => campaigns.id, { onDelete: "cascade" }),
+      .references(() => automations.id, { onDelete: "cascade" }),
     sourceNodeId: text("source_node_id").notNull(),
     source: text().notNull(),
     eventType: text("event_type"),
@@ -81,33 +81,33 @@ export const campaignTriggers = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [
-    index("campaign_triggers_workspace_event_idx").on(
+    index("automation_triggers_workspace_event_idx").on(
       table.workspaceId,
       table.eventType,
       table.resourceId,
     ),
-    index("campaign_triggers_source_idx").on(table.source, table.workspaceId),
+    index("automation_triggers_source_idx").on(table.source, table.workspaceId),
     check(
-      "campaign_triggers_source_check",
+      "automation_triggers_source_check",
       sql`${table.source} IN ('segment_joined', 'form_submitted', 'contact_created', 'api_event', 'webhook_event', 'contact_inactive')`,
     ),
-    check("campaign_triggers_reentry_check", sql`${table.reentry} IN ('once', 'every_time')`),
+    check("automation_triggers_reentry_check", sql`${table.reentry} IN ('once', 'every_time')`),
   ],
 );
 
-export const campaignEnrollments = sqliteTable(
-  "campaign_enrollments",
+export const automationEnrollments = sqliteTable(
+  "automation_enrollments",
   {
     id: text().primaryKey().notNull(),
     workspaceId: text("workspace_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    campaignId: text("campaign_id")
+    automationId: text("automation_id")
       .notNull()
-      .references(() => campaigns.id, { onDelete: "cascade" }),
-    campaignVersionId: text("campaign_version_id")
+      .references(() => automations.id, { onDelete: "cascade" }),
+    automationVersionId: text("automation_version_id")
       .notNull()
-      .references(() => campaignVersions.id, { onDelete: "cascade" }),
+      .references(() => automationVersions.id, { onDelete: "cascade" }),
     contactId: text("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
@@ -119,32 +119,35 @@ export const campaignEnrollments = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    index("campaign_enrollments_workspace_status_idx").on(
+    index("automation_enrollments_workspace_status_idx").on(
       table.workspaceId,
       table.status,
       table.updatedAt,
     ),
-    index("campaign_enrollments_workspace_campaign_entered_idx").on(
+    index("automation_enrollments_workspace_automation_entered_idx").on(
       table.workspaceId,
-      table.campaignId,
+      table.automationId,
       table.enteredAt,
     ),
-    index("campaign_enrollments_workspace_completed_idx").on(table.workspaceId, table.completedAt),
-    uniqueIndex("campaign_enrollment_source_unique").on(
+    index("automation_enrollments_workspace_completed_idx").on(
       table.workspaceId,
-      table.campaignId,
+      table.completedAt,
+    ),
+    uniqueIndex("automation_enrollment_source_unique").on(
+      table.workspaceId,
+      table.automationId,
       table.contactId,
       table.sourceEventId,
     ),
     check(
-      "campaign_enrollments_status_check",
+      "automation_enrollments_status_check",
       sql`${table.status} IN ('active', 'completed', 'cancelled', 'failed')`,
     ),
   ],
 );
 
-export const campaignJobs = sqliteTable(
-  "campaign_jobs",
+export const automationJobs = sqliteTable(
+  "automation_jobs",
   {
     id: text().primaryKey().notNull(),
     workspaceId: text("workspace_id")
@@ -152,12 +155,14 @@ export const campaignJobs = sqliteTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     enrollmentId: text("enrollment_id")
       .notNull()
-      .references(() => campaignEnrollments.id, { onDelete: "cascade" }),
-    campaignVersionId: text("campaign_version_id")
+      .references(() => automationEnrollments.id, { onDelete: "cascade" }),
+    automationVersionId: text("automation_version_id")
       .notNull()
-      .references(() => campaignVersions.id, { onDelete: "cascade" }),
+      .references(() => automationVersions.id, { onDelete: "cascade" }),
     nodeId: text("node_id").notNull(),
-    recipientId: text("recipient_id").notNull(),
+    contactId: text("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
     idempotencyKey: text("idempotency_key").notNull(),
     payload: text().default("{}").notNull(),
     status: text().default("pending").notNull(),
@@ -170,19 +175,32 @@ export const campaignJobs = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    index("campaign_jobs_workspace_enrollment_idx").on(
+    index("automation_jobs_workspace_enrollment_idx").on(
       table.workspaceId,
       table.enrollmentId,
       table.createdAt,
     ),
-    index("campaign_jobs_due_claim_idx").on(table.status, table.dueAt, table.leaseUntil),
-    uniqueIndex("campaign_jobs_workspace_idempotency_unique").on(
+    // Deliberately NOT workspace-prefixed: the cron claims due jobs across
+    // every workspace in one fair-queueing scan (see
+    // AutomationEngineRepository.workspacesWithDueJobs), so a global
+    // (status, due_at, lease_until) index is the correct shape here.
+    index("automation_jobs_due_claim_idx").on(table.status, table.dueAt, table.leaseUntil),
+    uniqueIndex("automation_jobs_workspace_idempotency_unique").on(
       table.workspaceId,
       table.idempotencyKey,
     ),
     check(
-      "campaign_jobs_status_check",
+      "automation_jobs_status_check",
       sql`${table.status} IN ('pending', 'leased', 'queued', 'running', 'succeeded', 'failed', 'cancelled')`,
     ),
   ],
 );
+
+// draftVersionId/publishedVersionId are FK-shaped but left unconstrained: a
+// real FK would create automations<->automationVersions as a two-table
+// reference cycle at both the DDL and Drizzle-type level (each version also
+// points back at its automation). SQLite requires such cycles to be wired
+// with `PRAGMA defer_foreign_keys` around every write that touches both
+// tables (publish already does a 3-row transaction across them); enforcing
+// it store-side isn't worth that complexity when application code is the
+// only writer of these two columns.

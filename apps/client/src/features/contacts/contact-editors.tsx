@@ -86,7 +86,7 @@ export function AccountEditor({
   onChanged,
 }: {
   contactId: string;
-  accounts: ContactProfile["accounts"];
+  accounts: ContactProfile["companies"];
   options: AccountOption[];
   disabled: boolean;
   onChanged: () => Promise<void>;
@@ -101,7 +101,7 @@ export function AccountEditor({
     setBusy(true);
     setError("");
     try {
-      await orpc.accounts.assignContact({
+      await orpc.companies.assignContact({
         id: selectedId,
         contactId,
         isPrimary: accounts.length === 0,
@@ -119,7 +119,7 @@ export function AccountEditor({
     setBusy(true);
     setError("");
     try {
-      await orpc.accounts.removeContact({ id: accountId, contactId });
+      await orpc.companies.removeContact({ id: accountId, contactId });
       await onChanged();
     } catch (caught) {
       setError(

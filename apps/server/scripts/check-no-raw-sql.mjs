@@ -29,7 +29,9 @@ const offenders = listTsFiles(root)
   .map(({ path }) => path.slice(root.length + 1));
 
 if (offenders.length > 0) {
-  console.error("Raw .prepare( calls found in apps/server/src (SQL must live in @kaenma/database):");
+  console.error(
+    "Raw .prepare( calls found in apps/server/src (SQL must live in @kaenma/database):",
+  );
   for (const path of offenders) console.error(`  - ${path}`);
   process.exit(1);
 }

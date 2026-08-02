@@ -33,13 +33,13 @@ export const segmentOptionSchema = z.object({
 });
 export type SegmentOption = z.infer<typeof segmentOptionSchema>;
 
-export const accountOptionSchema = z.object({
+export const companyOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   domain: z.string().nullable(),
   contactCount: z.number().int().nonnegative(),
 });
-export type AccountOption = z.infer<typeof accountOptionSchema>;
+export type CompanyOption = z.infer<typeof companyOptionSchema>;
 
 export const stageCountSchema = z.object({
   stage: z.string(),
@@ -51,7 +51,7 @@ export const contactOptionsSchema = z.object({
   tags: z.array(tagSchema),
   lists: z.array(contactListSchema),
   segments: z.array(segmentOptionSchema),
-  accounts: z.array(accountOptionSchema),
+  companies: z.array(companyOptionSchema),
   stages: z.array(stageCountSchema),
 });
 export type ContactOptions = z.infer<typeof contactOptionsSchema>;
@@ -73,7 +73,7 @@ export const contactProfileSchema = z.object({
       joinedAt: z.string(),
     }),
   ),
-  accounts: z.array(
+  companies: z.array(
     z.object({
       id: z.string(),
       name: z.string(),

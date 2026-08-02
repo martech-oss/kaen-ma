@@ -12,7 +12,7 @@ type SegmentFilterInput = Pick<
 interface SegmentFilterResources {
   tags: ReadonlyArray<{ id: string; slug: string }>;
   lists: ReadonlyArray<{ id: string; slug: string }>;
-  accounts: ReadonlyArray<{ id: string; name: string }>;
+  companies: ReadonlyArray<{ id: string; name: string }>;
 }
 
 /** Converts the currently visible contact filters into a reusable dynamic segment. */
@@ -49,8 +49,8 @@ export function createSegmentFilter(
   const list = resources.lists.find((item) => item.id === input.listId);
   addTextCondition(children, "list", list?.slug);
 
-  const account = resources.accounts.find((item) => item.id === input.accountId);
-  addTextCondition(children, "company", account?.name);
+  const company = resources.companies.find((item) => item.id === input.accountId);
+  addTextCondition(children, "company", company?.name);
 
   if (children.length === 0) return null;
   return children.length === 1 ? children[0]! : { kind: "group", combinator: "and", children };

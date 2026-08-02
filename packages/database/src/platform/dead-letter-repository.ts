@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 
-import { campaignJobs } from "../automations/schema";
+import { automationJobs } from "../automations/schema";
 import { createDatabase, type DatabaseSource } from "../client";
 import { deliveries } from "../messaging/schema";
 import { deadLetters } from "./schema";
@@ -21,9 +21,9 @@ export class DeadLetterRepository {
 
   public async findJobWorkspace(jobId: string): Promise<string | null> {
     const [row] = await createDatabase(this.database)
-      .orm.select({ workspaceId: campaignJobs.workspaceId })
-      .from(campaignJobs)
-      .where(eq(campaignJobs.id, jobId))
+      .orm.select({ workspaceId: automationJobs.workspaceId })
+      .from(automationJobs)
+      .where(eq(automationJobs.id, jobId))
       .limit(1);
     return row?.workspaceId ?? null;
   }

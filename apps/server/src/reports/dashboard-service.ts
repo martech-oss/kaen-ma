@@ -10,7 +10,7 @@ export async function getDashboard(
   const data = await new ReportsRepository(database).dashboardSummary(workspaceId);
   return {
     contacts: { count: numericValue(data.contacts["count"]) },
-    campaigns: { count: numericValue(data.campaigns["count"]) },
+    campaigns: { count: numericValue(data.automations["count"]) },
     deliveries: {
       sent: numericValue(data.deliveries["sent"]),
       delivered: numericValue(data.deliveries["delivered"]),

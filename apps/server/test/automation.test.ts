@@ -50,9 +50,9 @@ describe("Automation flows", () => {
     });
     const enrollment = await env.DB.prepare(
       `SELECT ce.status, ce.current_node_id, ce.source_event_id, cj.status AS job_status
-       FROM campaign_enrollments ce
-       JOIN campaign_jobs cj ON cj.enrollment_id = ce.id
-       WHERE ce.workspace_id = ? AND ce.campaign_id = ? AND ce.contact_id = ?`,
+       FROM automation_enrollments ce
+       JOIN automation_jobs cj ON cj.enrollment_id = ce.id
+       WHERE ce.workspace_id = ? AND ce.automation_id = ? AND ce.contact_id = ?`,
     )
       .bind(workspaceId, campaign.id, contact.id)
       .first<{
@@ -93,8 +93,8 @@ describe("Automation flows", () => {
       expect(recorded).toMatchObject({ enrollmentCount: 1 });
     }
     const cartEnrollments = await env.DB.prepare(
-      `SELECT COUNT(*) AS count FROM campaign_enrollments
-       WHERE workspace_id = ? AND campaign_id = ? AND contact_id = ?`,
+      `SELECT COUNT(*) AS count FROM automation_enrollments
+       WHERE workspace_id = ? AND automation_id = ? AND contact_id = ?`,
     )
       .bind(workspaceId, cartCampaignId, contact.id)
       .first<{ count: number }>();
@@ -122,8 +122,8 @@ describe("Automation flows", () => {
       await enrollInactiveContacts(createDatabase(env.DB), new Date("2026-07-30T00:01:00.000Z")),
     ).toBe(0);
     const inactivityEnrollments = await env.DB.prepare(
-      `SELECT COUNT(*) AS count FROM campaign_enrollments
-       WHERE workspace_id = ? AND campaign_id = ? AND contact_id = ?`,
+      `SELECT COUNT(*) AS count FROM automation_enrollments
+       WHERE workspace_id = ? AND automation_id = ? AND contact_id = ?`,
     )
       .bind(workspaceId, inactivityCampaignId, contact.id)
       .first<{ count: number }>();

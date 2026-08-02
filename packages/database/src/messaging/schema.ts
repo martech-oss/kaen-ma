@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import { organization } from "../auth/schema";
-import { campaignEnrollments } from "../automations/schema";
+import { automationEnrollments } from "../automations/schema";
 import { broadcasts } from "../broadcasts/schema";
 import { subscriptionTopics } from "../consent/schema";
 import { contacts } from "../contacts/schema";
@@ -80,7 +80,7 @@ export const deliveries = sqliteTable(
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
     contactId: text("contact_id").references(() => contacts.id, { onDelete: "set null" }),
-    enrollmentId: text("enrollment_id").references(() => campaignEnrollments.id, {
+    enrollmentId: text("enrollment_id").references(() => automationEnrollments.id, {
       onDelete: "set null",
     }),
     broadcastId: text("broadcast_id").references(() => broadcasts.id, { onDelete: "set null" }),

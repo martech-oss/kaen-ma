@@ -1,12 +1,12 @@
-import { CampaignRepository, type KaenmaDatabase } from "@kaenma/database";
+import { AutomationRepository, type KaenmaDatabase } from "@kaenma/database";
 import type { CampaignRow } from "@kaenma/orpc";
 
 export async function listCampaigns(
   database: KaenmaDatabase,
   workspaceId: string,
 ): Promise<CampaignRow[]> {
-  const repository = new CampaignRepository(database, { workspaceId });
-  const rows = await repository.listCampaignsWithCounts();
+  const repository = new AutomationRepository(database, { workspaceId });
+  const rows = await repository.listAutomationsWithCounts();
   return rows.map((row) => ({
     id: row.id,
     name: row.name,

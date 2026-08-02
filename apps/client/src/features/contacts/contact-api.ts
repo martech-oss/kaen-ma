@@ -3,14 +3,21 @@ import { queryOptions } from "@tanstack/react-query";
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type { ContactListInput } from "@kaenma/orpc";
 import type {
-  AccountOption,
+  CompanyOption,
   ContactList as ListOption,
   ContactOptions,
   SegmentOption,
   Tag as TagOption,
 } from "@kaenma/orpc";
 
-export type { AccountOption, ContactOptions, ListOption, SegmentOption, TagOption };
+export type {
+  CompanyOption,
+  CompanyOption as AccountOption,
+  ContactOptions,
+  ListOption,
+  SegmentOption,
+  TagOption,
+};
 
 export const contactOptionsQueryKey = ["contacts", "options"] as const;
 
@@ -90,7 +97,7 @@ export function buildContactSearchInput(search: ContactSearch): ContactListInput
     ...(search.stage ? { stage: search.stage } : {}),
     ...(search.tagId ? { tagId: search.tagId } : {}),
     ...(search.listId ? { listId: search.listId } : {}),
-    ...(search.accountId ? { accountId: search.accountId } : {}),
+    ...(search.accountId ? { companyId: search.accountId } : {}),
     ...(search.segmentId ? { segmentId: search.segmentId } : {}),
     ...(scoreMin === undefined ? {} : { scoreMin }),
     ...(scoreMax === undefined ? {} : { scoreMax }),

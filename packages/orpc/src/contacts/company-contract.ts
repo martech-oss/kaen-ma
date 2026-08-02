@@ -1,20 +1,19 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import {
-  accountCreateSchema,
-  accountDetailSchema,
-  accountSchema,
-  accountSummarySchema,
-} from "./company-dto";
-
 import { workspaceErrors } from "../shared/errors";
 import {
-  accountAssignContactInputSchema,
-  accountGetInputSchema,
-  accountListInputSchema,
-  accountRemoveContactInputSchema,
-  accountUpdateInputSchema,
+  companyCreateSchema,
+  companyDetailSchema,
+  companySchema,
+  companySummarySchema,
+} from "./company-dto";
+import {
+  companyAssignContactInputSchema,
+  companyGetInputSchema,
+  companyListInputSchema,
+  companyRemoveContactInputSchema,
+  companyUpdateInputSchema,
 } from "./company-schema";
 
 const forbidden = {
@@ -25,62 +24,62 @@ const forbidden = {
 } as const;
 
 const notFound = {
-  ACCOUNT_NOT_FOUND: {
+  COMPANY_NOT_FOUND: {
     status: 404,
-    message: "アカウントが見つかりません",
+    message: "会社が見つかりません",
   },
 } as const;
 
 const conflict = {
-  ACCOUNT_CONFLICT: {
+  COMPANY_CONFLICT: {
     status: 409,
-    message: "同じドメインのアカウントが既に存在します",
+    message: "同じドメインの会社が既に存在します",
   },
 } as const;
 
-export const accountsContract = {
+export const companiesContract = {
   list: oc
-    .route({ method: "GET", path: "/accounts" })
+    .route({ method: "GET", path: "/companies" })
     .errors(workspaceErrors)
-    .input(accountListInputSchema)
-    .output(z.array(accountSummarySchema)),
+    .input(companyListInputSchema)
+    .output(z.array(companySummarySchema)),
   get: oc
-    .route({ method: "GET", path: "/accounts/{id}" })
+    .route({ method: "GET", path: "/companies/{id}" })
     .errors({ ...workspaceErrors, ...notFound })
-    .input(accountGetInputSchema)
-    .output(accountDetailSchema),
+    .input(companyGetInputSchema)
+    .output(companyDetailSchema),
   create: oc
-    .route({ method: "POST", path: "/accounts", successStatus: 201 })
+    .route({ method: "POST", path: "/companies", successStatus: 201 })
     .errors({ ...workspaceErrors, ...forbidden, ...conflict })
-    .input(accountCreateSchema)
-    .output(accountSchema),
+    .input(companyCreateSchema)
+    .output(companySchema),
   update: oc
-    .route({ method: "PATCH", path: "/accounts/{id}" })
+    .route({ method: "PATCH", path: "/companies/{id}" })
     .errors({ ...workspaceErrors, ...forbidden, ...notFound, ...conflict })
-    .input(accountUpdateInputSchema)
-    .output(accountSchema),
+    .input(companyUpdateInputSchema)
+    .output(companySchema),
   assignContact: oc
-    .route({ method: "POST", path: "/accounts/{id}/contacts", successStatus: 201 })
+    .route({ method: "POST", path: "/companies/{id}/contacts", successStatus: 201 })
     .errors({
       ...workspaceErrors,
       ...forbidden,
-      ACCOUNT_CONTACT_NOT_FOUND: {
+      COMPANY_CONTACT_NOT_FOUND: {
         status: 404,
-        message: "アカウントまたは連絡先が見つかりません",
+        message: "会社または連絡先が見つかりません",
       },
     })
-    .input(accountAssignContactInputSchema)
+    .input(companyAssignContactInputSchema)
     .output(z.object({ assigned: z.literal(true) })),
   removeContact: oc
-    .route({ method: "DELETE", path: "/accounts/{id}/contacts/{contactId}" })
+    .route({ method: "DELETE", path: "/companies/{id}/contacts/{contactId}" })
     .errors({
       ...workspaceErrors,
       ...forbidden,
-      ACCOUNT_CONTACT_NOT_FOUND: {
+      COMPANY_CONTACT_NOT_FOUND: {
         status: 404,
-        message: "アカウントとの関連が見つかりません",
+        message: "会社との関連が見つかりません",
       },
     })
-    .input(accountRemoveContactInputSchema)
+    .input(companyRemoveContactInputSchema)
     .output(z.object({ removed: z.literal(true) })),
 };

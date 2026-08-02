@@ -83,21 +83,21 @@ describe("Reporting", () => {
         createdAt: completedAt,
       },
     ]);
-    // raw seed: migrate in P6/P7 (campaigns, deliveries, deals, webforms, site messages)
+    // raw seed: migrate in P6/P7 (deliveries, deals, webforms, site messages)
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO campaigns
+        `INSERT INTO automations
          (id, workspace_id, name, description, status, created_at, updated_at)
          VALUES (?, ?, 'Welcome flow', '', 'active', ?, ?)`,
       ).bind(campaignId, workspaceId, at, at),
       env.DB.prepare(
-        `INSERT INTO campaign_versions
-         (id, workspace_id, campaign_id, version, status, timezone, graph, published_at, created_at)
+        `INSERT INTO automation_versions
+         (id, workspace_id, automation_id, version, status, timezone, graph, published_at, created_at)
          VALUES (?, ?, ?, 1, 'published', 'Asia/Tokyo', '{"nodes":[],"edges":[]}', ?, ?)`,
       ).bind(campaignVersionId, workspaceId, campaignId, at, at),
       env.DB.prepare(
-        `INSERT INTO campaign_enrollments
-         (id, workspace_id, campaign_id, campaign_version_id, contact_id, status,
+        `INSERT INTO automation_enrollments
+         (id, workspace_id, automation_id, automation_version_id, contact_id, status,
           entered_at, completed_at, updated_at)
          VALUES (?, ?, ?, ?, ?, 'completed', ?, ?, ?)`,
       ).bind(

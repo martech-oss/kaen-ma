@@ -48,7 +48,7 @@ export const projectItems = sqliteTable(
     }),
     check(
       "project_items_resource_type_check",
-      sql`${table.resourceType} IN ('campaign', 'email', 'form', 'page', 'segment')`,
+      sql`${table.resourceType} IN ('automation', 'email', 'form', 'page', 'segment')`,
     ),
   ],
 );
@@ -141,12 +141,15 @@ export const landingPages = sqliteTable(
     name: text().notNull(),
     slug: text().notNull(),
     status: text().default("draft").notNull(),
+    // Unconstrained for the same reason as automations.draftVersionId: a real
+    // FK would make landingPages<->landingPageVersions a two-table reference
+    // cycle (each version also points back at its page).
     currentVersionId: text("current_version_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("pages_workspace_slug_unique").on(table.workspaceId, table.slug),
+    uniqueIndex("landing_pages_workspace_slug_unique").on(table.workspaceId, table.slug),
     check("landing_pages_status_check", sql`${table.status} IN ('draft', 'published', 'archived')`),
   ],
 );
@@ -167,7 +170,7 @@ export const landingPageVersions = sqliteTable(
     createdAt: text("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("page_versions_workspace_page_version_unique").on(
+    uniqueIndex("landing_page_versions_workspace_page_version_unique").on(
       table.workspaceId,
       table.pageId,
       table.version,

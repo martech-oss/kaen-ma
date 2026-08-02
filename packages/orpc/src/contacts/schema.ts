@@ -15,7 +15,7 @@ export const contactTagSchema = z.object({
 
 const contactListChipSchema = contactTagSchema;
 
-export const contactAccountSchema = z.object({
+export const contactCompanySchema = z.object({
   id: z.string(),
   name: z.string(),
   domain: z.string().nullable(),
@@ -26,7 +26,7 @@ export const contactAccountSchema = z.object({
 export const contactSummarySchema = contactSchema.extend({
   tags: z.array(contactTagSchema),
   lists: z.array(contactListChipSchema),
-  accounts: z.array(contactAccountSchema),
+  companies: z.array(contactCompanySchema),
 });
 
 export type ContactSummary = z.infer<typeof contactSummarySchema>;
@@ -39,7 +39,7 @@ export const contactListInputSchema = z.object({
   stage: z.string().optional(),
   tagId: z.string().optional(),
   listId: z.string().optional(),
-  accountId: z.string().optional(),
+  companyId: z.string().optional(),
   segmentId: z.string().optional(),
   scoreMin: z.number().optional(),
   scoreMax: z.number().optional(),

@@ -93,10 +93,10 @@ export function DealBoard({
                       </CardAction>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-2 text-xs text-muted-foreground">
-                      {deal.accountName ? (
+                      {deal.companyName ? (
                         <span className="flex items-center gap-1.5">
                           <UsersRound className="size-3.5" />
-                          {deal.accountName}
+                          {deal.companyName}
                         </span>
                       ) : null}
                       {deal.ownerName ? (

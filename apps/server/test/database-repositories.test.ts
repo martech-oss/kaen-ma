@@ -3,13 +3,13 @@ import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import {
-  AccountRepository,
+  CompanyRepository,
   ContactRepository,
   auditLogs,
-  campaignEnrollments,
-  campaignJobs,
-  campaigns,
-  campaignVersions,
+  automationEnrollments,
+  automationJobs,
+  automations,
+  automationVersions,
   claimDueJobs,
   companyContacts,
   contactListMemberships,
@@ -106,13 +106,13 @@ describe("contact and account repositories", () => {
   it("filters through relationships and excludes archived contacts from account totals", async () => {
     const context = await seedWorkspace("relations");
     const contactRepository = new ContactRepository(env.DB, context);
-    const accountRepository = new AccountRepository(env.DB, context);
+    const accountRepository = new CompanyRepository(env.DB, context);
     const contact = await contactRepository.createContact({
       email: "related@example.com",
       stage: "customer",
       customFields: {},
     });
-    const account = await accountRepository.createAccount({ name: "Related Company" });
+    const account = await accountRepository.createCompany({ name: "Related Company" });
     const now = new Date().toISOString();
     const tagId = uuidv7();
     const listId = uuidv7();
@@ -174,7 +174,7 @@ describe("contact and account repositories", () => {
     ]);
 
     for (const filter of [
-      { accountId: account.id },
+      { companyId: account.id },
       { tagId },
       { listId },
       { segmentId },
@@ -185,13 +185,13 @@ describe("contact and account repositories", () => {
         total: 1,
       });
     }
-    await expect(accountRepository.listAccounts({})).resolves.toEqual([
+    await expect(accountRepository.listCompanies({})).resolves.toEqual([
       expect.objectContaining({ id: account.id, contactCount: 1 }),
     ]);
 
     await expect(contactRepository.archiveContact(contact.id)).resolves.toBe(true);
     await expect(contactRepository.archiveContact(contact.id)).resolves.toBe(false);
-    await expect(accountRepository.listAccounts({})).resolves.toEqual([
+    await expect(accountRepository.listCompanies({})).resolves.toEqual([
       expect.objectContaining({ id: account.id, contactCount: 0 }),
     ]);
     await expect(contactRepository.restoreContact(contact.id)).resolves.toBe(true);
@@ -299,8 +299,8 @@ describe("cross-cutting repositories", () => {
     );
     expect(claimed).toEqual([{ id: firstDue, leaseId: expect.any(String) }]);
 
-    const stored = await database().orm.query.campaignJobs.findFirst({
-      where: eq(campaignJobs.id, firstDue),
+    const stored = await database().orm.query.automationJobs.findFirst({
+      where: eq(automationJobs.id, firstDue),
     });
     expect(stored).toMatchObject({
       status: "leased",
@@ -368,7 +368,7 @@ async function seedCampaignJob(
     updatedAt: now,
   });
   await database()
-    .orm.insert(campaigns)
+    .orm.insert(automations)
     .values({
       id: campaignId,
       workspaceId: context.workspaceId,
@@ -377,35 +377,35 @@ async function seedCampaignJob(
       createdAt: now,
       updatedAt: now,
     });
-  await database().orm.insert(campaignVersions).values({
+  await database().orm.insert(automationVersions).values({
     id: versionId,
     workspaceId: context.workspaceId,
-    campaignId,
+    automationId: campaignId,
     version: 1,
     status: "published",
     timezone: "UTC",
     graph: "{}",
     createdAt: now,
   });
-  await database().orm.insert(campaignEnrollments).values({
+  await database().orm.insert(automationEnrollments).values({
     id: enrollmentId,
     workspaceId: context.workspaceId,
-    campaignId,
-    campaignVersionId: versionId,
+    automationId: campaignId,
+    automationVersionId: versionId,
     contactId,
     status: "active",
     enteredAt: now,
     updatedAt: now,
   });
   await database()
-    .orm.insert(campaignJobs)
+    .orm.insert(automationJobs)
     .values({
       id: jobId,
       workspaceId: context.workspaceId,
       enrollmentId,
-      campaignVersionId: versionId,
+      automationVersionId: versionId,
       nodeId: "node-1",
-      recipientId: contactId,
+      contactId,
       idempotencyKey: `job-${jobId}`,
       payload: "{}",
       status: "pending",

@@ -72,7 +72,7 @@ export function DealForm({
         status: getFormString(form, "status") as DealStatus,
         ownerUserId: getFormString(form, "ownerUserId") || null,
         contactId: getFormString(form, "contactId") || null,
-        accountId: getFormString(form, "accountId") || null,
+        companyId: getFormString(form, "companyId") || null,
         expectedCloseDate: getFormString(form, "expectedCloseDate") || null,
         description: getFormString(form, "description").trim(),
       });
@@ -170,15 +170,11 @@ export function DealForm({
               </FormSelectOption>
             ))}
           </FormNativeSelect>
-          <FormNativeSelect
-            label="アカウント"
-            name="accountId"
-            defaultValue={deal?.accountId ?? ""}
-          >
+          <FormNativeSelect label="会社" name="companyId" defaultValue={deal?.companyId ?? ""}>
             <FormSelectOption value="">未設定</FormSelectOption>
-            {options.accounts.map((account) => (
-              <FormSelectOption key={account.id} value={account.id}>
-                {account.name}
+            {options.companies.map((company) => (
+              <FormSelectOption key={company.id} value={company.id}>
+                {company.name}
               </FormSelectOption>
             ))}
           </FormNativeSelect>

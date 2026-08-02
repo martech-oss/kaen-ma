@@ -31,7 +31,7 @@ export type {
 };
 
 export type DealContactOption = DealOptions["contacts"][number];
-export type DealAccountOption = DealOptions["accounts"][number];
+export type DealAccountOption = DealOptions["companies"][number];
 export type DealMemberOption = DealOptions["members"][number];
 export type DealPipeline = DealOptions["pipelines"][number];
 export type DealListSummary = DealListData["summary"];

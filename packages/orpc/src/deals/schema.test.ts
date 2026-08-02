@@ -17,7 +17,7 @@ describe("deal schemas", () => {
     currency: "jpy",
     ownerUserId: null,
     contactId: null,
-    accountId: null,
+    companyId: null,
     expectedCloseDate: "2026-09-30",
     description: "導入条件を確認中",
   };

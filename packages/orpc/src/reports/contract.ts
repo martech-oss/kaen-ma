@@ -1,6 +1,7 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
+import { workspaceErrors } from "../shared/errors";
 import {
   automationsReportSchema,
   contactsReportSchema,
@@ -9,8 +10,6 @@ import {
   reportDateRangeSchema,
   siteReportSchema,
 } from "./schema";
-
-import { workspaceErrors } from "../shared/errors";
 
 /** Reports are analyst-and-above; the range is validated by the shared schema. */
 const analystErrors = {

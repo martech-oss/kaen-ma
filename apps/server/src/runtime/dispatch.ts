@@ -2,7 +2,7 @@ import { PermanentChannelError } from "@kaenma/channels";
 import { retryDelaySeconds } from "@kaenma/core";
 import {
   BroadcastWorkerRepository,
-  CampaignEngineRepository,
+  AutomationEngineRepository,
   claimDueJobs,
   createDatabase,
   MessagingWorkerRepository,
@@ -35,7 +35,7 @@ export async function scheduled(
   await enrollInactiveContacts(database);
   const now = new Date().toISOString();
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();
-  const engine = new CampaignEngineRepository(database);
+  const engine = new AutomationEngineRepository(database);
   const workspaces = await engine.workspacesWithDueJobs(now, 50);
   const messages: Array<{ body: KaenmaQueueMessage }> = [];
   for (const workspace of workspaces) {

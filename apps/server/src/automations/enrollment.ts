@@ -1,6 +1,6 @@
 import {
-  CampaignEngineRepository,
-  CampaignRepository,
+  AutomationEngineRepository,
+  AutomationRepository,
   type KaenmaDatabase,
 } from "@kaenma/database";
 import type { CampaignDefinition } from "@kaenma/orpc";
@@ -13,9 +13,9 @@ export interface ContactEvent {
   resourceId?: string | null;
 }
 
-interface CampaignTriggerRef {
-  campaignVersionId: string;
-  campaignId: string;
+interface AutomationTriggerRef {
+  automationVersionId: string;
+  automationId: string;
   sourceNodeId: string;
   reentry: string;
 }
@@ -29,7 +29,7 @@ export async function enrollAutomationsForEvent(
   database: KaenmaDatabase,
   event: ContactEvent,
 ): Promise<EnrollmentResult[]> {
-  const repository = new CampaignRepository(database, { workspaceId: event.workspaceId });
+  const repository = new AutomationRepository(database, { workspaceId: event.workspaceId });
   const triggers = await repository.listActiveTriggersForEvent(
     event.type,
     event.resourceId ?? null,
@@ -51,15 +51,15 @@ export async function enrollInactiveContacts(
   now = new Date(),
   limit = 200,
 ): Promise<number> {
-  const engine = new CampaignEngineRepository(database);
+  const engine = new AutomationEngineRepository(database);
   const candidates = await engine.listInactiveEnrollmentCandidates(now.toISOString(), limit);
 
   let enrolled = 0;
   for (const candidate of candidates) {
-    const repository = new CampaignRepository(database, { workspaceId: candidate.workspaceId });
+    const repository = new AutomationRepository(database, { workspaceId: candidate.workspaceId });
     const result = await enrollFromTrigger(repository, candidate, {
       contactId: candidate.contactId,
-      sourceEventId: `inactive:${candidate.campaignVersionId}:${candidate.contactId}`,
+      sourceEventId: `inactive:${candidate.automationVersionId}:${candidate.contactId}`,
     });
     if (result) enrolled += 1;
   }
@@ -77,21 +77,21 @@ export async function enrollContactManually(
   database: KaenmaDatabase,
   input: {
     workspaceId: string;
-    campaignId: string;
+    automationId: string;
     contactId: string;
     sourceEventId: string;
   },
 ): Promise<ManualEnrollOutcome> {
-  const repository = new CampaignRepository(database, { workspaceId: input.workspaceId });
-  const campaign = await repository.findActivePublishedCampaign(input.campaignId);
-  if (!campaign) return { kind: "not_active" };
-  const graph = JSON.parse(campaign.graph) as CampaignDefinition;
+  const repository = new AutomationRepository(database, { workspaceId: input.workspaceId });
+  const automation = await repository.findActivePublishedAutomation(input.automationId);
+  if (!automation) return { kind: "not_active" };
+  const graph = JSON.parse(automation.graph) as CampaignDefinition;
   const source = graph.nodes.find((node) => node.type === "source");
   if (!source) return { kind: "source_missing" };
-  const result = await enrollPublishedCampaign(database, {
+  const result = await enrollPublishedAutomation(database, {
     workspaceId: input.workspaceId,
-    campaignId: input.campaignId,
-    campaignVersionId: campaign.publishedVersionId,
+    automationId: input.automationId,
+    automationVersionId: automation.publishedVersionId,
     contactId: input.contactId,
     sourceNodeId: source.id,
     sourceEventId: input.sourceEventId,
@@ -100,12 +100,12 @@ export async function enrollContactManually(
   return { kind: "enrolled", result };
 }
 
-export async function enrollPublishedCampaign(
+export async function enrollPublishedAutomation(
   database: KaenmaDatabase,
   input: {
     workspaceId: string;
-    campaignId: string;
-    campaignVersionId: string;
+    automationId: string;
+    automationVersionId: string;
     contactId: string;
     sourceNodeId: string;
     sourceEventId: string;
@@ -113,10 +113,10 @@ export async function enrollPublishedCampaign(
   },
 ): Promise<EnrollmentResult | null> {
   return enrollFromTrigger(
-    new CampaignRepository(database, { workspaceId: input.workspaceId }),
+    new AutomationRepository(database, { workspaceId: input.workspaceId }),
     {
-      campaignId: input.campaignId,
-      campaignVersionId: input.campaignVersionId,
+      automationId: input.automationId,
+      automationVersionId: input.automationVersionId,
       sourceNodeId: input.sourceNodeId,
       reentry: input.reentry ?? "every_time",
     },
@@ -128,8 +128,8 @@ export async function enrollPublishedCampaign(
 }
 
 async function enrollFromTrigger(
-  repository: CampaignRepository,
-  trigger: CampaignTriggerRef,
+  repository: AutomationRepository,
+  trigger: AutomationTriggerRef,
   input: {
     contactId: string;
     sourceEventId: string;
@@ -139,8 +139,8 @@ async function enrollFromTrigger(
   // source event id, which trips the enrollment unique index on any repeat.
   const sourceEventId = trigger.reentry === "once" ? "once" : input.sourceEventId;
   return repository.enrollContact({
-    campaignId: trigger.campaignId,
-    campaignVersionId: trigger.campaignVersionId,
+    automationId: trigger.automationId,
+    automationVersionId: trigger.automationVersionId,
     sourceNodeId: trigger.sourceNodeId,
     contactId: input.contactId,
     sourceEventId,

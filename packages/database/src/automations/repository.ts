@@ -24,15 +24,15 @@ import { emailTemplates } from "../messaging/schema";
 import { segmentMemberships } from "../segments/schema";
 import { uuidv7 } from "../shared/uuid";
 import {
-  campaignEnrollments,
-  campaignJobs,
-  campaigns,
-  campaignTriggers,
-  campaignVersions,
+  automationEnrollments,
+  automationJobs,
+  automations,
+  automationTriggers,
+  automationVersions,
 } from "./schema";
 
-/** campaign_jobs.status vocabulary (mirrors the table CHECK constraint). */
-export type CampaignJobStatus =
+/** automation_jobs.status vocabulary (mirrors the table CHECK constraint). */
+export type AutomationJobStatus =
   | "pending"
   | "leased"
   | "queued"
@@ -42,7 +42,7 @@ export type CampaignJobStatus =
   | "cancelled";
 
 /**
- * campaign_jobs speaks an older dialect of the shared job state machine in
+ * automation_jobs speaks an older dialect of the shared job state machine in
  * `@kaenma/core`: `running`/`succeeded` are the machine's
  * `processing`/`completed`.
  */
@@ -54,7 +54,7 @@ const MACHINE_STATUS = {
   succeeded: "completed",
   failed: "failed",
   cancelled: "cancelled",
-} as const satisfies Record<CampaignJobStatus, JobStatus>;
+} as const satisfies Record<AutomationJobStatus, JobStatus>;
 
 /**
  * Machine hops the table stores no row for. A claimed job is put on the
@@ -69,13 +69,13 @@ const COLLAPSED_HOPS: Partial<Record<`${JobStatus}->${JobStatus}`, readonly JobS
 };
 
 /**
- * Routes a campaign_jobs status write through the shared job state machine.
+ * Routes a automation_jobs status write through the shared job state machine.
  * Every hop of the (possibly collapsed) machine path is asserted, so an
  * UPDATE that would skip or reverse the machine throws before touching the
  * database. Writes stay conditional (`WHERE status = expected`) on top of
  * this, preserving the optimistic-concurrency behavior the worker relies on.
  */
-function assertCampaignJobTransition(from: CampaignJobStatus, to: CampaignJobStatus): void {
+function assertAutomationJobTransition(from: AutomationJobStatus, to: AutomationJobStatus): void {
   const source = MACHINE_STATUS[from];
   const target = MACHINE_STATUS[to];
   const path: readonly JobStatus[] = [
@@ -89,18 +89,18 @@ function assertCampaignJobTransition(from: CampaignJobStatus, to: CampaignJobSta
 }
 
 /**
- * One executable campaign job joined with the graph, enrollment and contact
+ * One executable automation job joined with the graph, enrollment and contact
  * data the worker needs. Field names are snake_case because this row is the
  * long-standing contract of the automation worker, also consumed by the
  * messaging delivery worker.
  */
-export interface CampaignJobRow {
+export interface AutomationJobRow {
   id: string;
   workspace_id: string;
   enrollment_id: string;
-  campaign_version_id: string;
+  automation_version_id: string;
   node_id: string;
-  recipient_id: string;
+  contact_id: string;
   idempotency_key: string;
   payload: string;
   status: string;
@@ -118,7 +118,7 @@ export interface CampaignJobRow {
   custom_fields: string;
 }
 
-/** Contact columns a campaign "update_field" action may write directly. */
+/** Contact columns an automation "update_field" action may write directly. */
 const AUTOMATION_CONTACT_COLUMNS = {
   first_name: "firstName",
   last_name: "lastName",
@@ -130,16 +130,16 @@ const AUTOMATION_CONTACT_COLUMNS = {
 export type AutomationContactColumn = keyof typeof AUTOMATION_CONTACT_COLUMNS;
 
 /**
- * Worker-side store for the campaign engine. Deliberately unscoped: the
+ * Worker-side store for the automation engine. Deliberately unscoped: the
  * dispatcher scans and claims jobs across every workspace, and the queue
  * consumer locates a job by (id, lease id) alone — the workspace always comes
  * from the claimed row itself, never from a session.
  *
- * Contact/tag/segment mutations here implement campaign-action semantics
- * (no archived-contact guard, membership source 'campaign'), which is why
+ * Contact/tag/segment mutations here implement automation-action semantics
+ * (no archived-contact guard, membership source 'automation'), which is why
  * they exist alongside the stricter ContactResourceRepository methods.
  */
-export class CampaignEngineRepository {
+export class AutomationEngineRepository {
   private readonly database: KaenmaDatabase;
 
   public constructor(database: DatabaseSource) {
@@ -151,12 +151,12 @@ export class CampaignEngineRepository {
     now: string,
     limit = 50,
   ): Promise<Array<{ workspaceId: string }>> {
-    const oldest = sql<string>`MIN(${campaignJobs.dueAt})`.as("oldest");
+    const oldest = sql<string>`MIN(${automationJobs.dueAt})`.as("oldest");
     const rows = await this.database.orm
-      .select({ workspaceId: campaignJobs.workspaceId, oldest })
-      .from(campaignJobs)
-      .where(and(eq(campaignJobs.status, "pending"), lte(campaignJobs.dueAt, now)))
-      .groupBy(campaignJobs.workspaceId)
+      .select({ workspaceId: automationJobs.workspaceId, oldest })
+      .from(automationJobs)
+      .where(and(eq(automationJobs.status, "pending"), lte(automationJobs.dueAt, now)))
+      .groupBy(automationJobs.workspaceId)
       .orderBy(asc(sql`oldest`))
       .limit(limit);
     return rows.map((row) => ({ workspaceId: row.workspaceId }));
@@ -175,32 +175,32 @@ export class CampaignEngineRepository {
   ): Promise<Array<{ id: string; leaseId: string }>> {
     const orm = this.database.orm;
     const conditions = [
-      eq(campaignJobs.status, "pending"),
-      lte(campaignJobs.dueAt, now),
-      or(isNull(campaignJobs.leaseUntil), lt(campaignJobs.leaseUntil, now))!,
+      eq(automationJobs.status, "pending"),
+      lte(automationJobs.dueAt, now),
+      or(isNull(automationJobs.leaseUntil), lt(automationJobs.leaseUntil, now))!,
     ];
-    if (workspaceId) conditions.push(eq(campaignJobs.workspaceId, workspaceId));
+    if (workspaceId) conditions.push(eq(automationJobs.workspaceId, workspaceId));
     const candidates = await orm
-      .select({ id: campaignJobs.id })
-      .from(campaignJobs)
+      .select({ id: automationJobs.id })
+      .from(automationJobs)
       .where(and(...conditions))
-      .orderBy(asc(campaignJobs.dueAt))
+      .orderBy(asc(automationJobs.dueAt))
       .limit(limit);
     const claims = candidates.map((candidate) => ({ id: candidate.id, leaseId: uuidv7() }));
     const [first, ...rest] = claims.map((claim) =>
       orm
-        .update(campaignJobs)
+        .update(automationJobs)
         .set({ status: "leased", leaseId: claim.leaseId, leaseUntil, updatedAt: now })
         .where(
           and(
-            eq(campaignJobs.id, claim.id),
-            eq(campaignJobs.status, "pending"),
-            or(isNull(campaignJobs.leaseUntil), lt(campaignJobs.leaseUntil, now)),
+            eq(automationJobs.id, claim.id),
+            eq(automationJobs.status, "pending"),
+            or(isNull(automationJobs.leaseUntil), lt(automationJobs.leaseUntil, now)),
           ),
         ),
     );
     if (!first) return [];
-    assertCampaignJobTransition("pending", "leased");
+    assertAutomationJobTransition("pending", "leased");
     const results = await orm.batch([first, ...rest]);
     return claims.filter((_, index) => results[index]?.meta.changes === 1);
   }
@@ -209,23 +209,23 @@ export class CampaignEngineRepository {
   public async findJobForProcessing(
     jobId: string,
     leaseId: string,
-  ): Promise<CampaignJobRow | null> {
+  ): Promise<AutomationJobRow | null> {
     const row = await this.database.orm
       .select({
-        id: campaignJobs.id,
-        workspace_id: campaignJobs.workspaceId,
-        enrollment_id: campaignJobs.enrollmentId,
-        campaign_version_id: campaignJobs.campaignVersionId,
-        node_id: campaignJobs.nodeId,
-        recipient_id: campaignJobs.recipientId,
-        idempotency_key: campaignJobs.idempotencyKey,
-        payload: campaignJobs.payload,
-        status: campaignJobs.status,
-        lease_id: campaignJobs.leaseId,
-        attempts: campaignJobs.attempts,
-        created_at: campaignJobs.createdAt,
-        entered_at: campaignEnrollments.enteredAt,
-        graph: campaignVersions.graph,
+        id: automationJobs.id,
+        workspace_id: automationJobs.workspaceId,
+        enrollment_id: automationJobs.enrollmentId,
+        automation_version_id: automationJobs.automationVersionId,
+        node_id: automationJobs.nodeId,
+        contact_id: automationJobs.contactId,
+        idempotency_key: automationJobs.idempotencyKey,
+        payload: automationJobs.payload,
+        status: automationJobs.status,
+        lease_id: automationJobs.leaseId,
+        attempts: automationJobs.attempts,
+        created_at: automationJobs.createdAt,
+        entered_at: automationEnrollments.enteredAt,
+        graph: automationVersions.graph,
         contact_email: contacts.email,
         first_name: contacts.firstName,
         last_name: contacts.lastName,
@@ -234,33 +234,33 @@ export class CampaignEngineRepository {
         score: contacts.score,
         custom_fields: contacts.customFields,
       })
-      .from(campaignJobs)
+      .from(automationJobs)
       .innerJoin(
-        campaignVersions,
+        automationVersions,
         and(
-          eq(campaignVersions.id, campaignJobs.campaignVersionId),
-          eq(campaignVersions.workspaceId, campaignJobs.workspaceId),
+          eq(automationVersions.id, automationJobs.automationVersionId),
+          eq(automationVersions.workspaceId, automationJobs.workspaceId),
         ),
       )
       .innerJoin(
-        campaignEnrollments,
+        automationEnrollments,
         and(
-          eq(campaignEnrollments.id, campaignJobs.enrollmentId),
-          eq(campaignEnrollments.workspaceId, campaignJobs.workspaceId),
+          eq(automationEnrollments.id, automationJobs.enrollmentId),
+          eq(automationEnrollments.workspaceId, automationJobs.workspaceId),
         ),
       )
       .innerJoin(
         contacts,
         and(
-          eq(contacts.id, campaignJobs.recipientId),
-          eq(contacts.workspaceId, campaignJobs.workspaceId),
+          eq(contacts.id, automationJobs.contactId),
+          eq(contacts.workspaceId, automationJobs.workspaceId),
         ),
       )
       .where(
         and(
-          eq(campaignJobs.id, jobId),
-          eq(campaignJobs.leaseId, leaseId),
-          inArray(campaignJobs.status, ["leased", "running"]),
+          eq(automationJobs.id, jobId),
+          eq(automationJobs.leaseId, leaseId),
+          inArray(automationJobs.status, ["leased", "running"]),
         ),
       )
       .get();
@@ -273,15 +273,15 @@ export class CampaignEngineRepository {
    * decides whether it already owns a running row.
    */
   public async startLeasedJob(jobId: string, leaseId: string, now: string): Promise<boolean> {
-    assertCampaignJobTransition("leased", "running");
+    assertAutomationJobTransition("leased", "running");
     const result = await this.database.orm
-      .update(campaignJobs)
-      .set({ status: "running", attempts: sql`${campaignJobs.attempts} + 1`, updatedAt: now })
+      .update(automationJobs)
+      .set({ status: "running", attempts: sql`${automationJobs.attempts} + 1`, updatedAt: now })
       .where(
         and(
-          eq(campaignJobs.id, jobId),
-          eq(campaignJobs.leaseId, leaseId),
-          eq(campaignJobs.status, "leased"),
+          eq(automationJobs.id, jobId),
+          eq(automationJobs.leaseId, leaseId),
+          eq(automationJobs.status, "leased"),
         ),
       );
     return result.meta.changes > 0;
@@ -293,9 +293,9 @@ export class CampaignEngineRepository {
     leaseId: string,
     input: { dueAt: string; payload: string; now: string },
   ): Promise<void> {
-    assertCampaignJobTransition("running", "pending");
+    assertAutomationJobTransition("running", "pending");
     await this.database.orm
-      .update(campaignJobs)
+      .update(automationJobs)
       .set({
         status: "pending",
         dueAt: input.dueAt,
@@ -306,9 +306,9 @@ export class CampaignEngineRepository {
       })
       .where(
         and(
-          eq(campaignJobs.id, jobId),
-          eq(campaignJobs.leaseId, leaseId),
-          eq(campaignJobs.status, "running"),
+          eq(automationJobs.id, jobId),
+          eq(automationJobs.leaseId, leaseId),
+          eq(automationJobs.status, "running"),
         ),
       );
   }
@@ -323,15 +323,15 @@ export class CampaignEngineRepository {
     lastError: string,
     now: string,
   ): Promise<void> {
-    assertCampaignJobTransition("running", "leased");
+    assertAutomationJobTransition("running", "leased");
     await this.database.orm
-      .update(campaignJobs)
+      .update(automationJobs)
       .set({ status: "leased", lastError, updatedAt: now })
       .where(
         and(
-          eq(campaignJobs.id, jobId),
-          eq(campaignJobs.leaseId, leaseId),
-          eq(campaignJobs.status, "running"),
+          eq(automationJobs.id, jobId),
+          eq(automationJobs.leaseId, leaseId),
+          eq(automationJobs.status, "running"),
         ),
       );
   }
@@ -342,21 +342,21 @@ export class CampaignEngineRepository {
    * alone — the holder finishes its row regardless of status races.
    */
   public async completeJobClosingEnrollment(
-    job: Pick<CampaignJobRow, "id" | "workspace_id" | "enrollment_id">,
+    job: Pick<AutomationJobRow, "id" | "workspace_id" | "enrollment_id">,
     leaseId: string,
     now: string,
   ): Promise<void> {
-    assertCampaignJobTransition("running", "succeeded");
+    assertAutomationJobTransition("running", "succeeded");
     const orm = this.database.orm;
     await orm.batch([
       this.jobSucceededUpdate(job.id, leaseId, now),
       orm
-        .update(campaignEnrollments)
+        .update(automationEnrollments)
         .set({ status: "completed", currentNodeId: null, completedAt: now, updatedAt: now })
         .where(
           and(
-            eq(campaignEnrollments.workspaceId, job.workspace_id),
-            eq(campaignEnrollments.id, job.enrollment_id),
+            eq(automationEnrollments.workspaceId, job.workspace_id),
+            eq(automationEnrollments.id, job.enrollment_id),
           ),
         ),
     ]);
@@ -370,27 +370,27 @@ export class CampaignEngineRepository {
    */
   public async completeJobAdvancingEnrollment(
     job: Pick<
-      CampaignJobRow,
-      "id" | "workspace_id" | "enrollment_id" | "campaign_version_id" | "recipient_id"
+      AutomationJobRow,
+      "id" | "workspace_id" | "enrollment_id" | "automation_version_id" | "contact_id"
     >,
     leaseId: string,
     nextNodeId: string,
     now: string,
   ): Promise<void> {
-    assertCampaignJobTransition("running", "succeeded");
+    assertAutomationJobTransition("running", "succeeded");
     const orm = this.database.orm;
     await orm.batch([
       this.jobSucceededUpdate(job.id, leaseId, now),
       orm
-        .insert(campaignJobs)
+        .insert(automationJobs)
         .values({
           id: uuidv7(),
           workspaceId: job.workspace_id,
           enrollmentId: job.enrollment_id,
-          campaignVersionId: job.campaign_version_id,
+          automationVersionId: job.automation_version_id,
           nodeId: nextNodeId,
-          recipientId: job.recipient_id,
-          idempotencyKey: `${job.enrollment_id}:${nextNodeId}:${job.recipient_id}`,
+          contactId: job.contact_id,
+          idempotencyKey: `${job.enrollment_id}:${nextNodeId}:${job.contact_id}`,
           status: "pending",
           dueAt: now,
           createdAt: now,
@@ -398,13 +398,13 @@ export class CampaignEngineRepository {
         })
         .onConflictDoNothing(),
       orm
-        .update(campaignEnrollments)
+        .update(automationEnrollments)
         .set({ currentNodeId: nextNodeId, updatedAt: now })
         .where(
           and(
-            eq(campaignEnrollments.workspaceId, job.workspace_id),
-            eq(campaignEnrollments.id, job.enrollment_id),
-            eq(campaignEnrollments.status, "active"),
+            eq(automationEnrollments.workspaceId, job.workspace_id),
+            eq(automationEnrollments.id, job.enrollment_id),
+            eq(automationEnrollments.status, "active"),
           ),
         ),
     ]);
@@ -487,11 +487,11 @@ export class CampaignEngineRepository {
   }
 
   /**
-   * add_segment action: joins the contact with source 'campaign'. Returns
+   * add_segment action: joins the contact with source 'automation'. Returns
    * whether a row was written, so the caller can emit `segment_joined` only
    * on a fresh membership.
    */
-  public async addCampaignSegmentMembership(
+  public async addAutomationSegmentMembership(
     workspaceId: string,
     segmentId: string,
     contactId: string,
@@ -499,7 +499,7 @@ export class CampaignEngineRepository {
   ): Promise<boolean> {
     const result = await this.database.orm
       .insert(segmentMemberships)
-      .values({ workspaceId, segmentId, contactId, source: "campaign", joinedAt: now })
+      .values({ workspaceId, segmentId, contactId, source: "automation", joinedAt: now })
       .onConflictDoNothing();
     return result.meta.changes === 1;
   }
@@ -550,8 +550,8 @@ export class CampaignEngineRepository {
         contactId,
         delta: amount,
         total,
-        reason: "campaign",
-        campaignEnrollmentId: enrollmentId,
+        reason: "automation",
+        automationEnrollmentId: enrollmentId,
         createdAt: now,
       }),
     ]);
@@ -595,7 +595,7 @@ export class CampaignEngineRepository {
 
   /**
    * Cross-workspace scan for 'contact_inactive' triggers: active contacts of
-   * active campaigns whose latest event (or creation) is at least
+   * active automations whose latest event (or creation) is at least
    * `inactivity_days` before `now`, excluding contacts already enrolled via
    * the "once" sentinel.
    */
@@ -604,8 +604,8 @@ export class CampaignEngineRepository {
     limit: number,
   ): Promise<
     Array<{
-      campaignVersionId: string;
-      campaignId: string;
+      automationVersionId: string;
+      automationId: string;
       sourceNodeId: string;
       reentry: string;
       workspaceId: string;
@@ -615,43 +615,43 @@ export class CampaignEngineRepository {
     const orm = this.database.orm;
     return await orm
       .select({
-        campaignVersionId: campaignTriggers.campaignVersionId,
-        campaignId: campaignTriggers.campaignId,
-        sourceNodeId: campaignTriggers.sourceNodeId,
-        reentry: campaignTriggers.reentry,
+        automationVersionId: automationTriggers.automationVersionId,
+        automationId: automationTriggers.automationId,
+        sourceNodeId: automationTriggers.sourceNodeId,
+        reentry: automationTriggers.reentry,
         workspaceId: contacts.workspaceId,
         contactId: contacts.id,
       })
-      .from(campaignTriggers)
+      .from(automationTriggers)
       .innerJoin(
-        campaigns,
+        automations,
         and(
-          eq(campaigns.workspaceId, campaignTriggers.workspaceId),
-          eq(campaigns.id, campaignTriggers.campaignId),
+          eq(automations.workspaceId, automationTriggers.workspaceId),
+          eq(automations.id, automationTriggers.automationId),
         ),
       )
-      .innerJoin(contacts, eq(contacts.workspaceId, campaignTriggers.workspaceId))
+      .innerJoin(contacts, eq(contacts.workspaceId, automationTriggers.workspaceId))
       .where(
         and(
-          eq(campaignTriggers.source, "contact_inactive"),
-          eq(campaigns.status, "active"),
-          eq(campaigns.publishedVersionId, campaignTriggers.campaignVersionId),
+          eq(automationTriggers.source, "contact_inactive"),
+          eq(automations.status, "active"),
+          eq(automations.publishedVersionId, automationTriggers.automationVersionId),
           eq(contacts.status, "active"),
           sql`julianday(COALESCE((
             SELECT MAX(${contactEvents.occurredAt}) FROM ${contactEvents}
             WHERE ${contactEvents.workspaceId} = ${contacts.workspaceId}
               AND ${contactEvents.contactId} = ${contacts.id}
-          ), ${contacts.createdAt})) <= julianday(${now}) - ${campaignTriggers.inactivityDays}`,
+          ), ${contacts.createdAt})) <= julianday(${now}) - ${automationTriggers.inactivityDays}`,
           notExists(
             orm
               .select({ value: sql`1` })
-              .from(campaignEnrollments)
+              .from(automationEnrollments)
               .where(
                 and(
-                  eq(campaignEnrollments.workspaceId, campaignTriggers.workspaceId),
-                  eq(campaignEnrollments.campaignId, campaignTriggers.campaignId),
-                  eq(campaignEnrollments.contactId, contacts.id),
-                  eq(campaignEnrollments.sourceEventId, "once"),
+                  eq(automationEnrollments.workspaceId, automationTriggers.workspaceId),
+                  eq(automationEnrollments.automationId, automationTriggers.automationId),
+                  eq(automationEnrollments.contactId, contacts.id),
+                  eq(automationEnrollments.sourceEventId, "once"),
                 ),
               ),
           ),
@@ -664,16 +664,16 @@ export class CampaignEngineRepository {
   /** Succeeds a finished job; matches on the lease only, like the worker always has. */
   private jobSucceededUpdate(jobId: string, leaseId: string, now: string) {
     return this.database.orm
-      .update(campaignJobs)
+      .update(automationJobs)
       .set({ status: "succeeded", leaseId: null, leaseUntil: null, updatedAt: now })
-      .where(and(eq(campaignJobs.id, jobId), eq(campaignJobs.leaseId, leaseId)));
+      .where(and(eq(automationJobs.id, jobId), eq(automationJobs.leaseId, leaseId)));
   }
 }
 
 /**
  * Legacy free-function entry point for the dispatcher; claims due pending
  * jobs across (or within) workspaces. Delegates to
- * {@link CampaignEngineRepository.claimDueJobs}.
+ * {@link AutomationEngineRepository.claimDueJobs}.
  */
 export async function claimDueJobs(
   database: DatabaseSource,
@@ -682,16 +682,16 @@ export async function claimDueJobs(
   limit = 100,
   workspaceId?: string,
 ): Promise<Array<{ id: string; leaseId: string }>> {
-  return new CampaignEngineRepository(database).claimDueJobs(now, leaseUntil, limit, workspaceId);
+  return new AutomationEngineRepository(database).claimDueJobs(now, leaseUntil, limit, workspaceId);
 }
 
 /**
- * Workspace-scoped campaign store: admin CRUD, the publish pipeline and
+ * Workspace-scoped automation store: admin CRUD, the publish pipeline and
  * enrollment writes. Scoped by workspace id only, because event-driven
  * enrollment flows resolve just the workspace id; a full
  * {@link WorkspaceContext} is assignable wherever this scope is expected.
  */
-export class CampaignRepository {
+export class AutomationRepository {
   private readonly database: KaenmaDatabase;
 
   public constructor(
@@ -701,8 +701,8 @@ export class CampaignRepository {
     this.database = createDatabase(database);
   }
 
-  /** Campaign list rows with enrollment counters and the published trigger source. */
-  public async listCampaignsWithCounts(): Promise<
+  /** Automation list rows with enrollment counters and the published trigger source. */
+  public async listAutomationsWithCounts(): Promise<
     Array<{
       id: string;
       name: string;
@@ -719,34 +719,34 @@ export class CampaignRepository {
     // `${table.column}` into a select field renders it unqualified, which
     // would silently self-compare inside the subquery.
     const triggerSourceQuery = this.database.orm
-      .select({ source: campaignTriggers.source })
-      .from(campaignTriggers)
+      .select({ source: automationTriggers.source })
+      .from(automationTriggers)
       .where(
         and(
-          eq(campaignTriggers.workspaceId, campaigns.workspaceId),
-          eq(campaignTriggers.campaignVersionId, campaigns.publishedVersionId),
+          eq(automationTriggers.workspaceId, automations.workspaceId),
+          eq(automationTriggers.automationVersionId, automations.publishedVersionId),
         ),
       );
     return await this.database.orm
       .select({
-        id: campaigns.id,
-        name: campaigns.name,
-        description: campaigns.description,
-        status: campaigns.status,
+        id: automations.id,
+        name: automations.name,
+        description: automations.description,
+        status: automations.status,
         triggerSource: sql<string | null>`${triggerSourceQuery}`.as("trigger_source"),
         enrollmentCount: this.enrollmentCountExpression().as("enrollment_count"),
         activeCount: this.enrollmentCountExpression("active").as("active_count"),
         completedCount: this.enrollmentCountExpression("completed").as("completed_count"),
-        updatedAt: campaigns.updatedAt,
+        updatedAt: automations.updatedAt,
       })
-      .from(campaigns)
-      .where(eq(campaigns.workspaceId, this.context.workspaceId))
-      .orderBy(desc(campaigns.updatedAt))
+      .from(automations)
+      .where(eq(automations.workspaceId, this.context.workspaceId))
+      .orderBy(desc(automations.updatedAt))
       .limit(200);
   }
 
-  /** Creates the campaign shell plus its first draft version atomically. */
-  public async createCampaign(input: {
+  /** Creates the automation shell plus its first draft version atomically. */
+  public async createAutomation(input: {
     name: string;
     description: string;
     timezone: string;
@@ -757,7 +757,7 @@ export class CampaignRepository {
     const now = new Date().toISOString();
     const orm = this.database.orm;
     await orm.batch([
-      orm.insert(campaigns).values({
+      orm.insert(automations).values({
         id,
         workspaceId: this.context.workspaceId,
         name: input.name,
@@ -767,10 +767,10 @@ export class CampaignRepository {
         createdAt: now,
         updatedAt: now,
       }),
-      orm.insert(campaignVersions).values({
+      orm.insert(automationVersions).values({
         id: draftVersionId,
         workspaceId: this.context.workspaceId,
-        campaignId: id,
+        automationId: id,
         version: 1,
         status: "draft",
         timezone: input.timezone,
@@ -781,83 +781,88 @@ export class CampaignRepository {
     return { id, draftVersionId };
   }
 
-  /** The draft graph of one campaign plus the campaign status. */
-  public async getDraft(campaignId: string): Promise<{ graph: string; status: string } | null> {
+  /** The draft graph of one automation plus the automation status. */
+  public async getDraft(automationId: string): Promise<{ graph: string; status: string } | null> {
     const row = await this.database.orm
-      .select({ graph: campaignVersions.graph, status: campaigns.status })
-      .from(campaigns)
+      .select({ graph: automationVersions.graph, status: automations.status })
+      .from(automations)
       .innerJoin(
-        campaignVersions,
+        automationVersions,
         and(
-          eq(campaignVersions.id, campaigns.draftVersionId),
-          eq(campaignVersions.workspaceId, campaigns.workspaceId),
+          eq(automationVersions.id, automations.draftVersionId),
+          eq(automationVersions.workspaceId, automations.workspaceId),
         ),
       )
-      .where(and(eq(campaigns.workspaceId, this.context.workspaceId), eq(campaigns.id, campaignId)))
+      .where(
+        and(
+          eq(automations.workspaceId, this.context.workspaceId),
+          eq(automations.id, automationId),
+        ),
+      )
       .get();
     return row ?? null;
   }
 
   /**
-   * Stores the draft graph, then refreshes the campaign metadata. Returns
-   * false — without touching the metadata — when the campaign has no
+   * Stores the draft graph, then refreshes the automation metadata. Returns
+   * false — without touching the metadata — when the automation has no
    * editable draft version.
    */
   public async saveDraft(
-    campaignId: string,
+    automationId: string,
     input: { name: string; description: string; timezone: string; graph: string },
   ): Promise<boolean> {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
     const draftVersionOf = orm
-      .select({ id: campaigns.draftVersionId })
-      .from(campaigns)
-      .where(and(eq(campaigns.workspaceId, workspaceId), eq(campaigns.id, campaignId)));
+      .select({ id: automations.draftVersionId })
+      .from(automations)
+      .where(and(eq(automations.workspaceId, workspaceId), eq(automations.id, automationId)));
     const result = await orm
-      .update(campaignVersions)
+      .update(automationVersions)
       .set({ timezone: input.timezone, graph: input.graph })
       .where(
         and(
-          eq(campaignVersions.workspaceId, workspaceId),
-          eq(campaignVersions.id, draftVersionOf),
-          eq(campaignVersions.status, "draft"),
+          eq(automationVersions.workspaceId, workspaceId),
+          eq(automationVersions.id, draftVersionOf),
+          eq(automationVersions.status, "draft"),
         ),
       );
     if (result.meta.changes === 0) return false;
     await orm
-      .update(campaigns)
+      .update(automations)
       .set({
         name: input.name,
         description: input.description,
         updatedAt: new Date().toISOString(),
       })
-      .where(and(eq(campaigns.workspaceId, workspaceId), eq(campaigns.id, campaignId)));
+      .where(and(eq(automations.workspaceId, workspaceId), eq(automations.id, automationId)));
     return true;
   }
 
-  /** The campaign's current draft version, if it is still publishable. */
+  /** The automation's current draft version, if it is still publishable. */
   public async findPublishableDraft(
-    campaignId: string,
+    automationId: string,
   ): Promise<{ draftVersionId: string; version: number; graph: string } | null> {
     const row = await this.database.orm
       .select({
-        draftVersionId: campaignVersions.id,
-        version: campaignVersions.version,
-        graph: campaignVersions.graph,
+        draftVersionId: automationVersions.id,
+        version: automationVersions.version,
+        graph: automationVersions.graph,
       })
-      .from(campaigns)
+      .from(automations)
       .innerJoin(
-        campaignVersions,
+        automationVersions,
         and(
-          eq(campaignVersions.id, campaigns.draftVersionId),
-          eq(campaignVersions.workspaceId, campaigns.workspaceId),
+          eq(automationVersions.id, automations.draftVersionId),
+          eq(automationVersions.workspaceId, automations.workspaceId),
         ),
       )
       .where(
         and(
-          eq(campaigns.workspaceId, this.context.workspaceId),
-          eq(campaigns.id, campaignId),
-          eq(campaignVersions.status, "draft"),
+          eq(automations.workspaceId, this.context.workspaceId),
+          eq(automations.id, automationId),
+          eq(automationVersions.status, "draft"),
         ),
       )
       .get();
@@ -883,11 +888,11 @@ export class CampaignRepository {
 
   /**
    * Publishes the draft in one atomic batch: publish the version, open the
-   * next draft, point the campaign at both versions, and replace the trigger
+   * next draft, point the automation at both versions, and replace the trigger
    * registration. Returns the id of the freshly opened draft.
    */
   public async publishDraft(input: {
-    campaignId: string;
+    automationId: string;
     draftVersionId: string;
     currentVersion: number;
     timezone: string;
@@ -907,19 +912,19 @@ export class CampaignRepository {
     const orm = this.database.orm;
     await orm.batch([
       orm
-        .update(campaignVersions)
+        .update(automationVersions)
         .set({ status: "published", publishedAt: now })
         .where(
           and(
-            eq(campaignVersions.workspaceId, workspaceId),
-            eq(campaignVersions.id, input.draftVersionId),
-            eq(campaignVersions.status, "draft"),
+            eq(automationVersions.workspaceId, workspaceId),
+            eq(automationVersions.id, input.draftVersionId),
+            eq(automationVersions.status, "draft"),
           ),
         ),
-      orm.insert(campaignVersions).values({
+      orm.insert(automationVersions).values({
         id: nextDraftId,
         workspaceId,
-        campaignId: input.campaignId,
+        automationId: input.automationId,
         version: input.currentVersion + 1,
         status: "draft",
         timezone: input.timezone,
@@ -927,26 +932,28 @@ export class CampaignRepository {
         createdAt: now,
       }),
       orm
-        .update(campaigns)
+        .update(automations)
         .set({
           status: "active",
           publishedVersionId: input.draftVersionId,
           draftVersionId: nextDraftId,
           updatedAt: now,
         })
-        .where(and(eq(campaigns.workspaceId, workspaceId), eq(campaigns.id, input.campaignId))),
+        .where(
+          and(eq(automations.workspaceId, workspaceId), eq(automations.id, input.automationId)),
+        ),
       orm
-        .delete(campaignTriggers)
+        .delete(automationTriggers)
         .where(
           and(
-            eq(campaignTriggers.workspaceId, workspaceId),
-            eq(campaignTriggers.campaignId, input.campaignId),
+            eq(automationTriggers.workspaceId, workspaceId),
+            eq(automationTriggers.automationId, input.automationId),
           ),
         ),
-      orm.insert(campaignTriggers).values({
-        campaignVersionId: input.draftVersionId,
+      orm.insert(automationTriggers).values({
+        automationVersionId: input.draftVersionId,
         workspaceId,
-        campaignId: input.campaignId,
+        automationId: input.automationId,
         sourceNodeId: input.trigger.sourceNodeId,
         source: input.trigger.source,
         eventType: input.trigger.eventType,
@@ -959,83 +966,88 @@ export class CampaignRepository {
     return { draftVersionId: nextDraftId };
   }
 
-  /** Pauses or resumes a published campaign; false when nothing was changeable. */
-  public async setCampaignStatus(
-    campaignId: string,
+  /** Pauses or resumes a published automation; false when nothing was changeable. */
+  public async setAutomationStatus(
+    automationId: string,
     status: "active" | "paused",
   ): Promise<boolean> {
     const result = await this.database.orm
-      .update(campaigns)
+      .update(automations)
       .set({ status, updatedAt: new Date().toISOString() })
       .where(
         and(
-          eq(campaigns.workspaceId, this.context.workspaceId),
-          eq(campaigns.id, campaignId),
-          isNotNull(campaigns.publishedVersionId),
-          inArray(campaigns.status, ["active", "paused"]),
+          eq(automations.workspaceId, this.context.workspaceId),
+          eq(automations.id, automationId),
+          isNotNull(automations.publishedVersionId),
+          inArray(automations.status, ["active", "paused"]),
         ),
       );
     return result.meta.changes === 1;
   }
 
-  /** Published triggers of active campaigns listening for this event. */
+  /** Published triggers of active automations listening for this event. */
   public async listActiveTriggersForEvent(
     eventType: string,
     resourceId: string | null,
   ): Promise<
-    Array<{ campaignVersionId: string; campaignId: string; sourceNodeId: string; reentry: string }>
+    Array<{
+      automationVersionId: string;
+      automationId: string;
+      sourceNodeId: string;
+      reentry: string;
+    }>
   > {
     // `resource_id = NULL` never matches, so a null event resource narrows
     // the raw `(resource_id IS NULL OR resource_id = ?)` to the IS NULL arm.
     const resourceCondition =
       resourceId === null
-        ? isNull(campaignTriggers.resourceId)
-        : or(isNull(campaignTriggers.resourceId), eq(campaignTriggers.resourceId, resourceId));
+        ? isNull(automationTriggers.resourceId)
+        : or(isNull(automationTriggers.resourceId), eq(automationTriggers.resourceId, resourceId));
     return await this.database.orm
       .select({
-        campaignVersionId: campaignTriggers.campaignVersionId,
-        campaignId: campaignTriggers.campaignId,
-        sourceNodeId: campaignTriggers.sourceNodeId,
-        reentry: campaignTriggers.reentry,
+        automationVersionId: automationTriggers.automationVersionId,
+        automationId: automationTriggers.automationId,
+        sourceNodeId: automationTriggers.sourceNodeId,
+        reentry: automationTriggers.reentry,
       })
-      .from(campaignTriggers)
+      .from(automationTriggers)
       .innerJoin(
-        campaigns,
+        automations,
         and(
-          eq(campaigns.workspaceId, campaignTriggers.workspaceId),
-          eq(campaigns.id, campaignTriggers.campaignId),
+          eq(automations.workspaceId, automationTriggers.workspaceId),
+          eq(automations.id, automationTriggers.automationId),
         ),
       )
       .where(
         and(
-          eq(campaignTriggers.workspaceId, this.context.workspaceId),
-          eq(campaigns.status, "active"),
-          eq(campaigns.publishedVersionId, campaignTriggers.campaignVersionId),
-          eq(campaignTriggers.eventType, eventType),
+          eq(automationTriggers.workspaceId, this.context.workspaceId),
+          eq(automations.status, "active"),
+          eq(automations.publishedVersionId, automationTriggers.automationVersionId),
+          eq(automationTriggers.eventType, eventType),
           resourceCondition,
         ),
       );
   }
 
-  /** The published version (id + graph) of one active campaign. */
-  public async findActivePublishedCampaign(
-    campaignId: string,
+  /** The published version (id + graph) of one active automation. */
+  public async findActivePublishedAutomation(
+    automationId: string,
   ): Promise<{ publishedVersionId: string; graph: string } | null> {
     const row = await this.database.orm
-      .select({ publishedVersionId: campaignVersions.id, graph: campaignVersions.graph })
-      .from(campaigns)
+      .select({ publishedVersionId: automationVersions.id, graph: automationVersions.graph })
+      .from(automations)
       .innerJoin(
-        campaignVersions,
+        automationVersions,
         and(
-          eq(campaignVersions.id, campaigns.publishedVersionId),
-          eq(campaignVersions.workspaceId, campaigns.workspaceId),
+          eq(automationVersions.id, automations.publishedVersionId),
+          eq(automationVersions.workspaceId, automations.workspaceId),
         ),
       )
       .where(
         and(
-          eq(campaigns.workspaceId, this.context.workspaceId),
-          eq(campaigns.id, campaignId),
-          eq(campaigns.status, "active"),
+          eq(automations.workspaceId, this.context.workspaceId),
+          eq(automations.id, automationId),
+          eq(automations.status, "active"),
         ),
       )
       .get();
@@ -1046,13 +1058,13 @@ export class CampaignRepository {
    * Enrolls a contact and creates the first job ('pending') in one atomic
    * batch. The enrollment row is inserted via SELECT so a missing or
    * archived contact inserts nothing and the job's FK aborts the batch; that
-   * — like a duplicate (workspace, campaign, contact, source event) — comes
+   * — like a duplicate (workspace, automation, contact, source event) — comes
    * back as a constraint violation and is reported as null. Note the
    * caller-provided sourceEventId may be the "once" re-entry sentinel.
    */
   public async enrollContact(input: {
-    campaignId: string;
-    campaignVersionId: string;
+    automationId: string;
+    automationVersionId: string;
     sourceNodeId: string;
     contactId: string;
     sourceEventId: string;
@@ -1065,15 +1077,17 @@ export class CampaignRepository {
     try {
       await orm.batch([
         // insert-from-select: drizzle emits the full column list in
-        // declaration order, so the SELECT lists every campaign_enrollments
+        // declaration order, so the SELECT lists every automation_enrollments
         // column in exactly that order.
-        orm.insert(campaignEnrollments).select(
+        orm.insert(automationEnrollments).select(
           orm
             .select({
               id: sql<string>`${enrollmentId}`.as("id"),
               workspaceId: contacts.workspaceId,
-              campaignId: sql<string>`${input.campaignId}`.as("campaign_id"),
-              campaignVersionId: sql<string>`${input.campaignVersionId}`.as("campaign_version_id"),
+              automationId: sql<string>`${input.automationId}`.as("automation_id"),
+              automationVersionId: sql<string>`${input.automationVersionId}`.as(
+                "automation_version_id",
+              ),
               contactId: contacts.id,
               sourceEventId: sql<string>`${input.sourceEventId}`.as("source_event_id"),
               status: sql<string>`'active'`.as("status"),
@@ -1091,13 +1105,13 @@ export class CampaignRepository {
               ),
             ),
         ),
-        orm.insert(campaignJobs).values({
+        orm.insert(automationJobs).values({
           id: jobId,
           workspaceId,
           enrollmentId,
-          campaignVersionId: input.campaignVersionId,
+          automationVersionId: input.automationVersionId,
           nodeId: input.sourceNodeId,
-          recipientId: input.contactId,
+          contactId: input.contactId,
           idempotencyKey: `${enrollmentId}:${input.sourceNodeId}:${input.contactId}`,
           status: "pending",
           dueAt: now,
@@ -1112,14 +1126,14 @@ export class CampaignRepository {
     }
   }
 
-  /** COUNT of this campaign's enrollments, optionally narrowed to one status. */
+  /** COUNT of this automation's enrollments, optionally narrowed to one status. */
   private enrollmentCountExpression(status?: "active" | "completed") {
     const conditions = [
-      eq(campaignEnrollments.workspaceId, campaigns.workspaceId),
-      eq(campaignEnrollments.campaignId, campaigns.id),
+      eq(automationEnrollments.workspaceId, automations.workspaceId),
+      eq(automationEnrollments.automationId, automations.id),
     ];
-    if (status) conditions.push(eq(campaignEnrollments.status, status));
-    return sql<number>`${this.database.orm.$count(campaignEnrollments, and(...conditions))}`.mapWith(
+    if (status) conditions.push(eq(automationEnrollments.status, status));
+    return sql<number>`${this.database.orm.$count(automationEnrollments, and(...conditions))}`.mapWith(
       Number,
     );
   }

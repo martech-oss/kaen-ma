@@ -1,5 +1,5 @@
 import { validateCampaign } from "@kaenma/core";
-import { CampaignRepository, uuidv7 } from "@kaenma/database";
+import { AutomationRepository, uuidv7 } from "@kaenma/database";
 import { campaignDefinitionSchema, type CampaignDefinition } from "@kaenma/orpc";
 
 import { authed, requireRole } from "../orpc/base";
@@ -16,8 +16,8 @@ export const listCampaignsProcedure = authed.campaigns.list.handler(async ({ con
 export const createCampaignProcedure = authed.campaigns.create.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const repository = new CampaignRepository(context.database, context.workspace);
-    const created = await repository.createCampaign({
+    const repository = new AutomationRepository(context.database, context.workspace);
+    const created = await repository.createAutomation({
       name: input.name,
       description: input.description,
       timezone: input.timezone,
@@ -29,7 +29,7 @@ export const createCampaignProcedure = authed.campaigns.create.handler(
 
 export const getCampaignDraftProcedure = authed.campaigns.getDraft.handler(
   async ({ context, input, errors }) => {
-    const repository = new CampaignRepository(context.database, context.workspace);
+    const repository = new AutomationRepository(context.database, context.workspace);
     const row = await repository.getDraft(input.id);
     if (!row) throw errors.CAMPAIGN_NOT_FOUND();
     const graph = campaignDefinitionSchema.safeParse(JSON.parse(row.graph));
@@ -42,7 +42,7 @@ export const saveCampaignDraftProcedure = authed.campaigns.saveDraft.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...definition } = input;
-    const repository = new CampaignRepository(context.database, context.workspace);
+    const repository = new AutomationRepository(context.database, context.workspace);
     const updated = await repository.saveDraft(id, {
       name: definition.name,
       description: definition.description,
@@ -57,7 +57,7 @@ export const saveCampaignDraftProcedure = authed.campaigns.saveDraft.handler(
 export const publishCampaignProcedure = authed.campaigns.publish.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const repository = new CampaignRepository(context.database, context.workspace);
+    const repository = new AutomationRepository(context.database, context.workspace);
     const row = await repository.findPublishableDraft(input.id);
     if (!row) throw errors.DRAFT_NOT_FOUND();
 
@@ -93,7 +93,7 @@ export const publishCampaignProcedure = authed.campaigns.publish.handler(
     if (!source) throw errors.INVALID_GRAPH({ message: "開始条件がありません" });
     const trigger = campaignTrigger(source.config);
     const published = await repository.publishDraft({
-      campaignId: input.id,
+      automationId: input.id,
       draftVersionId: row.draftVersionId,
       currentVersion: row.version,
       timezone: definition.timezone,
@@ -114,8 +114,8 @@ export const publishCampaignProcedure = authed.campaigns.publish.handler(
 export const setCampaignStatusProcedure = authed.campaigns.setStatus.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const repository = new CampaignRepository(context.database, context.workspace);
-    const changed = await repository.setCampaignStatus(input.id, input.status);
+    const repository = new AutomationRepository(context.database, context.workspace);
+    const changed = await repository.setAutomationStatus(input.id, input.status);
     if (!changed) throw errors.NOT_CHANGEABLE();
     return { status: input.status };
   },
@@ -126,7 +126,7 @@ export const enrollCampaignProcedure = authed.campaigns.enroll.handler(
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const outcome = await enrollContactManually(context.database, {
       workspaceId: context.workspace.workspaceId,
-      campaignId: input.id,
+      automationId: input.id,
       contactId: input.contactId,
       sourceEventId: input.sourceEventId ?? uuidv7(),
     });

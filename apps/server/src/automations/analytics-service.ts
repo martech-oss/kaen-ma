@@ -1,6 +1,6 @@
 import { and, count, eq } from "drizzle-orm";
 
-import { campaignEnrollments, deliveries, type KaenmaDatabase } from "@kaenma/database";
+import { automationEnrollments, deliveries, type KaenmaDatabase } from "@kaenma/database";
 
 export interface CampaignAnalytics {
   enrollments: Array<{ status: string; count: number }>;
@@ -10,33 +10,33 @@ export interface CampaignAnalytics {
 export async function getCampaignAnalytics(
   database: KaenmaDatabase,
   workspaceId: string,
-  campaignId: string,
+  automationId: string,
 ): Promise<CampaignAnalytics> {
   const [enrollmentRows, deliveryRows] = await Promise.all([
     database.orm
-      .select({ status: campaignEnrollments.status, count: count() })
-      .from(campaignEnrollments)
+      .select({ status: automationEnrollments.status, count: count() })
+      .from(automationEnrollments)
       .where(
         and(
-          eq(campaignEnrollments.workspaceId, workspaceId),
-          eq(campaignEnrollments.campaignId, campaignId),
+          eq(automationEnrollments.workspaceId, workspaceId),
+          eq(automationEnrollments.automationId, automationId),
         ),
       )
-      .groupBy(campaignEnrollments.status),
+      .groupBy(automationEnrollments.status),
     database.orm
       .select({ status: deliveries.status, count: count() })
       .from(deliveries)
       .innerJoin(
-        campaignEnrollments,
+        automationEnrollments,
         and(
-          eq(campaignEnrollments.id, deliveries.enrollmentId),
-          eq(campaignEnrollments.workspaceId, deliveries.workspaceId),
+          eq(automationEnrollments.id, deliveries.enrollmentId),
+          eq(automationEnrollments.workspaceId, deliveries.workspaceId),
         ),
       )
       .where(
         and(
           eq(deliveries.workspaceId, workspaceId),
-          eq(campaignEnrollments.campaignId, campaignId),
+          eq(automationEnrollments.automationId, automationId),
         ),
       )
       .groupBy(deliveries.status),

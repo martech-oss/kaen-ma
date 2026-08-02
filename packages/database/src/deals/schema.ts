@@ -69,7 +69,7 @@ export const deals = sqliteTable(
     status: text().default("open").notNull(),
     ownerUserId: text("owner_user_id").references(() => user.id, { onDelete: "set null" }),
     contactId: text("contact_id").references(() => contacts.id, { onDelete: "set null" }),
-    accountId: text("account_id").references(() => companies.id, { onDelete: "set null" }),
+    companyId: text("company_id").references(() => companies.id, { onDelete: "set null" }),
     expectedCloseDate: text("expected_close_date"),
     description: text().default("").notNull(),
     wonAt: text("won_at"),
@@ -87,7 +87,7 @@ export const deals = sqliteTable(
     ),
     index("deals_workspace_owner_idx").on(table.workspaceId, table.ownerUserId, table.status),
     index("deals_workspace_contact_idx").on(table.workspaceId, table.contactId),
-    index("deals_workspace_account_idx").on(table.workspaceId, table.accountId),
+    index("deals_workspace_company_idx").on(table.workspaceId, table.companyId),
     index("deals_workspace_updated_idx").on(table.workspaceId, table.archivedAt, table.updatedAt),
     index("deals_workspace_currency_created_idx").on(
       table.workspaceId,

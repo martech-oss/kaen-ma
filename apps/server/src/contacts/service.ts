@@ -104,7 +104,7 @@ async function attachContactRelations(
   }).listContactRelations(ids);
   const tagsByContact = new Map<string, ContactSummary["tags"]>();
   const listsByContact = new Map<string, ContactSummary["lists"]>();
-  const accountsByContact = new Map<string, ContactSummary["accounts"]>();
+  const companiesByContact = new Map<string, ContactSummary["companies"]>();
 
   for (const row of relations.tags) {
     const items = tagsByContact.get(row.contactId) ?? [];
@@ -119,7 +119,7 @@ async function attachContactRelations(
   }
 
   for (const row of relations.accounts) {
-    const items = accountsByContact.get(row.contactId) ?? [];
+    const items = companiesByContact.get(row.contactId) ?? [];
     items.push({
       id: row.id,
       name: row.name,
@@ -127,13 +127,13 @@ async function attachContactRelations(
       title: row.title,
       is_primary: Boolean(row.isPrimary),
     });
-    accountsByContact.set(row.contactId, items);
+    companiesByContact.set(row.contactId, items);
   }
 
   return contacts.map((contact) => ({
     ...contact,
     tags: tagsByContact.get(contact.id) ?? [],
     lists: listsByContact.get(contact.id) ?? [],
-    accounts: accountsByContact.get(contact.id) ?? [],
+    companies: companiesByContact.get(contact.id) ?? [],
   }));
 }

@@ -29,11 +29,7 @@ import type { SegmentRow } from "@kaenma/orpc";
 import type { SegmentFilter } from "@kaenma/orpc";
 
 export type { SegmentRow };
-import {
-  getSegmentFieldDefinition,
-  type SegmentField,
-  type SegmentOperator,
-} from "@kaenma/orpc";
+import { getSegmentFieldDefinition, type SegmentField, type SegmentOperator } from "@kaenma/orpc";
 
 export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNode {
   const router = useRouter();

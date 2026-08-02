@@ -26,7 +26,9 @@ export const subscriptionTopics = sqliteTable(
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
-  (table) => [uniqueIndex("topics_workspace_slug_unique").on(table.workspaceId, table.slug)],
+  (table) => [
+    uniqueIndex("subscription_topics_workspace_slug_unique").on(table.workspaceId, table.slug),
+  ],
 );
 
 export const contactSubscriptions = sqliteTable(

@@ -233,11 +233,29 @@ CREATE TABLE `custom_field_definitions` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "custom_fields_entity_type_check" CHECK("custom_field_definitions"."entity_type" IN ('contact', 'company')),
-	CONSTRAINT "custom_fields_data_type_check" CHECK("custom_field_definitions"."data_type" IN ('text', 'number', 'boolean', 'date', 'select'))
+	CONSTRAINT "custom_field_definitions_entity_type_check" CHECK("custom_field_definitions"."entity_type" IN ('contact', 'company')),
+	CONSTRAINT "custom_field_definitions_data_type_check" CHECK("custom_field_definitions"."data_type" IN ('text', 'number', 'boolean', 'date', 'select'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `custom_fields_workspace_entity_key_unique` ON `custom_field_definitions` (`workspace_id`,`entity_type`,`key`);--> statement-breakpoint
+CREATE UNIQUE INDEX `custom_field_definitions_workspace_entity_key_unique` ON `custom_field_definitions` (`workspace_id`,`entity_type`,`key`);--> statement-breakpoint
+CREATE TABLE `import_jobs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`kind` text NOT NULL,
+	`r2_key` text NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`cursor` text,
+	`processed` integer DEFAULT 0 NOT NULL,
+	`succeeded` integer DEFAULT 0 NOT NULL,
+	`failed` integer DEFAULT 0 NOT NULL,
+	`error_manifest_key` text,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "import_jobs_kind_check" CHECK("import_jobs"."kind" IN ('contact_import', 'contact_export', 'event_archive'))
+);
+--> statement-breakpoint
+CREATE INDEX `import_jobs_workspace_status_idx` ON `import_jobs` (`workspace_id`,`status`,`created_at`);--> statement-breakpoint
 CREATE TABLE `score_events` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -245,13 +263,25 @@ CREATE TABLE `score_events` (
 	`delta` integer NOT NULL,
 	`total` integer NOT NULL,
 	`reason` text NOT NULL,
-	`campaign_enrollment_id` text,
+	`automation_enrollment_id` text,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade
+	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`automation_enrollment_id`) REFERENCES `automation_enrollments`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
 CREATE INDEX `score_events_workspace_contact_idx` ON `score_events` (`workspace_id`,`contact_id`,`created_at`);--> statement-breakpoint
+CREATE TABLE `tags` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`name` text NOT NULL,
+	`slug` text NOT NULL,
+	`color` text DEFAULT '#64748b' NOT NULL,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `tags_workspace_slug_unique` ON `tags` (`workspace_id`,`slug`);--> statement-breakpoint
 CREATE TABLE `segment_memberships` (
 	`workspace_id` text NOT NULL,
 	`segment_id` text NOT NULL,
@@ -262,7 +292,7 @@ CREATE TABLE `segment_memberships` (
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`segment_id`) REFERENCES `segments`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "segment_memberships_source_check" CHECK("segment_memberships"."source" IN ('static', 'dynamic', 'campaign'))
+	CONSTRAINT "segment_memberships_source_check" CHECK("segment_memberships"."source" IN ('static', 'dynamic', 'automation'))
 );
 --> statement-breakpoint
 CREATE INDEX `segment_memberships_workspace_contact_idx` ON `segment_memberships` (`workspace_id`,`contact_id`,`segment_id`);--> statement-breakpoint
@@ -283,17 +313,6 @@ CREATE TABLE `segments` (
 --> statement-breakpoint
 CREATE INDEX `segments_workspace_updated_idx` ON `segments` (`workspace_id`,`updated_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `segments_workspace_slug_unique` ON `segments` (`workspace_id`,`slug`);--> statement-breakpoint
-CREATE TABLE `tags` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`name` text NOT NULL,
-	`slug` text NOT NULL,
-	`color` text DEFAULT '#64748b' NOT NULL,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `tags_workspace_slug_unique` ON `tags` (`workspace_id`,`slug`);--> statement-breakpoint
 CREATE TABLE `deal_pipelines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -358,7 +377,7 @@ CREATE TABLE `deals` (
 	`status` text DEFAULT 'open' NOT NULL,
 	`owner_user_id` text,
 	`contact_id` text,
-	`account_id` text,
+	`company_id` text,
 	`expected_close_date` text,
 	`description` text DEFAULT '' NOT NULL,
 	`won_at` text,
@@ -371,7 +390,7 @@ CREATE TABLE `deals` (
 	FOREIGN KEY (`stage_id`) REFERENCES `deal_stages`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`owner_user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`account_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE set null,
 	CONSTRAINT "deals_value_check" CHECK("deals"."value" >= 0),
 	CONSTRAINT "deals_status_check" CHECK("deals"."status" IN ('open', 'won', 'lost')),
 	CONSTRAINT "deals_currency_check" CHECK(length("deals"."currency") = 3)
@@ -380,7 +399,7 @@ CREATE TABLE `deals` (
 CREATE INDEX `deals_workspace_pipeline_stage_idx` ON `deals` (`workspace_id`,`pipeline_id`,`stage_id`,`status`);--> statement-breakpoint
 CREATE INDEX `deals_workspace_owner_idx` ON `deals` (`workspace_id`,`owner_user_id`,`status`);--> statement-breakpoint
 CREATE INDEX `deals_workspace_contact_idx` ON `deals` (`workspace_id`,`contact_id`);--> statement-breakpoint
-CREATE INDEX `deals_workspace_account_idx` ON `deals` (`workspace_id`,`account_id`);--> statement-breakpoint
+CREATE INDEX `deals_workspace_company_idx` ON `deals` (`workspace_id`,`company_id`);--> statement-breakpoint
 CREATE INDEX `deals_workspace_updated_idx` ON `deals` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
 CREATE INDEX `deals_workspace_currency_created_idx` ON `deals` (`workspace_id`,`currency`,`created_at`);--> statement-breakpoint
 CREATE INDEX `deals_workspace_currency_won_idx` ON `deals` (`workspace_id`,`currency`,`won_at`);--> statement-breakpoint
@@ -431,7 +450,7 @@ CREATE TABLE `subscription_topics` (
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `topics_workspace_slug_unique` ON `subscription_topics` (`workspace_id`,`slug`);--> statement-breakpoint
+CREATE UNIQUE INDEX `subscription_topics_workspace_slug_unique` ON `subscription_topics` (`workspace_id`,`slug`);--> statement-breakpoint
 CREATE TABLE `suppressions` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -448,6 +467,259 @@ CREATE TABLE `suppressions` (
 --> statement-breakpoint
 CREATE INDEX `suppressions_workspace_contact_idx` ON `suppressions` (`workspace_id`,`contact_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `suppressions_workspace_email_unique` ON `suppressions` (`workspace_id`,`email`) WHERE "suppressions"."email" IS NOT NULL;--> statement-breakpoint
+CREATE TABLE `automation_enrollments` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`automation_id` text NOT NULL,
+	`automation_version_id` text NOT NULL,
+	`contact_id` text NOT NULL,
+	`source_event_id` text,
+	`status` text DEFAULT 'active' NOT NULL,
+	`current_node_id` text,
+	`entered_at` text NOT NULL,
+	`completed_at` text,
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`automation_id`) REFERENCES `automations`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`automation_version_id`) REFERENCES `automation_versions`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "automation_enrollments_status_check" CHECK("automation_enrollments"."status" IN ('active', 'completed', 'cancelled', 'failed'))
+);
+--> statement-breakpoint
+CREATE INDEX `automation_enrollments_workspace_status_idx` ON `automation_enrollments` (`workspace_id`,`status`,`updated_at`);--> statement-breakpoint
+CREATE INDEX `automation_enrollments_workspace_automation_entered_idx` ON `automation_enrollments` (`workspace_id`,`automation_id`,`entered_at`);--> statement-breakpoint
+CREATE INDEX `automation_enrollments_workspace_completed_idx` ON `automation_enrollments` (`workspace_id`,`completed_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `automation_enrollment_source_unique` ON `automation_enrollments` (`workspace_id`,`automation_id`,`contact_id`,`source_event_id`);--> statement-breakpoint
+CREATE TABLE `automation_jobs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`enrollment_id` text NOT NULL,
+	`automation_version_id` text NOT NULL,
+	`node_id` text NOT NULL,
+	`contact_id` text NOT NULL,
+	`idempotency_key` text NOT NULL,
+	`payload` text DEFAULT '{}' NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`due_at` text NOT NULL,
+	`lease_id` text,
+	`lease_until` text,
+	`attempts` integer DEFAULT 0 NOT NULL,
+	`last_error` text,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`enrollment_id`) REFERENCES `automation_enrollments`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`automation_version_id`) REFERENCES `automation_versions`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "automation_jobs_status_check" CHECK("automation_jobs"."status" IN ('pending', 'leased', 'queued', 'running', 'succeeded', 'failed', 'cancelled'))
+);
+--> statement-breakpoint
+CREATE INDEX `automation_jobs_workspace_enrollment_idx` ON `automation_jobs` (`workspace_id`,`enrollment_id`,`created_at`);--> statement-breakpoint
+CREATE INDEX `automation_jobs_due_claim_idx` ON `automation_jobs` (`status`,`due_at`,`lease_until`);--> statement-breakpoint
+CREATE UNIQUE INDEX `automation_jobs_workspace_idempotency_unique` ON `automation_jobs` (`workspace_id`,`idempotency_key`);--> statement-breakpoint
+CREATE TABLE `automation_triggers` (
+	`automation_version_id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`automation_id` text NOT NULL,
+	`source_node_id` text NOT NULL,
+	`source` text NOT NULL,
+	`event_type` text,
+	`resource_id` text,
+	`reentry` text DEFAULT 'once' NOT NULL,
+	`inactivity_days` integer,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`automation_version_id`) REFERENCES `automation_versions`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`automation_id`) REFERENCES `automations`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "automation_triggers_source_check" CHECK("automation_triggers"."source" IN ('segment_joined', 'form_submitted', 'contact_created', 'api_event', 'webhook_event', 'contact_inactive')),
+	CONSTRAINT "automation_triggers_reentry_check" CHECK("automation_triggers"."reentry" IN ('once', 'every_time'))
+);
+--> statement-breakpoint
+CREATE INDEX `automation_triggers_workspace_event_idx` ON `automation_triggers` (`workspace_id`,`event_type`,`resource_id`);--> statement-breakpoint
+CREATE INDEX `automation_triggers_source_idx` ON `automation_triggers` (`source`,`workspace_id`);--> statement-breakpoint
+CREATE TABLE `automation_versions` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`automation_id` text NOT NULL,
+	`version` integer NOT NULL,
+	`status` text DEFAULT 'draft' NOT NULL,
+	`timezone` text DEFAULT 'UTC' NOT NULL,
+	`graph` text NOT NULL,
+	`published_at` text,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`automation_id`) REFERENCES `automations`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "automation_versions_status_check" CHECK("automation_versions"."status" IN ('draft', 'published'))
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `automation_versions_workspace_automation_version_unique` ON `automation_versions` (`workspace_id`,`automation_id`,`version`);--> statement-breakpoint
+CREATE TABLE `automations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`name` text NOT NULL,
+	`description` text DEFAULT '' NOT NULL,
+	`status` text DEFAULT 'draft' NOT NULL,
+	`draft_version_id` text,
+	`published_version_id` text,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "automations_status_check" CHECK("automations"."status" IN ('draft', 'active', 'paused', 'archived'))
+);
+--> statement-breakpoint
+CREATE INDEX `automations_workspace_status_updated_idx` ON `automations` (`workspace_id`,`status`,`updated_at`);--> statement-breakpoint
+CREATE TABLE `deliveries` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`contact_id` text,
+	`enrollment_id` text,
+	`broadcast_id` text,
+	`channel` text NOT NULL,
+	`purpose` text NOT NULL,
+	`provider` text NOT NULL,
+	`recipient` text NOT NULL,
+	`topic_id` text,
+	`template_id` text,
+	`idempotency_key` text NOT NULL,
+	`payload` text NOT NULL,
+	`status` text DEFAULT 'queued' NOT NULL,
+	`provider_message_id` text,
+	`attempts` integer DEFAULT 0 NOT NULL,
+	`next_attempt_at` text,
+	`last_error` text,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`enrollment_id`) REFERENCES `automation_enrollments`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`broadcast_id`) REFERENCES `broadcasts`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`topic_id`) REFERENCES `subscription_topics`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`template_id`) REFERENCES `email_templates`(`id`) ON UPDATE no action ON DELETE set null,
+	CONSTRAINT "deliveries_channel_check" CHECK("deliveries"."channel" IN ('email', 'webhook')),
+	CONSTRAINT "deliveries_purpose_check" CHECK("deliveries"."purpose" IN ('transactional', 'marketing')),
+	CONSTRAINT "deliveries_provider_check" CHECK("deliveries"."provider" IN ('resend', 'webhook')),
+	CONSTRAINT "deliveries_status_check" CHECK("deliveries"."status" IN ('queued', 'sending', 'accepted', 'delivered', 'failed', 'suppressed', 'cancelled'))
+);
+--> statement-breakpoint
+CREATE INDEX `deliveries_workspace_contact_created_idx` ON `deliveries` (`workspace_id`,`contact_id`,`created_at`);--> statement-breakpoint
+CREATE INDEX `deliveries_workspace_status_next_idx` ON `deliveries` (`workspace_id`,`status`,`next_attempt_at`);--> statement-breakpoint
+CREATE INDEX `deliveries_workspace_channel_created_idx` ON `deliveries` (`workspace_id`,`channel`,`created_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `deliveries_workspace_idempotency_unique` ON `deliveries` (`workspace_id`,`idempotency_key`);--> statement-breakpoint
+CREATE TABLE `delivery_events` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`delivery_id` text NOT NULL,
+	`provider` text NOT NULL,
+	`provider_event_id` text NOT NULL,
+	`provider_message_id` text,
+	`type` text NOT NULL,
+	`occurred_at` text NOT NULL,
+	`metadata` text DEFAULT '{}' NOT NULL,
+	`archived_at` text,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`delivery_id`) REFERENCES `deliveries`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "delivery_events_type_check" CHECK("delivery_events"."type" IN ('accepted', 'delivered', 'opened', 'clicked', 'bounced', 'complained', 'unsubscribed', 'replied', 'failed'))
+);
+--> statement-breakpoint
+CREATE INDEX `delivery_events_workspace_delivery_idx` ON `delivery_events` (`workspace_id`,`delivery_id`,`occurred_at`);--> statement-breakpoint
+CREATE INDEX `delivery_events_workspace_occurred_idx` ON `delivery_events` (`workspace_id`,`occurred_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `delivery_events_provider_event_unique` ON `delivery_events` (`workspace_id`,`provider`,`provider_event_id`);--> statement-breakpoint
+CREATE TABLE `email_templates` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`name` text NOT NULL,
+	`purpose` text NOT NULL,
+	`resend_template_id` text NOT NULL,
+	`resend_alias` text,
+	`subject` text,
+	`remote_status` text DEFAULT 'draft' NOT NULL,
+	`remote_current_version_id` text NOT NULL,
+	`has_unpublished_versions` integer DEFAULT false NOT NULL,
+	`variables` text DEFAULT '[]' NOT NULL,
+	`published_at` text,
+	`last_synced_at` text NOT NULL,
+	`sync_error` text,
+	`archived_at` text,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "email_templates_purpose_check" CHECK("email_templates"."purpose" IN ('transactional', 'marketing')),
+	CONSTRAINT "email_templates_remote_status_check" CHECK("email_templates"."remote_status" IN ('draft', 'published'))
+);
+--> statement-breakpoint
+CREATE INDEX `email_templates_workspace_archived_updated_idx` ON `email_templates` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `email_templates_resend_template_unique` ON `email_templates` (`resend_template_id`);--> statement-breakpoint
+CREATE TABLE `inbound_emails` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`contact_id` text,
+	`delivery_id` text,
+	`message_id` text,
+	`sender` text NOT NULL,
+	`recipient` text NOT NULL,
+	`subject` text,
+	`text_body` text,
+	`html_body` text,
+	`attachment_manifest` text DEFAULT '[]' NOT NULL,
+	`received_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE set null,
+	FOREIGN KEY (`delivery_id`) REFERENCES `deliveries`(`id`) ON UPDATE no action ON DELETE set null
+);
+--> statement-breakpoint
+CREATE INDEX `inbound_emails_workspace_contact_idx` ON `inbound_emails` (`workspace_id`,`contact_id`,`received_at`);--> statement-breakpoint
+CREATE TABLE `message_variables` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`key` text NOT NULL,
+	`name` text NOT NULL,
+	`value` text NOT NULL,
+	`description` text DEFAULT '' NOT NULL,
+	`archived_at` text,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `message_variables_workspace_archived_updated_idx` ON `message_variables` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
+CREATE UNIQUE INDEX `message_variables_workspace_key_unique` ON `message_variables` (`workspace_id`,`key`);--> statement-breakpoint
+CREATE TABLE `broadcast_recipients` (
+	`workspace_id` text NOT NULL,
+	`broadcast_id` text NOT NULL,
+	`contact_id` text NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`snapshot_at` text NOT NULL,
+	PRIMARY KEY(`workspace_id`, `broadcast_id`, `contact_id`),
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`broadcast_id`) REFERENCES `broadcasts`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `broadcast_recipients_status_idx` ON `broadcast_recipients` (`workspace_id`,`broadcast_id`,`status`);--> statement-breakpoint
+CREATE TABLE `broadcasts` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`name` text NOT NULL,
+	`segment_id` text NOT NULL,
+	`template_id` text NOT NULL,
+	`topic_id` text,
+	`status` text DEFAULT 'draft' NOT NULL,
+	`scheduled_at` text,
+	`started_at` text,
+	`completed_at` text,
+	`created_at` text NOT NULL,
+	`updated_at` text NOT NULL,
+	`archived_at` text,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`segment_id`) REFERENCES `segments`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`template_id`) REFERENCES `email_templates`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`topic_id`) REFERENCES `subscription_topics`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "broadcasts_status_check" CHECK("broadcasts"."status" IN ('draft', 'scheduled', 'sending', 'completed', 'cancelled'))
+);
+--> statement-breakpoint
+CREATE INDEX `broadcasts_workspace_archived_updated_idx` ON `broadcasts` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
+CREATE INDEX `broadcasts_workspace_status_idx` ON `broadcasts` (`workspace_id`,`status`,`scheduled_at`);--> statement-breakpoint
 CREATE TABLE `assets` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -512,7 +784,7 @@ CREATE TABLE `landing_page_versions` (
 	FOREIGN KEY (`page_id`) REFERENCES `landing_pages`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `page_versions_workspace_page_version_unique` ON `landing_page_versions` (`workspace_id`,`page_id`,`version`);--> statement-breakpoint
+CREATE UNIQUE INDEX `landing_page_versions_workspace_page_version_unique` ON `landing_page_versions` (`workspace_id`,`page_id`,`version`);--> statement-breakpoint
 CREATE TABLE `landing_pages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -526,7 +798,7 @@ CREATE TABLE `landing_pages` (
 	CONSTRAINT "landing_pages_status_check" CHECK("landing_pages"."status" IN ('draft', 'published', 'archived'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `pages_workspace_slug_unique` ON `landing_pages` (`workspace_id`,`slug`);--> statement-breakpoint
+CREATE UNIQUE INDEX `landing_pages_workspace_slug_unique` ON `landing_pages` (`workspace_id`,`slug`);--> statement-breakpoint
 CREATE TABLE `project_items` (
 	`workspace_id` text NOT NULL,
 	`project_id` text NOT NULL,
@@ -536,7 +808,7 @@ CREATE TABLE `project_items` (
 	PRIMARY KEY(`workspace_id`, `project_id`, `resource_type`, `resource_id`),
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "project_items_resource_type_check" CHECK("project_items"."resource_type" IN ('campaign', 'email', 'form', 'page', 'segment'))
+	CONSTRAINT "project_items_resource_type_check" CHECK("project_items"."resource_type" IN ('automation', 'email', 'form', 'page', 'segment'))
 );
 --> statement-breakpoint
 CREATE TABLE `projects` (
@@ -551,239 +823,40 @@ CREATE TABLE `projects` (
 );
 --> statement-breakpoint
 CREATE INDEX `projects_workspace_updated_idx` ON `projects` (`workspace_id`,`updated_at`);--> statement-breakpoint
-CREATE TABLE `broadcast_recipients` (
-	`workspace_id` text NOT NULL,
-	`broadcast_id` text NOT NULL,
-	`contact_id` text NOT NULL,
-	`status` text DEFAULT 'pending' NOT NULL,
-	`snapshot_at` text NOT NULL,
-	PRIMARY KEY(`workspace_id`, `broadcast_id`, `contact_id`),
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`broadcast_id`) REFERENCES `broadcasts`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `broadcast_recipients_status_idx` ON `broadcast_recipients` (`workspace_id`,`broadcast_id`,`status`);--> statement-breakpoint
-CREATE TABLE `broadcasts` (
+CREATE TABLE `site_messages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
 	`name` text NOT NULL,
-	`segment_id` text NOT NULL,
-	`template_id` text NOT NULL,
-	`topic_id` text,
 	`status` text DEFAULT 'draft' NOT NULL,
-	`scheduled_at` text,
-	`started_at` text,
-	`completed_at` text,
+	`headline` text NOT NULL,
+	`body` text DEFAULT '' NOT NULL,
+	`cta_label` text DEFAULT '' NOT NULL,
+	`cta_url` text,
+	`page_pattern` text DEFAULT '*' NOT NULL,
+	`starts_at` text,
+	`ends_at` text,
+	`impression_count` integer DEFAULT 0 NOT NULL,
+	`click_count` integer DEFAULT 0 NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	`archived_at` text,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`segment_id`) REFERENCES `segments`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`template_id`) REFERENCES `email_templates`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`topic_id`) REFERENCES `subscription_topics`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "broadcasts_status_check" CHECK("broadcasts"."status" IN ('draft', 'scheduled', 'sending', 'completed', 'cancelled'))
+	CONSTRAINT "site_messages_status_check" CHECK("site_messages"."status" IN ('draft', 'published', 'archived'))
 );
 --> statement-breakpoint
-CREATE INDEX `broadcasts_workspace_archived_updated_idx` ON `broadcasts` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
-CREATE INDEX `broadcasts_workspace_status_idx` ON `broadcasts` (`workspace_id`,`status`,`scheduled_at`);--> statement-breakpoint
-CREATE TABLE `campaign_enrollments` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`campaign_id` text NOT NULL,
-	`campaign_version_id` text NOT NULL,
-	`contact_id` text NOT NULL,
-	`source_event_id` text,
-	`status` text DEFAULT 'active' NOT NULL,
-	`current_node_id` text,
-	`entered_at` text NOT NULL,
-	`completed_at` text,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`campaign_version_id`) REFERENCES `campaign_versions`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "campaign_enrollments_status_check" CHECK("campaign_enrollments"."status" IN ('active', 'completed', 'cancelled', 'failed'))
-);
---> statement-breakpoint
-CREATE INDEX `campaign_enrollments_workspace_status_idx` ON `campaign_enrollments` (`workspace_id`,`status`,`updated_at`);--> statement-breakpoint
-CREATE INDEX `campaign_enrollments_workspace_campaign_entered_idx` ON `campaign_enrollments` (`workspace_id`,`campaign_id`,`entered_at`);--> statement-breakpoint
-CREATE INDEX `campaign_enrollments_workspace_completed_idx` ON `campaign_enrollments` (`workspace_id`,`completed_at`);--> statement-breakpoint
-CREATE UNIQUE INDEX `campaign_enrollment_source_unique` ON `campaign_enrollments` (`workspace_id`,`campaign_id`,`contact_id`,`source_event_id`);--> statement-breakpoint
-CREATE TABLE `campaign_jobs` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`enrollment_id` text NOT NULL,
-	`campaign_version_id` text NOT NULL,
-	`node_id` text NOT NULL,
-	`recipient_id` text NOT NULL,
-	`idempotency_key` text NOT NULL,
-	`payload` text DEFAULT '{}' NOT NULL,
-	`status` text DEFAULT 'pending' NOT NULL,
-	`due_at` text NOT NULL,
-	`lease_id` text,
-	`lease_until` text,
-	`attempts` integer DEFAULT 0 NOT NULL,
-	`last_error` text,
+CREATE INDEX `site_messages_workspace_schedule_idx` ON `site_messages` (`workspace_id`,`starts_at`,`ends_at`);--> statement-breakpoint
+CREATE INDEX `site_messages_workspace_status_updated_idx` ON `site_messages` (`workspace_id`,`status`,`updated_at`);--> statement-breakpoint
+CREATE TABLE `site_tracking_settings` (
+	`workspace_id` text PRIMARY KEY NOT NULL,
+	`enabled` integer DEFAULT 0 NOT NULL,
+	`allowed_domains` text DEFAULT '[]' NOT NULL,
+	`consent_mode` text DEFAULT 'required' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`enrollment_id`) REFERENCES `campaign_enrollments`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`campaign_version_id`) REFERENCES `campaign_versions`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "campaign_jobs_status_check" CHECK("campaign_jobs"."status" IN ('pending', 'leased', 'queued', 'running', 'succeeded', 'failed', 'cancelled'))
+	CONSTRAINT "site_tracking_settings_consent_mode_check" CHECK("site_tracking_settings"."consent_mode" IN ('required'))
 );
 --> statement-breakpoint
-CREATE INDEX `campaign_jobs_workspace_enrollment_idx` ON `campaign_jobs` (`workspace_id`,`enrollment_id`,`created_at`);--> statement-breakpoint
-CREATE INDEX `campaign_jobs_due_claim_idx` ON `campaign_jobs` (`status`,`due_at`,`lease_until`);--> statement-breakpoint
-CREATE UNIQUE INDEX `campaign_jobs_workspace_idempotency_unique` ON `campaign_jobs` (`workspace_id`,`idempotency_key`);--> statement-breakpoint
-CREATE TABLE `campaign_triggers` (
-	`campaign_version_id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`campaign_id` text NOT NULL,
-	`source_node_id` text NOT NULL,
-	`source` text NOT NULL,
-	`event_type` text,
-	`resource_id` text,
-	`reentry` text DEFAULT 'once' NOT NULL,
-	`inactivity_days` integer,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`campaign_version_id`) REFERENCES `campaign_versions`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "campaign_triggers_source_check" CHECK("campaign_triggers"."source" IN ('segment_joined', 'form_submitted', 'contact_created', 'api_event', 'webhook_event', 'contact_inactive')),
-	CONSTRAINT "campaign_triggers_reentry_check" CHECK("campaign_triggers"."reentry" IN ('once', 'every_time'))
-);
---> statement-breakpoint
-CREATE INDEX `campaign_triggers_workspace_event_idx` ON `campaign_triggers` (`workspace_id`,`event_type`,`resource_id`);--> statement-breakpoint
-CREATE INDEX `campaign_triggers_source_idx` ON `campaign_triggers` (`source`,`workspace_id`);--> statement-breakpoint
-CREATE TABLE `campaign_versions` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`campaign_id` text NOT NULL,
-	`version` integer NOT NULL,
-	`status` text DEFAULT 'draft' NOT NULL,
-	`timezone` text DEFAULT 'UTC' NOT NULL,
-	`graph` text NOT NULL,
-	`published_at` text,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`campaign_id`) REFERENCES `campaigns`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "campaign_versions_status_check" CHECK("campaign_versions"."status" IN ('draft', 'published'))
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `campaign_versions_workspace_campaign_version_unique` ON `campaign_versions` (`workspace_id`,`campaign_id`,`version`);--> statement-breakpoint
-CREATE TABLE `campaigns` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`name` text NOT NULL,
-	`description` text DEFAULT '' NOT NULL,
-	`status` text DEFAULT 'draft' NOT NULL,
-	`draft_version_id` text,
-	`published_version_id` text,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "campaigns_status_check" CHECK("campaigns"."status" IN ('draft', 'active', 'paused', 'archived'))
-);
---> statement-breakpoint
-CREATE INDEX `campaigns_workspace_status_updated_idx` ON `campaigns` (`workspace_id`,`status`,`updated_at`);--> statement-breakpoint
-CREATE TABLE `deliveries` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`contact_id` text,
-	`enrollment_id` text,
-	`broadcast_id` text,
-	`channel` text NOT NULL,
-	`purpose` text NOT NULL,
-	`provider` text NOT NULL,
-	`recipient` text NOT NULL,
-	`topic_id` text,
-	`template_id` text,
-	`idempotency_key` text NOT NULL,
-	`payload` text NOT NULL,
-	`status` text DEFAULT 'queued' NOT NULL,
-	`provider_message_id` text,
-	`attempts` integer DEFAULT 0 NOT NULL,
-	`next_attempt_at` text,
-	`last_error` text,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`enrollment_id`) REFERENCES `campaign_enrollments`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`broadcast_id`) REFERENCES `broadcasts`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`topic_id`) REFERENCES `subscription_topics`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`template_id`) REFERENCES `email_templates`(`id`) ON UPDATE no action ON DELETE set null,
-	CONSTRAINT "deliveries_channel_check" CHECK("deliveries"."channel" IN ('email', 'webhook')),
-	CONSTRAINT "deliveries_purpose_check" CHECK("deliveries"."purpose" IN ('transactional', 'marketing')),
-	CONSTRAINT "deliveries_provider_check" CHECK("deliveries"."provider" IN ('resend', 'webhook')),
-	CONSTRAINT "deliveries_status_check" CHECK("deliveries"."status" IN ('queued', 'sending', 'accepted', 'delivered', 'failed', 'suppressed', 'cancelled'))
-);
---> statement-breakpoint
-CREATE INDEX `deliveries_workspace_contact_created_idx` ON `deliveries` (`workspace_id`,`contact_id`,`created_at`);--> statement-breakpoint
-CREATE INDEX `deliveries_workspace_status_next_idx` ON `deliveries` (`workspace_id`,`status`,`next_attempt_at`);--> statement-breakpoint
-CREATE INDEX `deliveries_workspace_channel_created_idx` ON `deliveries` (`workspace_id`,`channel`,`created_at`);--> statement-breakpoint
-CREATE UNIQUE INDEX `deliveries_workspace_idempotency_unique` ON `deliveries` (`workspace_id`,`idempotency_key`);--> statement-breakpoint
-CREATE TABLE `delivery_events` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`delivery_id` text NOT NULL,
-	`provider` text NOT NULL,
-	`provider_event_id` text NOT NULL,
-	`provider_message_id` text,
-	`type` text NOT NULL,
-	`occurred_at` text NOT NULL,
-	`metadata` text DEFAULT '{}' NOT NULL,
-	`archived_at` text,
-	`created_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`delivery_id`) REFERENCES `deliveries`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "delivery_events_type_check" CHECK("delivery_events"."type" IN ('accepted', 'delivered', 'opened', 'clicked', 'bounced', 'complained', 'unsubscribed', 'replied', 'failed'))
-);
---> statement-breakpoint
-CREATE INDEX `delivery_events_workspace_delivery_idx` ON `delivery_events` (`workspace_id`,`delivery_id`,`occurred_at`);--> statement-breakpoint
-CREATE INDEX `delivery_events_workspace_occurred_idx` ON `delivery_events` (`workspace_id`,`occurred_at`);--> statement-breakpoint
-CREATE UNIQUE INDEX `delivery_events_provider_event_unique` ON `delivery_events` (`workspace_id`,`provider`,`provider_event_id`);--> statement-breakpoint
-CREATE TABLE `email_templates` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`name` text NOT NULL,
-	`purpose` text NOT NULL,
-	`resend_template_id` text NOT NULL,
-	`resend_alias` text,
-	`subject` text,
-	`remote_status` text DEFAULT 'draft' NOT NULL,
-	`remote_current_version_id` text NOT NULL,
-	`has_unpublished_versions` integer DEFAULT false NOT NULL,
-	`variables` text DEFAULT '[]' NOT NULL,
-	`published_at` text,
-	`last_synced_at` text NOT NULL,
-	`sync_error` text,
-	`archived_at` text,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "email_templates_purpose_check" CHECK("email_templates"."purpose" IN ('transactional', 'marketing')),
-	CONSTRAINT "email_templates_remote_status_check" CHECK("email_templates"."remote_status" IN ('draft', 'published'))
-);
---> statement-breakpoint
-CREATE INDEX `email_templates_workspace_archived_updated_idx` ON `email_templates` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
-CREATE UNIQUE INDEX `email_templates_resend_template_unique` ON `email_templates` (`resend_template_id`);--> statement-breakpoint
-CREATE TABLE `message_variables` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`key` text NOT NULL,
-	`name` text NOT NULL,
-	`value` text NOT NULL,
-	`description` text DEFAULT '' NOT NULL,
-	`archived_at` text,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `message_variables_workspace_archived_updated_idx` ON `message_variables` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
-CREATE UNIQUE INDEX `message_variables_workspace_key_unique` ON `message_variables` (`workspace_id`,`key`);--> statement-breakpoint
 CREATE TABLE `api_keys` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -803,25 +876,6 @@ CREATE TABLE `api_keys` (
 --> statement-breakpoint
 CREATE INDEX `api_keys_workspace_idx` ON `api_keys` (`workspace_id`,`revoked_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `api_keys_prefix_unique` ON `api_keys` (`prefix`);--> statement-breakpoint
-CREATE TABLE `inbound_emails` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`contact_id` text,
-	`delivery_id` text,
-	`message_id` text,
-	`sender` text NOT NULL,
-	`recipient` text NOT NULL,
-	`subject` text,
-	`text_body` text,
-	`html_body` text,
-	`attachment_manifest` text DEFAULT '[]' NOT NULL,
-	`received_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`delivery_id`) REFERENCES `deliveries`(`id`) ON UPDATE no action ON DELETE set null
-);
---> statement-breakpoint
-CREATE INDEX `inbound_emails_workspace_contact_idx` ON `inbound_emails` (`workspace_id`,`contact_id`,`received_at`);--> statement-breakpoint
 CREATE TABLE `provider_configs` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -889,24 +943,6 @@ CREATE TABLE `audit_logs` (
 --> statement-breakpoint
 CREATE INDEX `audit_logs_workspace_resource_idx` ON `audit_logs` (`workspace_id`,`resource_type`,`resource_id`);--> statement-breakpoint
 CREATE INDEX `audit_logs_workspace_created_idx` ON `audit_logs` (`workspace_id`,`created_at`);--> statement-breakpoint
-CREATE TABLE `daily_metrics` (
-	`workspace_id` text NOT NULL,
-	`metric_date` text NOT NULL,
-	`dimension_type` text NOT NULL,
-	`dimension_id` text NOT NULL,
-	`accepted` integer DEFAULT 0 NOT NULL,
-	`delivered` integer DEFAULT 0 NOT NULL,
-	`opened` integer DEFAULT 0 NOT NULL,
-	`clicked` integer DEFAULT 0 NOT NULL,
-	`bounced` integer DEFAULT 0 NOT NULL,
-	`complained` integer DEFAULT 0 NOT NULL,
-	`unsubscribed` integer DEFAULT 0 NOT NULL,
-	`failed` integer DEFAULT 0 NOT NULL,
-	PRIMARY KEY(`workspace_id`, `metric_date`, `dimension_type`, `dimension_id`),
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `daily_metrics_workspace_date_idx` ON `daily_metrics` (`workspace_id`,`metric_date`);--> statement-breakpoint
 CREATE TABLE `dead_letters` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text,
@@ -935,54 +971,21 @@ CREATE TABLE `idempotency_keys` (
 );
 --> statement-breakpoint
 CREATE INDEX `idempotency_keys_expiry_idx` ON `idempotency_keys` (`expires_at`);--> statement-breakpoint
-CREATE TABLE `import_jobs` (
-	`id` text PRIMARY KEY NOT NULL,
+CREATE TABLE `daily_metrics` (
 	`workspace_id` text NOT NULL,
-	`kind` text NOT NULL,
-	`r2_key` text NOT NULL,
-	`status` text DEFAULT 'pending' NOT NULL,
-	`cursor` text,
-	`processed` integer DEFAULT 0 NOT NULL,
-	`succeeded` integer DEFAULT 0 NOT NULL,
+	`metric_date` text NOT NULL,
+	`dimension_type` text NOT NULL,
+	`dimension_id` text NOT NULL,
+	`accepted` integer DEFAULT 0 NOT NULL,
+	`delivered` integer DEFAULT 0 NOT NULL,
+	`opened` integer DEFAULT 0 NOT NULL,
+	`clicked` integer DEFAULT 0 NOT NULL,
+	`bounced` integer DEFAULT 0 NOT NULL,
+	`complained` integer DEFAULT 0 NOT NULL,
+	`unsubscribed` integer DEFAULT 0 NOT NULL,
 	`failed` integer DEFAULT 0 NOT NULL,
-	`error_manifest_key` text,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "import_jobs_kind_check" CHECK("import_jobs"."kind" IN ('contact_import', 'contact_export', 'event_archive'))
+	PRIMARY KEY(`workspace_id`, `metric_date`, `dimension_type`, `dimension_id`),
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `import_jobs_workspace_status_idx` ON `import_jobs` (`workspace_id`,`status`,`created_at`);--> statement-breakpoint
-CREATE TABLE `site_messages` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`name` text NOT NULL,
-	`status` text DEFAULT 'draft' NOT NULL,
-	`headline` text NOT NULL,
-	`body` text DEFAULT '' NOT NULL,
-	`cta_label` text DEFAULT '' NOT NULL,
-	`cta_url` text,
-	`page_pattern` text DEFAULT '*' NOT NULL,
-	`starts_at` text,
-	`ends_at` text,
-	`impression_count` integer DEFAULT 0 NOT NULL,
-	`click_count` integer DEFAULT 0 NOT NULL,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	`archived_at` text,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "site_messages_status_check" CHECK("site_messages"."status" IN ('draft', 'published', 'archived'))
-);
---> statement-breakpoint
-CREATE INDEX `site_messages_workspace_schedule_idx` ON `site_messages` (`workspace_id`,`starts_at`,`ends_at`);--> statement-breakpoint
-CREATE INDEX `site_messages_workspace_status_updated_idx` ON `site_messages` (`workspace_id`,`status`,`updated_at`);--> statement-breakpoint
-CREATE TABLE `site_tracking_settings` (
-	`workspace_id` text PRIMARY KEY NOT NULL,
-	`enabled` integer DEFAULT 0 NOT NULL,
-	`allowed_domains` text DEFAULT '[]' NOT NULL,
-	`consent_mode` text DEFAULT 'required' NOT NULL,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "site_tracking_settings_consent_mode_check" CHECK("site_tracking_settings"."consent_mode" IN ('required'))
-);
+CREATE INDEX `daily_metrics_workspace_date_idx` ON `daily_metrics` (`workspace_id`,`metric_date`);

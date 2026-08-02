@@ -1,16 +1,16 @@
 import { and, asc, desc, eq, like, ne, or, sql } from "drizzle-orm";
 
-import type { Account, AccountCreate, AccountUpdate, WorkspaceContext } from "@kaenma/orpc";
+import type { Company, CompanyCreate, CompanyUpdate, WorkspaceContext } from "@kaenma/orpc";
 
 import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
 import { uuidv7 } from "../shared/uuid";
 import { companies, companyContacts, contacts } from "./schema";
 
-export interface AccountSummary extends Account {
+export interface CompanySummary extends Company {
   contactCount: number;
 }
 
-export class AccountRepository {
+export class CompanyRepository {
   private readonly database: KaenmaDatabase;
 
   public constructor(
@@ -20,7 +20,7 @@ export class AccountRepository {
     this.database = createDatabase(database);
   }
 
-  public async listAccounts(input: { query?: string; limit?: number }): Promise<AccountSummary[]> {
+  public async listCompanies(input: { query?: string; limit?: number }): Promise<CompanySummary[]> {
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 200);
     const conditions = [eq(companies.workspaceId, this.context.workspaceId)];
     if (input.query) {
@@ -63,7 +63,7 @@ export class AccountRepository {
     }));
   }
 
-  public async getAccount(id: string): Promise<Account | null> {
+  public async getCompany(id: string): Promise<Company | null> {
     const row = await this.database.orm.query.companies.findFirst({
       columns: {
         id: true,
@@ -78,7 +78,7 @@ export class AccountRepository {
     return row ?? null;
   }
 
-  public async createAccount(input: AccountCreate): Promise<Account> {
+  public async createCompany(input: CompanyCreate): Promise<Company> {
     const id = uuidv7();
     const now = new Date().toISOString();
     await this.database.orm.insert(companies).values({
@@ -90,13 +90,13 @@ export class AccountRepository {
       createdAt: now,
       updatedAt: now,
     });
-    const account = await this.getAccount(id);
-    if (!account) throw new Error("Created account could not be loaded");
-    return account;
+    const company = await this.getCompany(id);
+    if (!company) throw new Error("Created company could not be loaded");
+    return company;
   }
 
-  public async updateAccount(id: string, input: AccountUpdate): Promise<Account | null> {
-    const existing = await this.getAccount(id);
+  public async updateCompany(id: string, input: CompanyUpdate): Promise<Company | null> {
+    const existing = await this.getCompany(id);
     if (!existing) return null;
     await this.database.orm
       .update(companies)
@@ -107,11 +107,11 @@ export class AccountRepository {
         updatedAt: new Date().toISOString(),
       })
       .where(and(eq(companies.workspaceId, this.context.workspaceId), eq(companies.id, id)));
-    return this.getAccount(id);
+    return this.getCompany(id);
   }
 
-  /** Lists the contacts on an account, primary first, then by display name. */
-  public listAccountContacts(accountId: string) {
+  /** Lists the contacts on an company, primary first, then by display name. */
+  public listCompanyContacts(companyId: string) {
     return this.database.orm
       .select({
         id: contacts.id,
@@ -135,7 +135,7 @@ export class AccountRepository {
       .where(
         and(
           eq(companyContacts.workspaceId, this.context.workspaceId),
-          eq(companyContacts.companyId, accountId),
+          eq(companyContacts.companyId, companyId),
         ),
       )
       .orderBy(
@@ -146,8 +146,8 @@ export class AccountRepository {
       );
   }
 
-  /** True when both the account and a non-archived contact exist. */
-  public async hasAssignableContact(accountId: string, contactId: string): Promise<boolean> {
+  /** True when both the company and a non-archived contact exist. */
+  public async hasAssignableContact(companyId: string, contactId: string): Promise<boolean> {
     const row = await this.database.orm
       .select({ id: companies.id })
       .from(companies)
@@ -155,7 +155,7 @@ export class AccountRepository {
       .where(
         and(
           eq(companies.workspaceId, this.context.workspaceId),
-          eq(companies.id, accountId),
+          eq(companies.id, companyId),
           eq(contacts.id, contactId),
           ne(contacts.status, "archived"),
         ),
@@ -165,12 +165,12 @@ export class AccountRepository {
   }
 
   /**
-   * Upserts the account–contact link. Promoting a contact to primary demotes
-   * it on every other account in the same atomic batch, so a contact is never
+   * Upserts the company–contact link. Promoting a contact to primary demotes
+   * it on every other company in the same atomic batch, so a contact is never
    * primary in two places.
    */
   public async assignContact(input: {
-    accountId: string;
+    companyId: string;
     contactId: string;
     title: string | null;
     isPrimary: boolean;
@@ -181,7 +181,7 @@ export class AccountRepository {
       .insert(companyContacts)
       .values({
         workspaceId,
-        companyId: input.accountId,
+        companyId: input.companyId,
         contactId: input.contactId,
         title: input.title,
         isPrimary,
@@ -209,13 +209,13 @@ export class AccountRepository {
     }
   }
 
-  public async removeContact(accountId: string, contactId: string): Promise<boolean> {
+  public async removeContact(companyId: string, contactId: string): Promise<boolean> {
     const result = await this.database.orm
       .delete(companyContacts)
       .where(
         and(
           eq(companyContacts.workspaceId, this.context.workspaceId),
-          eq(companyContacts.companyId, accountId),
+          eq(companyContacts.companyId, companyId),
           eq(companyContacts.contactId, contactId),
         ),
       );

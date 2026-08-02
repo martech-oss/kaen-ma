@@ -16,7 +16,7 @@ const emptyInput = {
 const resources = {
   tags: [{ id: "tag-1", slug: "customer" }],
   lists: [{ id: "list-1", slug: "newsletter" }],
-  accounts: [{ id: "account-1", name: "Kaenma" }],
+  companies: [{ id: "account-1", name: "Kaenma" }],
 };
 
 describe("createSegmentFilter", () => {

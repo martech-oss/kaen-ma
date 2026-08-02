@@ -173,7 +173,7 @@ export function AccountsPage({
         <AccountForm
           submitLabel="作成"
           onSubmit={async (values) => {
-            const account = await orpc.accounts.create(values);
+            const account = await orpc.companies.create(values);
             toast.success("アカウントを作成しました");
             setShowCreate(false);
             await navigate({
@@ -337,7 +337,7 @@ export function AccountDetailPage({
                       variant="ghost"
                       size="sm"
                       onClick={() => {
-                        void orpc.accounts
+                        void orpc.companies
                           .removeContact({ id: account.id, contactId: contact.id })
                           .then(async () => {
                             toast.success("アカウントとの関連を解除しました");
@@ -379,7 +379,7 @@ export function AccountDetailPage({
           initialDomain={account.domain ?? ""}
           submitLabel="変更を保存"
           onSubmit={async (values) => {
-            await orpc.accounts.update({
+            await orpc.companies.update({
               id: account.id,
               name: values.name,
               domain: values.domain || null,
@@ -399,7 +399,7 @@ export function AccountDetailPage({
         <AddAccountContactForm
           contacts={contacts.filter((contact) => !assignedIds.has(contact.id))}
           onSubmit={async (values) => {
-            await orpc.accounts.assignContact({ id: account.id, ...values });
+            await orpc.companies.assignContact({ id: account.id, ...values });
             toast.success("連絡先をアカウントへ追加しました");
             setShowAddContact(false);
             await load();

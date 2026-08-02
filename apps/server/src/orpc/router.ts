@@ -10,12 +10,12 @@ import {
 } from "../automations/router";
 import { createTopicProcedure, listTopicsProcedure } from "../consent/router";
 import {
-  assignAccountContactProcedure,
-  createAccountProcedure,
-  getAccountProcedure,
-  listAccountsProcedure,
-  removeAccountContactProcedure,
-  updateAccountProcedure,
+  assignCompanyContactProcedure,
+  createCompanyProcedure,
+  getCompanyProcedure,
+  listCompaniesProcedure,
+  removeCompanyContactProcedure,
+  updateCompanyProcedure,
 } from "../contacts/company-router";
 import {
   addListProcedure,
@@ -246,12 +246,12 @@ export const orpcRouter = os.router({
     getTracking: getTrackingProcedure,
     updateTracking: updateTrackingProcedure,
   },
-  accounts: {
-    list: listAccountsProcedure,
-    get: getAccountProcedure,
-    create: createAccountProcedure,
-    update: updateAccountProcedure,
-    assignContact: assignAccountContactProcedure,
-    removeContact: removeAccountContactProcedure,
+  companies: {
+    list: listCompaniesProcedure,
+    get: getCompanyProcedure,
+    create: createCompanyProcedure,
+    update: updateCompanyProcedure,
+    assignContact: assignCompanyContactProcedure,
+    removeContact: removeCompanyContactProcedure,
   },
 });

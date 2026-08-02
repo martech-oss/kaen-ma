@@ -14,7 +14,7 @@ import {
 } from "@kaenma/database";
 import { type CampaignNode } from "@kaenma/orpc";
 
-import { type CampaignJobRow } from "../automations/worker";
+import { type AutomationJobRow } from "../automations/worker";
 import { type RuntimeEnv } from "../env";
 import { buildReplyAddress } from "../messaging/reply-address";
 import { parseTemplateVariables, resolveTemplateVariables } from "../messaging/resend";
@@ -27,7 +27,7 @@ export async function createEmailDelivery(
   action: Extract<CampaignNode, { type: "action" }>["config"] & {
     action: "send_email";
   },
-  job: CampaignJobRow,
+  job: AutomationJobRow,
   env: RuntimeEnv,
 ): Promise<void> {
   if (!job.contact_email) throw new PermanentChannelError("Contact does not have an email");
@@ -52,7 +52,7 @@ export async function createEmailDelivery(
       ? await createSignedToken(env.TRACKING_SIGNING_SECRET, {
           workspaceId: job.workspace_id,
           resourceId: action.topicId ?? "global",
-          contactId: job.recipient_id,
+          contactId: job.contact_id,
           expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
           purpose: "unsubscribe",
         })
@@ -69,7 +69,7 @@ export async function createEmailDelivery(
     ...(unsubscribeUrl ? { unsubscribeUrl } : {}),
     ...(preferenceUrl ? { preferenceUrl } : {}),
   });
-  const replyTo = await buildReplyAddress(env, job.workspace_id, deliveryId, job.recipient_id);
+  const replyTo = await buildReplyAddress(env, job.workspace_id, deliveryId, job.contact_id);
   const payload: ChannelMessage = {
     kind: "email",
     idempotencyKey: `${job.idempotency_key}:email`,
@@ -85,7 +85,7 @@ export async function createEmailDelivery(
   const created = await repository.insertQueuedDelivery({
     id: deliveryId,
     workspaceId: job.workspace_id,
-    contactId: job.recipient_id,
+    contactId: job.contact_id,
     enrollmentId: job.enrollment_id,
     channel: "email",
     purpose: template.purpose,
@@ -103,7 +103,7 @@ export async function createEmailDelivery(
 
 export async function createWebhookDelivery(
   endpointId: string,
-  job: CampaignJobRow,
+  job: AutomationJobRow,
   env: RuntimeEnv,
 ): Promise<void> {
   const repository = new MessagingWorkerRepository(env.DB);
@@ -116,14 +116,14 @@ export async function createWebhookDelivery(
     workspaceId: job.workspace_id,
     deliveryId,
     payload: {
-      contactId: job.recipient_id,
+      contactId: job.contact_id,
       enrollmentId: job.enrollment_id,
     },
   };
   const created = await repository.insertQueuedDelivery({
     id: deliveryId,
     workspaceId: job.workspace_id,
-    contactId: job.recipient_id,
+    contactId: job.contact_id,
     enrollmentId: job.enrollment_id,
     channel: "webhook",
     purpose: "transactional",

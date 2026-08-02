@@ -211,7 +211,7 @@ describe("Kaenma Worker", () => {
       description: "Paid customers",
     });
     expect(list.id).toBeTruthy();
-    const account = await client.accounts.create({ name: "Acme", domain: "acme.example" });
+    const account = await client.companies.create({ name: "Acme", domain: "acme.example" });
     expect(account.name).toBe("Acme");
 
     const contact = await client.contacts.create({
@@ -227,7 +227,7 @@ describe("Kaenma Worker", () => {
       client.contactResources.addList({ contactId: contact.id, resourceId: list.id }),
     ).resolves.toEqual({ assigned: true });
     await expect(
-      client.accounts.assignContact({
+      client.companies.assignContact({
         id: account.id,
         contactId: contact.id,
         title: "Marketing Lead",
@@ -347,7 +347,7 @@ describe("Kaenma Worker", () => {
     const filtered = await client.contacts.list({
       tagId: tag.id,
       listId: list.id,
-      accountId: account.id,
+      companyId: account.id,
       segmentId: segment.id,
       scoreMin: 50,
     });
@@ -356,17 +356,17 @@ describe("Kaenma Worker", () => {
       id: contact.id,
       tags: [expect.objectContaining({ id: tag.id })],
       lists: [expect.objectContaining({ id: list.id })],
-      accounts: [expect.objectContaining({ id: account.id })],
+      companies: [expect.objectContaining({ id: account.id })],
     });
 
     const profile = await client.contactResources.profile({ contactId: contact.id });
     expect(profile.contact.score).toBe(75);
     expect(profile.tags).toHaveLength(1);
     expect(profile.lists).toHaveLength(1);
-    expect(profile.accounts).toHaveLength(1);
+    expect(profile.companies).toHaveLength(1);
     expect(profile.scoreEvents).toHaveLength(1);
 
-    const accountDetail = await client.accounts.get({ id: account.id });
+    const accountDetail = await client.companies.get({ id: account.id });
     expect(accountDetail.name).toBe("Acme");
     expect(accountDetail.contacts).toEqual([
       expect.objectContaining({

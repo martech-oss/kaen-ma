@@ -33,7 +33,7 @@ describe("Deals CRM", () => {
     const pipeline = options.pipelines[0]!;
     const firstStage = pipeline.stages[0]!;
     const secondStage = pipeline.stages[1]!;
-    const account = await client.accounts.create({
+    const account = await client.companies.create({
       name: "Acme株式会社",
       domain: "acme.example",
     });
@@ -52,14 +52,14 @@ describe("Deals CRM", () => {
       currency: "JPY",
       ownerUserId: userId,
       contactId: contact.id,
-      accountId: account.id,
+      companyId: account.id,
       expectedCloseDate: "2026-09-30",
       description: "提案準備中",
     });
     expect(created).toMatchObject({
       status: "open",
       stageId: firstStage.id,
-      accountName: "Acme株式会社",
+      companyName: "Acme株式会社",
     });
 
     await expect(client.deals.move({ id: created.id, stageId: uuidv7() })).rejects.toMatchObject({
