@@ -4,7 +4,6 @@ import {
   Building2,
   ChevronDown,
   Filter,
-  ListPlus,
   Plus,
   RefreshCw,
   Search,
@@ -89,8 +88,6 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
     setStage,
     tagId,
     setTagId,
-    listId,
-    setListId,
     accountId,
     setAccountId,
     segmentId,
@@ -176,7 +173,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
 
   function buildSegmentFilter() {
     return createSegmentFilter(
-      { q: query, status, stage, tagId, listId, accountId, scoreMin, scoreMax },
+      { q: query, status, stage, tagId, accountId, scoreMin, scoreMax },
       options,
     );
   }
@@ -193,10 +190,6 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
           <Button variant="outline" nativeButton={false} render={<Link to="/contacts/tags" />}>
             <Tags data-icon="inline-start" />
             タグ
-          </Button>
-          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/lists" />}>
-            <ListPlus data-icon="inline-start" />
-            リスト
           </Button>
           <Button onClick={() => setShowCreate(true)}>
             <Plus data-icon="inline-start" />
@@ -254,15 +247,6 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
               options={options.tags.map((tag) => ({
                 value: tag.id,
                 label: tag.name,
-              }))}
-            />
-            <ControlledSelect
-              value={listId}
-              onValueChange={setListId}
-              placeholder="すべてのリスト"
-              options={options.lists.map((list) => ({
-                value: list.id,
-                label: list.name,
               }))}
             />
             <ControlledSelect
@@ -362,8 +346,8 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
               options={[
                 { value: "add_tag", label: "タグを追加" },
                 { value: "remove_tag", label: "タグを削除" },
-                { value: "add_list", label: "リストへ追加" },
-                { value: "remove_list", label: "リストから削除" },
+                { value: "add_segment", label: "セグメントへ追加" },
+                { value: "remove_segment", label: "セグメントから削除" },
                 { value: "archive", label: "アーカイブ" },
                 { value: "restore", label: "復元" },
               ]}
@@ -379,15 +363,17 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                 }))}
               />
             )}
-            {bulkAction.includes("list") && (
+            {bulkAction.includes("segment") && (
               <ControlledSelect
                 value={bulkResourceId}
                 onValueChange={setBulkResourceId}
-                placeholder="リストを選択"
-                options={options.lists.map((list) => ({
-                  value: list.id,
-                  label: list.name,
-                }))}
+                placeholder="セグメントを選択"
+                options={options.segments
+                  .filter((segment) => segment.kind === "static")
+                  .map((segment) => ({
+                    value: segment.id,
+                    label: segment.name,
+                  }))}
               />
             )}
             <Button disabled={busy} onClick={() => void applyBulkAction()}>
@@ -510,13 +496,9 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                           {contact.tags.slice(0, 3).map((tag) => (
                             <ColorChip key={tag.id} item={tag} />
                           ))}
-                          {contact.lists.slice(0, 2).map((list) => (
-                            <Badge key={list.id} variant="outline">
-                              {list.name}
-                            </Badge>
-                          ))}
-                          {contact.companies.length + contact.tags.length + contact.lists.length ===
-                            0 && <span className="text-xs text-muted-foreground">未分類</span>}
+                          {contact.companies.length + contact.tags.length === 0 && (
+                            <span className="text-xs text-muted-foreground">未分類</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
@@ -560,7 +542,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
         open={showCreate}
         onOpenChange={setShowCreate}
         title="連絡先を追加"
-        description="プロフィール、会社、タグ、リストを登録します。"
+        description="プロフィール、会社、タグ、セグメントを登録します。"
         className="sm:max-w-2xl"
       >
         <ContactCreateForm

@@ -1,7 +1,7 @@
-import { and, asc, eq, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, ne, sql } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource } from "../client";
-import { contactEvents } from "../contacts/schema";
+import { contactEvents, contacts, scoreEvents } from "../contacts/schema";
 import { deliveryEvents } from "../messaging/schema";
 import { dailyMetrics } from "../reports/schema";
 import { idempotencyKeys } from "./schema";
@@ -80,5 +80,27 @@ export class MaintenanceRepository {
     await createDatabase(this.database)
       .orm.delete(idempotencyKeys)
       .where(lt(idempotencyKeys.expiresAt, now));
+  }
+
+  /**
+   * Recomputes contacts.score from SUM(score_events.delta) for any contact
+   * where the two have drifted, and returns how many rows were corrected.
+   * contacts.score is the materialized total; score_events is an append-only
+   * delta log with no stored running total of its own. The manual score-adjust
+   * write path is two statements (not one atomic batch), so a concurrent
+   * writer can in principle leave them inconsistent - this sweep is the
+   * safety net. Contacts with no score events cannot have drifted from their
+   * default 0, so the drift comparison alone already skips them.
+   */
+  public async reconcileContactScores(now: string): Promise<number> {
+    const database = createDatabase(this.database);
+    const total = sql<number>`(SELECT COALESCE(SUM(${scoreEvents.delta}), 0) FROM ${scoreEvents}
+      WHERE ${scoreEvents.workspaceId} = ${contacts.workspaceId}
+        AND ${scoreEvents.contactId} = ${contacts.id})`;
+    const result = await database.orm
+      .update(contacts)
+      .set({ score: total, updatedAt: now })
+      .where(ne(contacts.score, total));
+    return result.meta.changes;
   }
 }

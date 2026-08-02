@@ -43,14 +43,14 @@ export function ContactCreateForm({
         customFields: {},
       });
       const tagId = optionalString(form.get("tagId"));
-      const listId = optionalString(form.get("listId"));
+      const segmentId = optionalString(form.get("segmentId"));
       const accountId = optionalString(form.get("accountId"));
       await Promise.all([
         tagId
           ? orpc.contactResources.addTag({ contactId: contact.id, resourceId: tagId })
           : Promise.resolve(),
-        listId
-          ? orpc.contactResources.addList({ contactId: contact.id, resourceId: listId })
+        segmentId
+          ? orpc.contactResources.addSegment({ contactId: contact.id, resourceId: segmentId })
           : Promise.resolve(),
         accountId
           ? orpc.companies.assignContact({
@@ -99,13 +99,15 @@ export function ContactCreateForm({
             </NativeSelectOption>
           ))}
         </SelectInput>
-        <SelectInput label="リスト" name="listId">
+        <SelectInput label="セグメント" name="segmentId">
           <NativeSelectOption value="">指定なし</NativeSelectOption>
-          {options.lists.map((list) => (
-            <NativeSelectOption key={list.id} value={list.id}>
-              {list.name}
-            </NativeSelectOption>
-          ))}
+          {options.segments
+            .filter((segment) => segment.kind === "static")
+            .map((segment) => (
+              <NativeSelectOption key={segment.id} value={segment.id}>
+                {segment.name}
+              </NativeSelectOption>
+            ))}
         </SelectInput>
       </div>
       <p className="text-xs text-muted-foreground">

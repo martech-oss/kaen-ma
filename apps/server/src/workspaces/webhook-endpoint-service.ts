@@ -22,7 +22,7 @@ export async function listWebhookEndpoints(
     name: row.name,
     url: row.url,
     eventTypes: parseJsonValue<string[]>(row.eventTypes, []),
-    enabled: row.enabled === 1,
+    enabled: row.enabled,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }));

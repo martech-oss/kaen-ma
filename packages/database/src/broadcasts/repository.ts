@@ -458,13 +458,13 @@ export class BroadcastWorkerRepository {
     const [first, ...rest] = contactIds.map((contactId) =>
       orm
         .insert(broadcastRecipients)
-        .values({ workspaceId, broadcastId, contactId, status: "pending", snapshotAt })
+        .values({ workspaceId, broadcastId, contactId, snapshotAt })
         .onConflictDoNothing(),
     );
     if (first) await orm.batch([first, ...rest]);
   }
 
-  /** Pages snapshotted recipients that have no delivery yet, by contact id. */
+  /** Pages snapshotted recipients not yet through the fan-out decision, by contact id. */
   public async listPendingBroadcastRecipients(
     workspaceId: string,
     broadcastId: string,
@@ -485,7 +485,7 @@ export class BroadcastWorkerRepository {
         and(
           eq(broadcastRecipients.workspaceId, workspaceId),
           eq(broadcastRecipients.broadcastId, broadcastId),
-          eq(broadcastRecipients.status, "pending"),
+          isNull(broadcastRecipients.processedAt),
           gt(contacts.id, afterContactId),
         ),
       )
@@ -495,9 +495,10 @@ export class BroadcastWorkerRepository {
 
   /**
    * Applies one page of fan-out outcomes atomically (one D1 batch): contacts
-   * without an email are skipped, everyone else gets a queued delivery —
-   * deduplicated on the idempotency key — and their recipient row advanced
-   * from pending to queued.
+   * without an email are marked processed with no delivery, everyone else
+   * gets a queued delivery - deduplicated on the idempotency key - and their
+   * recipient row marked processed. Delivery outcome (sent, bounced,
+   * opened, ...) is tracked entirely on `deliveries` from here on.
    */
   public async applyBroadcastDeliveryOutcomes(
     workspaceId: string,
@@ -512,10 +513,11 @@ export class BroadcastWorkerRepository {
         eq(broadcastRecipients.workspaceId, workspaceId),
         eq(broadcastRecipients.broadcastId, broadcastId),
         eq(broadcastRecipients.contactId, outcome.contactId),
+        isNull(broadcastRecipients.processedAt),
       );
       if (outcome.kind === "skip") {
         statements.push(
-          orm.update(broadcastRecipients).set({ status: "skipped" }).where(recipientScope),
+          orm.update(broadcastRecipients).set({ processedAt: now }).where(recipientScope),
         );
         continue;
       }
@@ -540,10 +542,7 @@ export class BroadcastWorkerRepository {
             updatedAt: now,
           })
           .onConflictDoNothing(),
-        orm
-          .update(broadcastRecipients)
-          .set({ status: "queued" })
-          .where(and(recipientScope, eq(broadcastRecipients.status, "pending"))),
+        orm.update(broadcastRecipients).set({ processedAt: now }).where(recipientScope),
       );
     }
     const [first, ...rest] = statements;

@@ -3,8 +3,8 @@ import * as z from "zod";
 import { contactSchema } from "./contact-schema";
 
 /**
- * Chip shape embedded in contact summaries. The management-row variants with
- * counts live in resource-schema.ts (tagSchema / contactListSchema).
+ * Chip shape embedded in contact summaries. The management-row variant with
+ * a count lives in resource-schema.ts (tagSchema).
  */
 export const contactTagSchema = z.object({
   id: z.string(),
@@ -12,8 +12,6 @@ export const contactTagSchema = z.object({
   slug: z.string(),
   color: z.string(),
 });
-
-const contactListChipSchema = contactTagSchema;
 
 export const contactCompanySchema = z.object({
   id: z.string(),
@@ -25,7 +23,6 @@ export const contactCompanySchema = z.object({
 
 export const contactSummarySchema = contactSchema.extend({
   tags: z.array(contactTagSchema),
-  lists: z.array(contactListChipSchema),
   companies: z.array(contactCompanySchema),
 });
 
@@ -38,7 +35,6 @@ export const contactListInputSchema = z.object({
   status: z.enum(["active", "archived", "anonymous", "all"]).optional(),
   stage: z.string().optional(),
   tagId: z.string().optional(),
-  listId: z.string().optional(),
   companyId: z.string().optional(),
   segmentId: z.string().optional(),
   scoreMin: z.number().optional(),

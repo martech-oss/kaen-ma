@@ -89,7 +89,7 @@ export const forms = sqliteTable(
     version: integer().default(1).notNull(),
     definition: text().notNull(),
     allowedDomains: text("allowed_domains").default("[]").notNull(),
-    turnstileEnabled: integer("turnstile_enabled").default(1).notNull(),
+    turnstileEnabled: integer("turnstile_enabled", { mode: "boolean" }).default(true).notNull(),
     successMessage: text("success_message").default("ありがとうございます。").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -185,7 +185,7 @@ export const siteTrackingSettings = sqliteTable(
       .primaryKey()
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    enabled: integer().default(0).notNull(),
+    enabled: integer({ mode: "boolean" }).default(false).notNull(),
     allowedDomains: text("allowed_domains").default("[]").notNull(),
     consentMode: text("consent_mode").default("required").notNull(),
     createdAt: text("created_at").notNull(),

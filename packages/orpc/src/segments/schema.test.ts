@@ -14,7 +14,7 @@ describe("segment condition schema", () => {
         "email",
         "score",
         "tag",
-        "list",
+        "segment",
         "company",
         "subscription",
         "event",

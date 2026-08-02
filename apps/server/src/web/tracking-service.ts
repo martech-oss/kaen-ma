@@ -8,7 +8,7 @@ export async function getSiteTracking(
 ): Promise<SiteTracking> {
   const overview = await new WebRepository(database, workspace).getTrackingOverview();
   return {
-    enabled: overview.settings?.enabled === 1,
+    enabled: overview.settings?.enabled ?? false,
     allowedDomains: overview.settings?.allowedDomains ?? [],
     consentMode: "required",
     workspaceSlug: overview.workspaceSlug ?? "",

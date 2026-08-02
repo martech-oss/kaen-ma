@@ -44,6 +44,12 @@ export const broadcasts = sqliteTable(
   ],
 );
 
+/**
+ * Pure audience snapshot: which contacts were in scope when a broadcast
+ * started, plus how far fan-out has progressed. Delivery outcome (sent,
+ * bounced, opened, ...) lives entirely on `deliveries` - this table only
+ * needs to know whether a row has been through the fan-out decision yet.
+ */
 export const broadcastRecipients = sqliteTable(
   "broadcast_recipients",
   {
@@ -56,11 +62,15 @@ export const broadcastRecipients = sqliteTable(
     contactId: text("contact_id")
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
-    status: text().default("pending").notNull(),
     snapshotAt: text("snapshot_at").notNull(),
+    processedAt: text("processed_at"),
   },
   (table) => [
-    index("broadcast_recipients_status_idx").on(table.workspaceId, table.broadcastId, table.status),
+    index("broadcast_recipients_pending_idx").on(
+      table.workspaceId,
+      table.broadcastId,
+      table.processedAt,
+    ),
     primaryKey({
       columns: [table.workspaceId, table.broadcastId, table.contactId],
       name: "broadcast_recipients_workspace_id_broadcast_id_contact_id_pk",

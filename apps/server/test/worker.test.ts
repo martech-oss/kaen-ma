@@ -6,12 +6,12 @@ import {
   companies,
   companyContacts,
   ContactRepository,
-  contactListMemberships,
-  contactLists,
   contacts,
   contactTags,
   createDatabase,
   reserveIdempotencyKey,
+  segmentMemberships,
+  segments,
   tags,
   uuidv7,
 } from "@kaenma/database";
@@ -79,7 +79,7 @@ describe("Kaenma Worker", () => {
   it("filters, paginates, archives, and restores contacts within a workspace", async () => {
     const { workspaceId } = await seedWorkspace(env.DB);
     const tagId = uuidv7();
-    const listId = uuidv7();
+    const segmentId = uuidv7();
     const accountId = uuidv7();
     const now = new Date().toISOString();
     const repository = new ContactRepository(env.DB, {
@@ -109,13 +109,12 @@ describe("Kaenma Worker", () => {
         color: "#6366f1",
         createdAt: now,
       }),
-      orm.insert(contactLists).values({
-        id: listId,
+      orm.insert(segments).values({
+        id: segmentId,
         workspaceId,
         name: "Customers",
-        slug: `customers-${listId}`,
-        description: "",
-        color: "#6366f1",
+        slug: `customers-${segmentId}`,
+        kind: "static",
         createdAt: now,
         updatedAt: now,
       }),
@@ -144,29 +143,27 @@ describe("Kaenma Worker", () => {
         tagId,
         createdAt: now,
       }),
-      orm.insert(contactListMemberships).values({
+      orm.insert(segmentMemberships).values({
         workspaceId,
-        listId,
+        segmentId,
         contactId: highScore.id,
-        status: "active",
-        source: "manual",
-        createdAt: now,
-        updatedAt: now,
+        source: "static",
+        joinedAt: now,
       }),
       orm.insert(companyContacts).values({
         workspaceId,
         companyId: accountId,
         contactId: highScore.id,
         title: "Owner",
-        isPrimary: 1,
+        isPrimary: true,
         createdAt: now,
       }),
     ]);
 
     const filtered = await repository.listContacts({
       tagId,
-      listId,
-      accountId,
+      segmentId,
+      companyId: accountId,
       stage: "customer",
       scoreMin: 50,
     });
@@ -206,11 +203,12 @@ describe("Kaenma Worker", () => {
 
     const tag = await client.contactResources.createTag({ name: "VIP", color: "#6366f1" });
     expect(tag.id).toBeTruthy();
-    const list = await client.contactResources.createList({
+    const group = await client.segments.create({
       name: "Customers",
-      description: "Paid customers",
+      slug: "customers",
+      kind: "static",
     });
-    expect(list.id).toBeTruthy();
+    expect(group.id).toBeTruthy();
     const account = await client.companies.create({ name: "Acme", domain: "acme.example" });
     expect(account.name).toBe("Acme");
 
@@ -224,7 +222,7 @@ describe("Kaenma Worker", () => {
       client.contactResources.addTag({ contactId: contact.id, resourceId: tag.id }),
     ).resolves.toEqual({ assigned: true });
     await expect(
-      client.contactResources.addList({ contactId: contact.id, resourceId: list.id }),
+      client.contactResources.addSegment({ contactId: contact.id, resourceId: group.id }),
     ).resolves.toEqual({ assigned: true });
     await expect(
       client.companies.assignContact({
@@ -250,7 +248,7 @@ describe("Kaenma Worker", () => {
         combinator: "and",
         children: [
           { kind: "condition", field: "tag", operator: "eq", value: tag.slug },
-          { kind: "condition", field: "list", operator: "eq", value: list.slug },
+          { kind: "condition", field: "segment", operator: "eq", value: group.slug },
           { kind: "condition", field: "score", operator: "gte", value: 50 },
         ],
       },
@@ -346,23 +344,24 @@ describe("Kaenma Worker", () => {
 
     const filtered = await client.contacts.list({
       tagId: tag.id,
-      listId: list.id,
       companyId: account.id,
-      segmentId: segment.id,
+      segmentId: group.id,
       scoreMin: 50,
     });
     expect(filtered.total).toBe(1);
     expect(filtered.items[0]).toMatchObject({
       id: contact.id,
       tags: [expect.objectContaining({ id: tag.id })],
-      lists: [expect.objectContaining({ id: list.id })],
       companies: [expect.objectContaining({ id: account.id })],
     });
 
     const profile = await client.contactResources.profile({ contactId: contact.id });
     expect(profile.contact.score).toBe(75);
     expect(profile.tags).toHaveLength(1);
-    expect(profile.lists).toHaveLength(1);
+    // Both the manually-added static group and the auto-refreshed dynamic
+    // "Tokyo VIP" segment (created below, matching this contact's tag/group/
+    // score) end up as memberships once the dynamic segment exists.
+    expect(profile.segments.map((row) => row.id)).toContain(group.id);
     expect(profile.companies).toHaveLength(1);
     expect(profile.scoreEvents).toHaveLength(1);
 

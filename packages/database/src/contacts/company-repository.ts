@@ -176,7 +176,7 @@ export class CompanyRepository {
     isPrimary: boolean;
   }): Promise<void> {
     const workspaceId = this.context.workspaceId;
-    const isPrimary = input.isPrimary ? 1 : 0;
+    const isPrimary = input.isPrimary;
     const assign = this.database.orm
       .insert(companyContacts)
       .values({
@@ -195,7 +195,7 @@ export class CompanyRepository {
       await this.database.orm.batch([
         this.database.orm
           .update(companyContacts)
-          .set({ isPrimary: 0 })
+          .set({ isPrimary: false })
           .where(
             and(
               eq(companyContacts.workspaceId, workspaceId),

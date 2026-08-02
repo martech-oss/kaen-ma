@@ -12,7 +12,7 @@ export async function loadPublicTrackingWorkspace(
     .select({ id: organization.id, allowedDomains: siteTrackingSettings.allowedDomains })
     .from(organization)
     .innerJoin(siteTrackingSettings, eq(siteTrackingSettings.workspaceId, organization.id))
-    .where(and(eq(organization.slug, workspaceSlug), eq(siteTrackingSettings.enabled, 1)))
+    .where(and(eq(organization.slug, workspaceSlug), eq(siteTrackingSettings.enabled, true)))
     .limit(1);
   if (!row) return null;
   try {

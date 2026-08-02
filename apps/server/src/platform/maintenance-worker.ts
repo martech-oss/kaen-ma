@@ -51,4 +51,5 @@ export async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   await repository.rollupDailyMetrics(yesterday);
   await repository.purgeExpiredIdempotencyKeys(new Date().toISOString());
+  await repository.reconcileContactScores(new Date().toISOString());
 }

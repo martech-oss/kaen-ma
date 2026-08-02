@@ -103,19 +103,12 @@ async function attachContactRelations(
     workspaceId,
   }).listContactRelations(ids);
   const tagsByContact = new Map<string, ContactSummary["tags"]>();
-  const listsByContact = new Map<string, ContactSummary["lists"]>();
   const companiesByContact = new Map<string, ContactSummary["companies"]>();
 
   for (const row of relations.tags) {
     const items = tagsByContact.get(row.contactId) ?? [];
     items.push({ id: row.id, name: row.name, slug: row.slug, color: row.color });
     tagsByContact.set(row.contactId, items);
-  }
-
-  for (const row of relations.lists) {
-    const items = listsByContact.get(row.contactId) ?? [];
-    items.push({ id: row.id, name: row.name, slug: row.slug, color: row.color });
-    listsByContact.set(row.contactId, items);
   }
 
   for (const row of relations.accounts) {
@@ -125,7 +118,7 @@ async function attachContactRelations(
       name: row.name,
       domain: row.domain,
       title: row.title,
-      is_primary: Boolean(row.isPrimary),
+      is_primary: row.isPrimary,
     });
     companiesByContact.set(row.contactId, items);
   }
@@ -133,7 +126,6 @@ async function attachContactRelations(
   return contacts.map((contact) => ({
     ...contact,
     tags: tagsByContact.get(contact.id) ?? [],
-    lists: listsByContact.get(contact.id) ?? [],
     companies: companiesByContact.get(contact.id) ?? [],
   }));
 }

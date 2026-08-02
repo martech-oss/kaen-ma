@@ -22,7 +22,7 @@ export const subscriptionTopics = sqliteTable(
     name: text().notNull(),
     slug: text().notNull(),
     description: text().default("").notNull(),
-    isDefault: integer("is_default").default(0).notNull(),
+    isDefault: integer("is_default", { mode: "boolean" }).default(false).notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

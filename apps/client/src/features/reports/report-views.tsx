@@ -69,9 +69,9 @@ export function ContactsReportView({ report }: { report: ContactsReport }): Reac
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <RankingCard
-          title="上位リスト"
+          title="上位セグメント"
           description="現在のアクティブ連絡先数"
-          items={report.topLists}
+          items={report.topSegments}
         />
         <RankingCard
           title="上位タグ"

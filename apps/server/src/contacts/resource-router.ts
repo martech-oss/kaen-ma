@@ -1,15 +1,12 @@
 import { authed, requireRole } from "../orpc/base";
 import {
-  addContactList,
   addContactSegment,
   addContactTag,
   adjustContactScore,
   applyContactBulkAction,
-  createContactList,
   createTag,
   getContactOptions,
   getContactProfile,
-  removeContactList,
   removeContactSegment,
   removeContactTag,
   ResourceConflictError,
@@ -40,18 +37,6 @@ export const createTagProcedure = authed.contactResources.createTag.handler(
   },
 );
 
-export const createListProcedure = authed.contactResources.createList.handler(
-  async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    try {
-      return await createContactList(context.database, context.workspace, input);
-    } catch (error) {
-      if (error instanceof ResourceConflictError) throw errors.LIST_CONFLICT({ cause: error });
-      throw error;
-    }
-  },
-);
-
 export const addTagProcedure = authed.contactResources.addTag.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
@@ -66,26 +51,6 @@ export const removeTagProcedure = authed.contactResources.removeTag.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await removeContactTag(context.database, context.workspace, input))) {
-      throw errors.RELATION_REJECTED();
-    }
-    return { removed: true as const };
-  },
-);
-
-export const addListProcedure = authed.contactResources.addList.handler(
-  async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    if (!(await addContactList(context.database, context.workspace, input))) {
-      throw errors.RELATION_REJECTED();
-    }
-    return { assigned: true as const };
-  },
-);
-
-export const removeListProcedure = authed.contactResources.removeList.handler(
-  async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    if (!(await removeContactList(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
     return { removed: true as const };

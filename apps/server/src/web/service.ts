@@ -22,7 +22,7 @@ export async function listSignupForms(
     version: row.version,
     definition: row.definition,
     allowedDomains: row.allowedDomains,
-    turnstileEnabled: row.turnstileEnabled === 1,
+    turnstileEnabled: row.turnstileEnabled,
     successMessage: row.successMessage,
     submissionCount: row.submissionCount,
     createdAt: row.createdAt,

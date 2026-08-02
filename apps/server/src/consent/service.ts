@@ -13,7 +13,7 @@ export async function listSubscriptionTopics(
     name: row.name,
     slug: row.slug,
     description: row.description,
-    isDefault: row.isDefault === 1,
+    isDefault: row.isDefault,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }));

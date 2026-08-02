@@ -20,7 +20,6 @@ export function useContactFilters(initialSearch: ContactSearch) {
   const [status, setStatus] = useState<ContactStatus>(initialSearch.status);
   const [stage, setStage] = useState(initialSearch.stage);
   const [tagId, setTagId] = useState(initialSearch.tagId);
-  const [listId, setListId] = useState(initialSearch.listId);
   const [accountId, setAccountId] = useState(initialSearch.accountId);
   const [segmentId, setSegmentId] = useState(initialSearch.segmentId);
   const [scoreMin, setScoreMin] = useState(initialSearch.scoreMin);
@@ -34,7 +33,6 @@ export function useContactFilters(initialSearch: ContactSearch) {
     setStatus(initialSearch.status);
     setStage(initialSearch.stage);
     setTagId(initialSearch.tagId);
-    setListId(initialSearch.listId);
     setAccountId(initialSearch.accountId);
     setSegmentId(initialSearch.segmentId);
     setScoreMin(initialSearch.scoreMin);
@@ -49,7 +47,6 @@ export function useContactFilters(initialSearch: ContactSearch) {
       status,
       stage,
       tagId,
-      listId,
       accountId,
       segmentId,
       scoreMin,
@@ -79,7 +76,6 @@ export function useContactFilters(initialSearch: ContactSearch) {
     accountId,
     direction,
     initialSearch,
-    listId,
     navigate,
     query,
     scoreMax,
@@ -92,7 +88,7 @@ export function useContactFilters(initialSearch: ContactSearch) {
   ]);
 
   const hasAdvancedFilters = Boolean(
-    stage || tagId || listId || accountId || segmentId || scoreMin || scoreMax,
+    stage || tagId || accountId || segmentId || scoreMin || scoreMax,
   );
 
   /** Resets everything except `status`, which has its own control outside the filter panel. */
@@ -100,7 +96,6 @@ export function useContactFilters(initialSearch: ContactSearch) {
     setQuery("");
     setStage("");
     setTagId("");
-    setListId("");
     setAccountId("");
     setSegmentId("");
     setScoreMin("");
@@ -118,8 +113,6 @@ export function useContactFilters(initialSearch: ContactSearch) {
     setStage,
     tagId,
     setTagId,
-    listId,
-    setListId,
     accountId,
     setAccountId,
     segmentId,

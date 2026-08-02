@@ -44,7 +44,7 @@ export interface SignupFormRecord {
   version: number;
   definition: SignupFormDefinition;
   allowedDomains: string[];
-  turnstileEnabled: number;
+  turnstileEnabled: boolean;
   successMessage: string;
   submissionCount: number;
   createdAt: string;
@@ -69,7 +69,7 @@ export type LandingPageUpdateOutcome =
   | { kind: "ok"; id: string; versionId: string };
 
 export interface SiteTrackingOverview {
-  settings: { enabled: number; allowedDomains: string[]; updatedAt: string } | null;
+  settings: { enabled: boolean; allowedDomains: string[]; updatedAt: string } | null;
   workspaceSlug: string | null;
   summary: { pageViews: number; uniqueVisitors: number; identifiedContacts: number };
   topPages: Array<{ url: string | null; views: number }>;
@@ -178,7 +178,7 @@ export class WebRepository {
       status: input.status,
       definition: JSON.stringify(input.definition),
       allowedDomains: JSON.stringify(input.allowedDomains),
-      turnstileEnabled: input.turnstileEnabled ? 1 : 0,
+      turnstileEnabled: input.turnstileEnabled,
       successMessage: input.successMessage,
       createdAt: now,
       updatedAt: now,
@@ -196,7 +196,7 @@ export class WebRepository {
         version: sql`${forms.version} + 1`,
         definition: JSON.stringify(input.definition),
         allowedDomains: JSON.stringify(input.allowedDomains),
-        turnstileEnabled: input.turnstileEnabled ? 1 : 0,
+        turnstileEnabled: input.turnstileEnabled,
         successMessage: input.successMessage,
         updatedAt: new Date().toISOString(),
       })
@@ -450,7 +450,7 @@ export class WebRepository {
       .insert(siteTrackingSettings)
       .values({
         workspaceId: this.context.workspaceId,
-        enabled: input.enabled ? 1 : 0,
+        enabled: input.enabled,
         allowedDomains,
         consentMode: "required",
         createdAt: now,
@@ -458,7 +458,7 @@ export class WebRepository {
       })
       .onConflictDoUpdate({
         target: siteTrackingSettings.workspaceId,
-        set: { enabled: input.enabled ? 1 : 0, allowedDomains, updatedAt: now },
+        set: { enabled: input.enabled, allowedDomains, updatedAt: now },
       });
   }
 
@@ -709,7 +709,7 @@ export class PublicFormRepository {
       name: row.name,
       definition: parseJsonRecord(row.definition),
       allowedDomains: parseJsonArray(row.allowedDomains) as string[],
-      turnstileEnabled: row.turnstileEnabled === 1,
+      turnstileEnabled: row.turnstileEnabled,
       successMessage: row.successMessage,
     };
   }

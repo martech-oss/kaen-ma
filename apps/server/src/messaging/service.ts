@@ -187,5 +187,5 @@ export async function listSubscriptionTopicOptions(
   workspace: WorkspaceContext,
 ): Promise<SubscriptionTopicOption[]> {
   const rows = await new ConsentRepository(database, workspace).listTopics();
-  return rows.map((row) => ({ id: row.id, name: row.name, isDefault: Boolean(row.isDefault) }));
+  return rows.map((row) => ({ id: row.id, name: row.name, isDefault: row.isDefault }));
 }

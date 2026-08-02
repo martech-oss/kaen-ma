@@ -68,7 +68,6 @@ describe("oRPC API", () => {
       expect.objectContaining({
         id: created.id,
         tags: [],
-        lists: [],
         companies: [],
       }),
     ]);

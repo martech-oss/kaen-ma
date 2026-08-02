@@ -1,11 +1,14 @@
 import { sql } from "drizzle-orm";
 import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
+import { CHANNELS, DELIVERY_EVENT_TYPES, MESSAGE_PURPOSES, PROVIDERS } from "@kaenma/orpc";
+
 import { organization } from "../auth/schema";
 import { automationEnrollments } from "../automations/schema";
 import { broadcasts } from "../broadcasts/schema";
 import { subscriptionTopics } from "../consent/schema";
 import { contacts } from "../contacts/schema";
+import { checkEnum } from "../shared/enum-check";
 
 export const emailTemplates = sqliteTable(
   "email_templates",
@@ -39,7 +42,7 @@ export const emailTemplates = sqliteTable(
       table.updatedAt,
     ),
     uniqueIndex("email_templates_resend_template_unique").on(table.resendTemplateId),
-    check("email_templates_purpose_check", sql`${table.purpose} IN ('transactional', 'marketing')`),
+    checkEnum("email_templates_purpose_check", table.purpose, MESSAGE_PURPOSES),
     check(
       "email_templates_remote_status_check",
       sql`${table.remoteStatus} IN ('draft', 'published')`,
@@ -87,7 +90,12 @@ export const deliveries = sqliteTable(
     channel: text().notNull(),
     purpose: text().notNull(),
     provider: text().notNull(),
-    recipient: text().notNull(),
+    // Nulled out when the owning contact is archived (see ContactRepository.
+    // archiveContact / ContactResourceRepository.bulkSetContactsArchived) -
+    // deliveries are kept for audit/reporting, but the PII they carried
+    // independently of contactId (which is already SET NULL on delete)
+    // shouldn't outlive the contact's own retention.
+    recipient: text(),
     topicId: text("topic_id").references(() => subscriptionTopics.id, { onDelete: "set null" }),
     templateId: text("template_id").references(() => emailTemplates.id, {
       onDelete: "set null",
@@ -122,9 +130,9 @@ export const deliveries = sqliteTable(
       table.workspaceId,
       table.idempotencyKey,
     ),
-    check("deliveries_channel_check", sql`${table.channel} IN ('email', 'webhook')`),
-    check("deliveries_purpose_check", sql`${table.purpose} IN ('transactional', 'marketing')`),
-    check("deliveries_provider_check", sql`${table.provider} IN ('resend', 'webhook')`),
+    checkEnum("deliveries_channel_check", table.channel, CHANNELS),
+    checkEnum("deliveries_purpose_check", table.purpose, MESSAGE_PURPOSES),
+    checkEnum("deliveries_provider_check", table.provider, PROVIDERS),
     check(
       "deliveries_status_check",
       sql`${table.status} IN ('queued', 'sending', 'accepted', 'delivered', 'failed', 'suppressed', 'cancelled')`,
@@ -163,10 +171,7 @@ export const deliveryEvents = sqliteTable(
       table.provider,
       table.providerEventId,
     ),
-    check(
-      "delivery_events_type_check",
-      sql`${table.type} IN ('accepted', 'delivered', 'opened', 'clicked', 'bounced', 'complained', 'unsubscribed', 'replied', 'failed')`,
-    ),
+    checkEnum("delivery_events_type_check", table.type, DELIVERY_EVENT_TYPES),
   ],
 );
 

@@ -64,7 +64,7 @@ export const contactsReportSchema = z.object({
   topTags: z.array(
     z.object({ id: z.string(), name: z.string(), color: z.string(), contactCount: int }),
   ),
-  topLists: z.array(
+  topSegments: z.array(
     z.object({ id: z.string(), name: z.string(), color: z.string(), contactCount: int }),
   ),
 });

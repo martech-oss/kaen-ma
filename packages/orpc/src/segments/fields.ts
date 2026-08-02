@@ -72,7 +72,12 @@ export const segmentFieldDefinitions = [
     keyRequirement: "none",
   },
   { field: "tag", valueType: "relation", operators: relationOperators, keyRequirement: "none" },
-  { field: "list", valueType: "relation", operators: relationOperators, keyRequirement: "none" },
+  {
+    field: "segment",
+    valueType: "relation",
+    operators: relationOperators,
+    keyRequirement: "none",
+  },
   { field: "company", valueType: "relation", operators: relationOperators, keyRequirement: "none" },
   {
     field: "subscription",

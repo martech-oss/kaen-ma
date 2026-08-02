@@ -25,10 +25,10 @@ describe("contact resources over oRPC", () => {
   it("maps option rows to camelCase with counts", async () => {
     const client = await seedWorkspace();
     const tag = await client.contactResources.createTag({ name: "VIP", color: "#0f766e" });
-    const list = await client.contactResources.createList({
+    const group = await client.segments.create({
       name: "Customers",
-      description: "paying",
-      color: "#6366f1",
+      slug: "customers",
+      kind: "static",
     });
     const contact = await client.contacts.create({
       email: "res@example.com",
@@ -36,20 +36,21 @@ describe("contact resources over oRPC", () => {
       customFields: {},
     });
     await client.contactResources.addTag({ contactId: contact.id, resourceId: tag.id });
-    await client.contactResources.addList({ contactId: contact.id, resourceId: list.id });
+    await client.contactResources.addSegment({ contactId: contact.id, resourceId: group.id });
 
     const options = await client.contactResources.options();
     expect(options.tags).toEqual([
       { id: tag.id, name: "VIP", slug: tag.slug, color: "#0f766e", contactCount: 1 },
     ]);
-    expect(options.lists).toEqual([
+    expect(options.segments).toEqual([
       {
-        id: list.id,
+        id: group.id,
         name: "Customers",
-        slug: list.slug,
-        description: "paying",
-        color: "#6366f1",
-        contactCount: 1,
+        slug: group.slug,
+        kind: "static",
+        filterAst: null,
+        memberCount: 1,
+        evaluatedAt: null,
       },
     ]);
     expect(options.stages).toEqual([{ stage: "customer", contactCount: 1 }]);
@@ -75,9 +76,7 @@ describe("contact resources over oRPC", () => {
     expect(profile.companies).toEqual([
       { id: account.id, name: "Globex", domain: null, title: "VP", isPrimary: true },
     ]);
-    expect(profile.scoreEvents).toEqual([
-      expect.objectContaining({ delta: 5, total: 5, reason: "signup" }),
-    ]);
+    expect(profile.scoreEvents).toEqual([expect.objectContaining({ delta: 5, reason: "signup" })]);
     expect(profile.scoreEvents[0]?.createdAt).toEqual(expect.any(String));
     expect(profile.contact.score).toBe(5);
   });

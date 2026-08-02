@@ -1,7 +1,9 @@
-import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
+import { PROVIDERS, WORKSPACE_ROLES } from "@kaenma/orpc";
 
 import { organization, user } from "../auth/schema";
+import { checkEnum } from "../shared/enum-check";
 
 export const webhookEndpoints = sqliteTable(
   "webhook_endpoints",
@@ -14,7 +16,7 @@ export const webhookEndpoints = sqliteTable(
     url: text().notNull(),
     encryptedSecret: text("encrypted_secret").notNull(),
     eventTypes: text("event_types").default("[]").notNull(),
-    enabled: integer().default(1).notNull(),
+    enabled: integer({ mode: "boolean" }).default(true).notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -73,10 +75,7 @@ export const apiKeys = sqliteTable(
   (table) => [
     index("api_keys_workspace_idx").on(table.workspaceId, table.revokedAt),
     uniqueIndex("api_keys_prefix_unique").on(table.prefix),
-    check(
-      "api_keys_role_check",
-      sql`${table.role} IN ('owner', 'admin', 'marketer', 'analyst', 'viewer')`,
-    ),
+    checkEnum("api_keys_role_check", table.role, WORKSPACE_ROLES),
   ],
 );
 
@@ -92,7 +91,7 @@ export const providerConfigs = sqliteTable(
     encryptedCredentials: text("encrypted_credentials").notNull(),
     keyVersion: integer("key_version").default(1).notNull(),
     settings: text().default("{}").notNull(),
-    enabled: integer().default(1).notNull(),
+    enabled: integer({ mode: "boolean" }).default(true).notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -102,6 +101,6 @@ export const providerConfigs = sqliteTable(
       table.provider,
       table.name,
     ),
-    check("provider_configs_provider_check", sql`${table.provider} IN ('resend', 'webhook')`),
+    checkEnum("provider_configs_provider_check", table.provider, PROVIDERS),
   ],
 );

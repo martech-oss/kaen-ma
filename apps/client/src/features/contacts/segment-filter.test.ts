@@ -7,7 +7,6 @@ const emptyInput = {
   status: "all" as const,
   stage: "",
   tagId: "",
-  listId: "",
   accountId: "",
   scoreMin: "",
   scoreMax: "",
@@ -15,7 +14,6 @@ const emptyInput = {
 
 const resources = {
   tags: [{ id: "tag-1", slug: "customer" }],
-  lists: [{ id: "list-1", slug: "newsletter" }],
   companies: [{ id: "account-1", name: "Kaenma" }],
 };
 
@@ -52,7 +50,6 @@ describe("createSegmentFilter", () => {
         {
           ...emptyInput,
           tagId: "tag-1",
-          listId: "list-1",
           accountId: "account-1",
           scoreMin: "10",
         },
@@ -64,7 +61,6 @@ describe("createSegmentFilter", () => {
       children: [
         { kind: "condition", field: "score", operator: "gte", value: 10 },
         { kind: "condition", field: "tag", operator: "eq", value: "customer" },
-        { kind: "condition", field: "list", operator: "eq", value: "newsletter" },
         { kind: "condition", field: "company", operator: "eq", value: "Kaenma" },
       ],
     });

@@ -59,13 +59,16 @@ function compileCondition(
         JOIN tags t ON t.id = ct.tag_id AND t.workspace_id = c.workspace_id
         WHERE ct.contact_id = c.id AND ct.workspace_id = c.workspace_id AND t.slug = ?
       )`;
-    case "list":
+    case "segment":
+      // Scoped to source = 'static' (manually curated membership) so a
+      // dynamic segment can reference "is in group X" without the
+      // self-referential ambiguity of matching other dynamic segments.
       params.push(String(condition.value ?? ""));
       return `${existsPrefix(condition.operator)} EXISTS (
-        SELECT 1 FROM contact_list_memberships clm
-        JOIN contact_lists cl ON cl.id = clm.list_id AND cl.workspace_id = c.workspace_id
-        WHERE clm.contact_id = c.id AND clm.workspace_id = c.workspace_id
-          AND cl.slug = ? AND clm.status = 'active'
+        SELECT 1 FROM segment_memberships sm
+        JOIN segments s ON s.id = sm.segment_id AND s.workspace_id = c.workspace_id
+        WHERE sm.contact_id = c.id AND sm.workspace_id = c.workspace_id
+          AND s.slug = ? AND sm.source = 'static'
       )`;
     case "company":
       params.push(String(condition.value ?? ""));

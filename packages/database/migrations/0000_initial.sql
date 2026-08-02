@@ -124,7 +124,7 @@ CREATE TABLE `company_contacts` (
 	`company_id` text NOT NULL,
 	`contact_id` text NOT NULL,
 	`title` text,
-	`is_primary` integer DEFAULT 0 NOT NULL,
+	`is_primary` integer DEFAULT false NOT NULL,
 	`created_at` text NOT NULL,
 	PRIMARY KEY(`workspace_id`, `company_id`, `contact_id`),
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
@@ -152,37 +152,6 @@ CREATE TABLE `contact_events` (
 CREATE INDEX `contact_events_workspace_visitor_idx` ON `contact_events` (`workspace_id`,`visitor_id`,`occurred_at`);--> statement-breakpoint
 CREATE INDEX `contact_events_workspace_type_occurred_idx` ON `contact_events` (`workspace_id`,`type`,`occurred_at`);--> statement-breakpoint
 CREATE INDEX `contact_events_workspace_contact_idx` ON `contact_events` (`workspace_id`,`contact_id`,`occurred_at`);--> statement-breakpoint
-CREATE TABLE `contact_list_memberships` (
-	`workspace_id` text NOT NULL,
-	`list_id` text NOT NULL,
-	`contact_id` text NOT NULL,
-	`status` text DEFAULT 'active' NOT NULL,
-	`source` text DEFAULT 'manual' NOT NULL,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	PRIMARY KEY(`workspace_id`, `list_id`, `contact_id`),
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`list_id`) REFERENCES `contact_lists`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "contact_list_memberships_status_check" CHECK("contact_list_memberships"."status" IN ('active', 'unsubscribed'))
-);
---> statement-breakpoint
-CREATE INDEX `contact_list_memberships_workspace_list_status_idx` ON `contact_list_memberships` (`workspace_id`,`list_id`,`status`,`contact_id`);--> statement-breakpoint
-CREATE INDEX `contact_list_memberships_workspace_contact_idx` ON `contact_list_memberships` (`workspace_id`,`contact_id`,`list_id`);--> statement-breakpoint
-CREATE TABLE `contact_lists` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`name` text NOT NULL,
-	`slug` text NOT NULL,
-	`description` text DEFAULT '' NOT NULL,
-	`color` text DEFAULT '#6366f1' NOT NULL,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `contact_lists_workspace_updated_idx` ON `contact_lists` (`workspace_id`,`updated_at`);--> statement-breakpoint
-CREATE UNIQUE INDEX `contact_lists_workspace_slug_unique` ON `contact_lists` (`workspace_id`,`slug`);--> statement-breakpoint
 CREATE TABLE `contact_tags` (
 	`workspace_id` text NOT NULL,
 	`contact_id` text NOT NULL,
@@ -261,7 +230,6 @@ CREATE TABLE `score_events` (
 	`workspace_id` text NOT NULL,
 	`contact_id` text NOT NULL,
 	`delta` integer NOT NULL,
-	`total` integer NOT NULL,
 	`reason` text NOT NULL,
 	`automation_enrollment_id` text,
 	`created_at` text NOT NULL,
@@ -444,7 +412,7 @@ CREATE TABLE `subscription_topics` (
 	`name` text NOT NULL,
 	`slug` text NOT NULL,
 	`description` text DEFAULT '' NOT NULL,
-	`is_default` integer DEFAULT 0 NOT NULL,
+	`is_default` integer DEFAULT false NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
@@ -577,7 +545,7 @@ CREATE TABLE `deliveries` (
 	`channel` text NOT NULL,
 	`purpose` text NOT NULL,
 	`provider` text NOT NULL,
-	`recipient` text NOT NULL,
+	`recipient` text,
 	`topic_id` text,
 	`template_id` text,
 	`idempotency_key` text NOT NULL,
@@ -688,15 +656,15 @@ CREATE TABLE `broadcast_recipients` (
 	`workspace_id` text NOT NULL,
 	`broadcast_id` text NOT NULL,
 	`contact_id` text NOT NULL,
-	`status` text DEFAULT 'pending' NOT NULL,
 	`snapshot_at` text NOT NULL,
+	`processed_at` text,
 	PRIMARY KEY(`workspace_id`, `broadcast_id`, `contact_id`),
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`broadcast_id`) REFERENCES `broadcasts`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE INDEX `broadcast_recipients_status_idx` ON `broadcast_recipients` (`workspace_id`,`broadcast_id`,`status`);--> statement-breakpoint
+CREATE INDEX `broadcast_recipients_pending_idx` ON `broadcast_recipients` (`workspace_id`,`broadcast_id`,`processed_at`);--> statement-breakpoint
 CREATE TABLE `broadcasts` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -763,7 +731,7 @@ CREATE TABLE `forms` (
 	`version` integer DEFAULT 1 NOT NULL,
 	`definition` text NOT NULL,
 	`allowed_domains` text DEFAULT '[]' NOT NULL,
-	`turnstile_enabled` integer DEFAULT 1 NOT NULL,
+	`turnstile_enabled` integer DEFAULT true NOT NULL,
 	`success_message` text DEFAULT 'ありがとうございます。' NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
@@ -848,7 +816,7 @@ CREATE INDEX `site_messages_workspace_schedule_idx` ON `site_messages` (`workspa
 CREATE INDEX `site_messages_workspace_status_updated_idx` ON `site_messages` (`workspace_id`,`status`,`updated_at`);--> statement-breakpoint
 CREATE TABLE `site_tracking_settings` (
 	`workspace_id` text PRIMARY KEY NOT NULL,
-	`enabled` integer DEFAULT 0 NOT NULL,
+	`enabled` integer DEFAULT false NOT NULL,
 	`allowed_domains` text DEFAULT '[]' NOT NULL,
 	`consent_mode` text DEFAULT 'required' NOT NULL,
 	`created_at` text NOT NULL,
@@ -884,7 +852,7 @@ CREATE TABLE `provider_configs` (
 	`encrypted_credentials` text NOT NULL,
 	`key_version` integer DEFAULT 1 NOT NULL,
 	`settings` text DEFAULT '{}' NOT NULL,
-	`enabled` integer DEFAULT 1 NOT NULL,
+	`enabled` integer DEFAULT true NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
@@ -918,7 +886,7 @@ CREATE TABLE `webhook_endpoints` (
 	`url` text NOT NULL,
 	`encrypted_secret` text NOT NULL,
 	`event_types` text DEFAULT '[]' NOT NULL,
-	`enabled` integer DEFAULT 1 NOT NULL,
+	`enabled` integer DEFAULT true NOT NULL,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade

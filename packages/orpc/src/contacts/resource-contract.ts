@@ -5,8 +5,6 @@ import { workspaceErrors } from "../shared/errors";
 import { contactSchema } from "./contact-schema";
 import {
   contactBulkActionSchema,
-  contactListCreateSchema,
-  contactListSchema,
   contactOptionsSchema,
   contactProfileSchema,
   contactScoreAdjustSchema,
@@ -61,15 +59,6 @@ export const contactResourcesContract = {
     })
     .input(tagCreateSchema)
     .output(tagSchema.omit({ contactCount: true })),
-  createList: oc
-    .route({ method: "POST", path: "/contact-lists", successStatus: 201 })
-    .errors({
-      ...workspaceErrors,
-      ...forbidden,
-      LIST_CONFLICT: { status: 409, message: "同名のリストが既に存在します" },
-    })
-    .input(contactListCreateSchema)
-    .output(contactListSchema.omit({ contactCount: true })),
   addTag: oc
     .route({ method: "POST", path: "/contacts/{contactId}/tags", successStatus: 201 })
     .errors(relationErrors("タグを追加できませんでした"))
@@ -78,16 +67,6 @@ export const contactResourcesContract = {
   removeTag: oc
     .route({ method: "DELETE", path: "/contacts/{contactId}/tags/{resourceId}" })
     .errors(relationErrors("タグを削除できませんでした"))
-    .input(contactRelationInput)
-    .output(z.object({ removed: z.literal(true) })),
-  addList: oc
-    .route({ method: "POST", path: "/contacts/{contactId}/lists", successStatus: 201 })
-    .errors(relationErrors("リストへ追加できませんでした"))
-    .input(contactRelationInput)
-    .output(z.object({ assigned: z.literal(true) })),
-  removeList: oc
-    .route({ method: "DELETE", path: "/contacts/{contactId}/lists/{resourceId}" })
-    .errors(relationErrors("リストから削除できませんでした"))
     .input(contactRelationInput)
     .output(z.object({ removed: z.literal(true) })),
   addSegment: oc

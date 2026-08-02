@@ -12,8 +12,6 @@ import {
   automationVersions,
   claimDueJobs,
   companyContacts,
-  contactListMemberships,
-  contactLists,
   contactTags,
   contacts,
   createDatabase,
@@ -115,7 +113,6 @@ describe("contact and account repositories", () => {
     const account = await accountRepository.createCompany({ name: "Related Company" });
     const now = new Date().toISOString();
     const tagId = uuidv7();
-    const listId = uuidv7();
     const segmentId = uuidv7();
 
     await database().orm.batch([
@@ -138,23 +135,6 @@ describe("contact and account repositories", () => {
         tagId,
         createdAt: now,
       }),
-      database().orm.insert(contactLists).values({
-        id: listId,
-        workspaceId: context.workspaceId,
-        name: "Newsletter",
-        slug: "newsletter",
-        createdAt: now,
-        updatedAt: now,
-      }),
-      database().orm.insert(contactListMemberships).values({
-        workspaceId: context.workspaceId,
-        listId,
-        contactId: contact.id,
-        status: "active",
-        source: "manual",
-        createdAt: now,
-        updatedAt: now,
-      }),
       database().orm.insert(segments).values({
         id: segmentId,
         workspaceId: context.workspaceId,
@@ -176,7 +156,6 @@ describe("contact and account repositories", () => {
     for (const filter of [
       { companyId: account.id },
       { tagId },
-      { listId },
       { segmentId },
       { stage: "customer" },
     ]) {

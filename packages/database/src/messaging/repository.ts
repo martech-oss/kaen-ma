@@ -54,7 +54,7 @@ export interface DeliveryClaimRecord {
   channel: "email" | "webhook";
   purpose: "transactional" | "marketing";
   provider: "resend" | "webhook";
-  recipient: string;
+  recipient: string | null;
   topicId: string | null;
   idempotencyKey: string;
   payload: string;
@@ -385,7 +385,7 @@ export class MessagingWorkerRepository {
         and(
           eq(webhookEndpoints.workspaceId, workspaceId),
           eq(webhookEndpoints.id, endpointId),
-          eq(webhookEndpoints.enabled, 1),
+          eq(webhookEndpoints.enabled, true),
         ),
       )
       .get();
@@ -403,7 +403,7 @@ export class MessagingWorkerRepository {
         and(
           eq(webhookEndpoints.workspaceId, workspaceId),
           eq(webhookEndpoints.id, endpointId),
-          eq(webhookEndpoints.enabled, 1),
+          eq(webhookEndpoints.enabled, true),
         ),
       )
       .get();

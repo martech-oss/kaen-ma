@@ -1,6 +1,6 @@
 import { and, asc, eq, gt, isNull, or } from "drizzle-orm";
 
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
+import { WORKSPACE_ROLES, type WorkspaceContext, type WorkspaceRole } from "@kaenma/orpc";
 
 import { member } from "../auth/schema";
 import { createDatabase, type DatabaseSource } from "../client";
@@ -26,7 +26,7 @@ export async function resolveMemberContext(
 }
 
 function isWorkspaceRole(value: string): value is WorkspaceRole {
-  return ["owner", "admin", "marketer", "analyst", "viewer"].includes(value);
+  return (WORKSPACE_ROLES as readonly string[]).includes(value);
 }
 
 export interface ApiKeyAuthRow {

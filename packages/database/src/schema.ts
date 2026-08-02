@@ -6,6 +6,7 @@ import * as contactsSchema from "./contacts/schema";
 import * as dealsSchema from "./deals/schema";
 import * as messagingSchema from "./messaging/schema";
 import * as platformSchema from "./platform/schema";
+import * as relationsSchema from "./relations";
 import * as reportsSchema from "./reports/schema";
 import * as segmentsSchema from "./segments/schema";
 import * as webSchema from "./web/schema";
@@ -24,7 +25,11 @@ export * from "./workspaces/schema";
 export * from "./platform/schema";
 export * from "./reports/schema";
 
-/** Every table in the application, keyed by export name, for `drizzle()` registration. */
+/**
+ * Every table in the application, keyed by export name, for `drizzle()`
+ * registration - plus every `relations()` definition (see relations.ts),
+ * which `drizzle()` needs in the same object to enable `db.query.*`.
+ */
 export const schema = {
   ...authSchema,
   ...contactsSchema,
@@ -38,4 +43,5 @@ export const schema = {
   ...workspacesSchema,
   ...platformSchema,
   ...reportsSchema,
+  ...relationsSchema,
 };

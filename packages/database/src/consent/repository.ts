@@ -73,7 +73,7 @@ export class ConsentRepository {
         name: input.name,
         slug: input.slug,
         description: input.description,
-        isDefault: input.isDefault ? 1 : 0,
+        isDefault: input.isDefault,
         createdAt: now,
         updatedAt: now,
       });
@@ -245,7 +245,7 @@ export class ConsentRepository {
    */
   public async readConsentGateRows(input: {
     contactId: string | null;
-    recipient: string;
+    recipient: string | null;
     topicId: string | null;
   }): Promise<ConsentGateRows> {
     const workspaceId = this.context.workspaceId;
@@ -264,7 +264,12 @@ export class ConsentRepository {
             eq(suppressions.workspaceId, workspaceId),
             or(
               sql`${suppressions.contactId} = ${input.contactId}`,
-              eq(suppressions.email, input.recipient),
+              // Recipient can be null (PII scrubbed from an archived
+              // contact's delivery) - "" never matches a real email, so this
+              // deliberately falls through to contactId-only matching rather
+              // than comparing against NULL, which SQL would never match
+              // anyway but would read as intent to match unset emails.
+              eq(suppressions.email, input.recipient ?? ""),
             ),
           ),
         )

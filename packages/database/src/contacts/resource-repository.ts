@@ -3,14 +3,13 @@ import { and, asc, count, desc, eq, exists, inArray, ne, sql, type SQL } from "d
 import type { SegmentFilter, WorkspaceContext } from "@kaenma/orpc";
 
 import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { deliveries } from "../messaging/schema";
 import { segmentMemberships, segments } from "../segments/schema";
 import { uuidv7 } from "../shared/uuid";
 import {
   companies,
   companyContacts,
   contactEvents,
-  contactListMemberships,
-  contactLists,
   contacts,
   contactTags,
   scoreEvents,
@@ -27,8 +26,8 @@ export interface ContactEventRow {
 }
 
 /**
- * Queries for the resources hanging off a contact: tags, lists, segments,
- * accounts, score events and the activity timeline.
+ * Queries for the resources hanging off a contact: tags, segments, accounts,
+ * score events and the activity timeline.
  *
  * Scoped by workspace id only (not the full {@link WorkspaceContext}), because
  * the timeline and public event endpoints resolve just the workspace id.
@@ -48,7 +47,7 @@ export class ContactResourceRepository {
   public async getContactOptionRows() {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
-    const [tagRows, listRows, segmentRows, stageRows, accountRows] = await orm.batch([
+    const [tagRows, segmentRows, stageRows, accountRows] = await orm.batch([
       orm
         .select({
           id: tags.id,
@@ -65,29 +64,6 @@ export class ContactResourceRepository {
         .where(eq(tags.workspaceId, workspaceId))
         .groupBy(tags.id)
         .orderBy(asc(tags.name)),
-      orm
-        .select({
-          id: contactLists.id,
-          name: contactLists.name,
-          slug: contactLists.slug,
-          description: contactLists.description,
-          color: contactLists.color,
-          contactCount:
-            sql<number>`count(case when ${contactListMemberships.status} = 'active' then 1 end)`
-              .mapWith(Number)
-              .as("contact_count"),
-        })
-        .from(contactLists)
-        .leftJoin(
-          contactListMemberships,
-          and(
-            eq(contactListMemberships.workspaceId, contactLists.workspaceId),
-            eq(contactListMemberships.listId, contactLists.id),
-          ),
-        )
-        .where(eq(contactLists.workspaceId, workspaceId))
-        .groupBy(contactLists.id)
-        .orderBy(asc(contactLists.name)),
       orm
         .select({
           id: segments.id,
@@ -137,7 +113,6 @@ export class ContactResourceRepository {
     ]);
     return {
       tags: tagRows,
-      lists: listRows,
       segments: segmentRows.map((row) => ({ ...row, filterAst: parseFilterAst(row.filterAst) })),
       stages: stageRows,
       accounts: accountRows,
@@ -148,108 +123,77 @@ export class ContactResourceRepository {
   public async getContactProfileRows(contactId: string) {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
-    const [tagRows, listRows, segmentRows, accountRows, scoreEventRows, timelineRows] =
-      await orm.batch([
-        orm
-          .select({ id: tags.id, name: tags.name, slug: tags.slug, color: tags.color })
-          .from(tags)
-          .innerJoin(
-            contactTags,
-            and(eq(contactTags.workspaceId, tags.workspaceId), eq(contactTags.tagId, tags.id)),
-          )
-          .where(
-            and(eq(contactTags.workspaceId, workspaceId), eq(contactTags.contactId, contactId)),
-          )
-          .orderBy(asc(tags.name)),
-        orm
-          .select({
-            id: contactLists.id,
-            name: contactLists.name,
-            slug: contactLists.slug,
-            color: contactLists.color,
-            status: contactListMemberships.status,
-            updatedAt: contactListMemberships.updatedAt,
-          })
-          .from(contactLists)
-          .innerJoin(
-            contactListMemberships,
-            and(
-              eq(contactListMemberships.workspaceId, contactLists.workspaceId),
-              eq(contactListMemberships.listId, contactLists.id),
-            ),
-          )
-          .where(
-            and(
-              eq(contactListMemberships.workspaceId, workspaceId),
-              eq(contactListMemberships.contactId, contactId),
-            ),
-          )
-          .orderBy(asc(contactLists.name)),
-        orm
-          .select({
-            id: segments.id,
-            name: segments.name,
-            kind: segments.kind,
-            source: segmentMemberships.source,
-            joinedAt: segmentMemberships.joinedAt,
-          })
-          .from(segments)
-          .innerJoin(
-            segmentMemberships,
-            and(
-              eq(segmentMemberships.workspaceId, segments.workspaceId),
-              eq(segmentMemberships.segmentId, segments.id),
-            ),
-          )
-          .where(
-            and(
-              eq(segmentMemberships.workspaceId, workspaceId),
-              eq(segmentMemberships.contactId, contactId),
-            ),
-          )
-          .orderBy(asc(segments.name)),
-        orm
-          .select({
-            id: companies.id,
-            name: companies.name,
-            domain: companies.domain,
-            title: companyContacts.title,
-            isPrimary: companyContacts.isPrimary,
-          })
-          .from(companies)
-          .innerJoin(
-            companyContacts,
-            and(
-              eq(companyContacts.workspaceId, companies.workspaceId),
-              eq(companyContacts.companyId, companies.id),
-            ),
-          )
-          .where(
-            and(
-              eq(companyContacts.workspaceId, workspaceId),
-              eq(companyContacts.contactId, contactId),
-            ),
-          )
-          .orderBy(desc(companyContacts.isPrimary), asc(companies.name)),
-        orm
-          .select({
-            id: scoreEvents.id,
-            delta: scoreEvents.delta,
-            total: scoreEvents.total,
-            reason: scoreEvents.reason,
-            createdAt: scoreEvents.createdAt,
-          })
-          .from(scoreEvents)
-          .where(
-            and(eq(scoreEvents.workspaceId, workspaceId), eq(scoreEvents.contactId, contactId)),
-          )
-          .orderBy(desc(scoreEvents.createdAt))
-          .limit(100),
-        this.contactEventsQuery(contactId, 100),
-      ]);
+    const [tagRows, segmentRows, accountRows, scoreEventRows, timelineRows] = await orm.batch([
+      orm
+        .select({ id: tags.id, name: tags.name, slug: tags.slug, color: tags.color })
+        .from(tags)
+        .innerJoin(
+          contactTags,
+          and(eq(contactTags.workspaceId, tags.workspaceId), eq(contactTags.tagId, tags.id)),
+        )
+        .where(and(eq(contactTags.workspaceId, workspaceId), eq(contactTags.contactId, contactId)))
+        .orderBy(asc(tags.name)),
+      orm
+        .select({
+          id: segments.id,
+          name: segments.name,
+          kind: segments.kind,
+          source: segmentMemberships.source,
+          joinedAt: segmentMemberships.joinedAt,
+        })
+        .from(segments)
+        .innerJoin(
+          segmentMemberships,
+          and(
+            eq(segmentMemberships.workspaceId, segments.workspaceId),
+            eq(segmentMemberships.segmentId, segments.id),
+          ),
+        )
+        .where(
+          and(
+            eq(segmentMemberships.workspaceId, workspaceId),
+            eq(segmentMemberships.contactId, contactId),
+          ),
+        )
+        .orderBy(asc(segments.name)),
+      orm
+        .select({
+          id: companies.id,
+          name: companies.name,
+          domain: companies.domain,
+          title: companyContacts.title,
+          isPrimary: companyContacts.isPrimary,
+        })
+        .from(companies)
+        .innerJoin(
+          companyContacts,
+          and(
+            eq(companyContacts.workspaceId, companies.workspaceId),
+            eq(companyContacts.companyId, companies.id),
+          ),
+        )
+        .where(
+          and(
+            eq(companyContacts.workspaceId, workspaceId),
+            eq(companyContacts.contactId, contactId),
+          ),
+        )
+        .orderBy(desc(companyContacts.isPrimary), asc(companies.name)),
+      orm
+        .select({
+          id: scoreEvents.id,
+          delta: scoreEvents.delta,
+          reason: scoreEvents.reason,
+          createdAt: scoreEvents.createdAt,
+        })
+        .from(scoreEvents)
+        .where(and(eq(scoreEvents.workspaceId, workspaceId), eq(scoreEvents.contactId, contactId)))
+        .orderBy(desc(scoreEvents.createdAt))
+        .limit(100),
+      this.contactEventsQuery(contactId, 100),
+    ]);
     return {
       tags: tagRows,
-      lists: listRows,
       segments: segmentRows,
       accounts: accountRows,
       scoreEvents: scoreEventRows,
@@ -263,11 +207,11 @@ export class ContactResourceRepository {
     return rows.map(toContactEvent);
   }
 
-  /** Loads the tag, list and account chips for a page of contacts in one batch. */
+  /** Loads the tag and account chips for a page of contacts in one batch. */
   public async listContactRelations(contactIds: string[]) {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
-    const [tagRows, listRows, accountRows] = await orm.batch([
+    const [tagRows, accountRows] = await orm.batch([
       orm
         .select({
           contactId: contactTags.contactId,
@@ -285,30 +229,6 @@ export class ContactResourceRepository {
           and(eq(contactTags.workspaceId, workspaceId), inArray(contactTags.contactId, contactIds)),
         )
         .orderBy(asc(tags.name)),
-      orm
-        .select({
-          contactId: contactListMemberships.contactId,
-          id: contactLists.id,
-          name: contactLists.name,
-          slug: contactLists.slug,
-          color: contactLists.color,
-        })
-        .from(contactListMemberships)
-        .innerJoin(
-          contactLists,
-          and(
-            eq(contactLists.workspaceId, contactListMemberships.workspaceId),
-            eq(contactLists.id, contactListMemberships.listId),
-          ),
-        )
-        .where(
-          and(
-            eq(contactListMemberships.workspaceId, workspaceId),
-            eq(contactListMemberships.status, "active"),
-            inArray(contactListMemberships.contactId, contactIds),
-          ),
-        )
-        .orderBy(asc(contactLists.name)),
       orm
         .select({
           contactId: companyContacts.contactId,
@@ -334,7 +254,7 @@ export class ContactResourceRepository {
         )
         .orderBy(desc(companyContacts.isPrimary), asc(companies.name)),
     ]);
-    return { tags: tagRows, lists: listRows, accounts: accountRows };
+    return { tags: tagRows, accounts: accountRows };
   }
 
   public async contactExists(contactId: string): Promise<boolean> {
@@ -378,27 +298,6 @@ export class ContactResourceRepository {
     });
   }
 
-  /** Inserts a contact list; unique-slug violations bubble up to the caller. */
-  public async createContactList(input: {
-    id: string;
-    name: string;
-    slug: string;
-    description: string;
-    color: string;
-  }): Promise<void> {
-    const now = new Date().toISOString();
-    await this.database.orm.insert(contactLists).values({
-      id: input.id,
-      workspaceId: this.context.workspaceId,
-      name: input.name,
-      slug: input.slug,
-      description: input.description,
-      color: input.color,
-      createdAt: now,
-      updatedAt: now,
-    });
-  }
-
   public async addContactTag(contactId: string, tagId: string): Promise<boolean> {
     return (await this.insertTagMemberships(eq(contacts.id, contactId), tagId)) > 0;
   }
@@ -415,87 +314,37 @@ export class ContactResourceRepository {
     return this.deleteTagMemberships(inArray(contactTags.contactId, contactIds), tagId);
   }
 
-  public async addContactList(contactId: string, listId: string): Promise<boolean> {
-    return (await this.upsertListMemberships(eq(contacts.id, contactId), listId, "manual")) > 0;
-  }
-
-  public bulkAddContactList(contactIds: string[], listId: string): Promise<number> {
-    return this.upsertListMemberships(inArray(contacts.id, contactIds), listId, "bulk");
-  }
-
-  public async removeContactList(contactId: string, listId: string): Promise<boolean> {
-    return (
-      (await this.deleteListMemberships(eq(contactListMemberships.contactId, contactId), listId)) >
-      0
-    );
-  }
-
-  public bulkRemoveContactList(contactIds: string[], listId: string): Promise<number> {
-    return this.deleteListMemberships(
-      inArray(contactListMemberships.contactId, contactIds),
-      listId,
-    );
-  }
-
   /** Joins a contact to a static segment; dynamic segments reject the write. */
   public async addContactSegment(contactId: string, segmentId: string): Promise<boolean> {
-    const now = new Date().toISOString();
-    const result = await this.database.orm
-      .insert(segmentMemberships)
-      .select(
-        this.database.orm
-          .select({
-            workspaceId: contacts.workspaceId,
-            segmentId: segments.id,
-            contactId: contacts.id,
-            source: sql<string>`'static'`.as("source"),
-            joinedAt: sql<string>`${now}`.as("joined_at"),
-          })
-          .from(contacts)
-          .innerJoin(segments, eq(segments.workspaceId, contacts.workspaceId))
-          .where(
-            and(
-              eq(contacts.workspaceId, this.context.workspaceId),
-              eq(contacts.id, contactId),
-              ne(contacts.status, "archived"),
-              eq(segments.id, segmentId),
-              eq(segments.kind, "static"),
-            ),
-          ),
-      )
-      .onConflictDoNothing();
-    return result.meta.changes > 0;
+    return (await this.insertSegmentMemberships(eq(contacts.id, contactId), segmentId)) > 0;
+  }
+
+  public bulkAddContactSegment(contactIds: string[], segmentId: string): Promise<number> {
+    return this.insertSegmentMemberships(inArray(contacts.id, contactIds), segmentId);
   }
 
   /** Removes a manually added segment membership; dynamic memberships stay. */
   public async removeContactSegment(contactId: string, segmentId: string): Promise<boolean> {
-    const result = await this.database.orm.delete(segmentMemberships).where(
-      and(
-        eq(segmentMemberships.workspaceId, this.context.workspaceId),
+    return (
+      (await this.deleteSegmentMemberships(
         eq(segmentMemberships.contactId, contactId),
-        eq(segmentMemberships.segmentId, segmentId),
-        eq(segmentMemberships.source, "static"),
-        exists(
-          this.database.orm
-            .select({ value: sql`1` })
-            .from(contacts)
-            .where(
-              and(
-                eq(contacts.workspaceId, segmentMemberships.workspaceId),
-                eq(contacts.id, segmentMemberships.contactId),
-                ne(contacts.status, "archived"),
-              ),
-            ),
-        ),
-      ),
+        segmentId,
+      )) > 0
     );
-    return result.meta.changes > 0;
+  }
+
+  public bulkRemoveContactSegment(contactIds: string[], segmentId: string): Promise<number> {
+    return this.deleteSegmentMemberships(
+      inArray(segmentMemberships.contactId, contactIds),
+      segmentId,
+    );
   }
 
   /**
-   * Applies the delta and records a score event carrying the resulting total.
-   * Returns false when the contact is missing or archived, in which case
-   * nothing is written.
+   * Applies the delta and records a score event, atomically. Returns false
+   * when the contact is missing or archived, in which case nothing is
+   * written - the score event insert is itself an insert-from-select scoped
+   * to the same filter, so it naturally no-ops alongside the update.
    */
   public async adjustContactScore(
     contactId: string,
@@ -503,39 +352,41 @@ export class ContactResourceRepository {
   ): Promise<boolean> {
     const workspaceId = this.context.workspaceId;
     const now = new Date().toISOString();
-    const updated = await this.database.orm
-      .update(contacts)
-      .set({ score: sql`${contacts.score} + ${input.delta}`, updatedAt: now })
-      .where(
-        and(
-          eq(contacts.workspaceId, workspaceId),
-          eq(contacts.id, contactId),
-          ne(contacts.status, "archived"),
-        ),
-      );
-    if (updated.meta.changes === 0) return false;
-    await this.database.orm.insert(scoreEvents).select(
-      this.database.orm
-        .select({
-          id: sql<string>`${uuidv7()}`.as("id"),
-          workspaceId: contacts.workspaceId,
-          contactId: contacts.id,
-          delta: sql<number>`${input.delta}`.as("delta"),
-          total: contacts.score,
-          reason: sql<string>`${input.reason}`.as("reason"),
-          automationEnrollmentId: sql<string | null>`null`.as("automation_enrollment_id"),
-          createdAt: sql<string>`${now}`.as("created_at"),
-        })
-        .from(contacts)
-        .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId))),
+    const orm = this.database.orm;
+    const contactFilter = and(
+      eq(contacts.workspaceId, workspaceId),
+      eq(contacts.id, contactId),
+      ne(contacts.status, "archived"),
     );
-    return true;
+    const [updated] = await orm.batch([
+      orm
+        .update(contacts)
+        .set({ score: sql`${contacts.score} + ${input.delta}`, updatedAt: now })
+        .where(contactFilter),
+      orm.insert(scoreEvents).select(
+        orm
+          .select({
+            id: sql<string>`${uuidv7()}`.as("id"),
+            workspaceId: contacts.workspaceId,
+            contactId: contacts.id,
+            delta: sql<number>`${input.delta}`.as("delta"),
+            reason: sql<string>`${input.reason}`.as("reason"),
+            automationEnrollmentId: sql<string | null>`null`.as("automation_enrollment_id"),
+            createdAt: sql<string>`${now}`.as("created_at"),
+          })
+          .from(contacts)
+          .where(contactFilter),
+      ),
+    ]);
+    return updated.meta.changes > 0;
   }
 
   /** Archives or restores many contacts at once, regardless of current status. */
+  /** Archiving also scrubs the plaintext email off those contacts' email deliveries (see archiveContact). */
   public async bulkSetContactsArchived(contactIds: string[], archived: boolean): Promise<number> {
     const now = new Date().toISOString();
-    const result = await this.database.orm
+    const orm = this.database.orm;
+    const contactsUpdate = orm
       .update(contacts)
       .set({
         status: archived ? "archived" : "active",
@@ -545,6 +396,23 @@ export class ContactResourceRepository {
       .where(
         and(eq(contacts.workspaceId, this.context.workspaceId), inArray(contacts.id, contactIds)),
       );
+    if (!archived) {
+      const result = await contactsUpdate;
+      return result.meta.changes;
+    }
+    const [result] = await orm.batch([
+      contactsUpdate,
+      orm
+        .update(deliveries)
+        .set({ recipient: null })
+        .where(
+          and(
+            eq(deliveries.workspaceId, this.context.workspaceId),
+            inArray(deliveries.contactId, contactIds),
+            eq(deliveries.channel, "email"),
+          ),
+        ),
+    ]);
     return result.meta.changes;
   }
 
@@ -625,65 +493,58 @@ export class ContactResourceRepository {
   }
 
   /**
-   * Subscribes every non-archived selected contact to the list, reactivating
-   * memberships that were unsubscribed. Returns the number of rows written.
+   * Joins every non-archived selected contact to a static segment, skipping
+   * memberships that already exist. Dynamic segments reject the write.
+   * Returns the number of rows actually written.
    */
-  private async upsertListMemberships(
-    contactFilter: SQL,
-    listId: string,
-    source: "manual" | "bulk",
-  ): Promise<number> {
+  private async insertSegmentMemberships(contactFilter: SQL, segmentId: string): Promise<number> {
     const now = new Date().toISOString();
     const result = await this.database.orm
-      .insert(contactListMemberships)
+      .insert(segmentMemberships)
       .select(
         this.database.orm
           .select({
             workspaceId: contacts.workspaceId,
-            listId: contactLists.id,
+            segmentId: segments.id,
             contactId: contacts.id,
-            status: sql<string>`'active'`.as("status"),
-            source: sql<string>`${source}`.as("source"),
-            createdAt: sql<string>`${now}`.as("created_at"),
-            updatedAt: sql<string>`${now}`.as("updated_at"),
+            source: sql<string>`'static'`.as("source"),
+            joinedAt: sql<string>`${now}`.as("joined_at"),
           })
           .from(contacts)
-          .innerJoin(contactLists, eq(contactLists.workspaceId, contacts.workspaceId))
+          .innerJoin(segments, eq(segments.workspaceId, contacts.workspaceId))
           .where(
             and(
               eq(contacts.workspaceId, this.context.workspaceId),
               contactFilter,
               ne(contacts.status, "archived"),
-              eq(contactLists.id, listId),
+              eq(segments.id, segmentId),
+              eq(segments.kind, "static"),
             ),
           ),
       )
-      .onConflictDoUpdate({
-        target: [
-          contactListMemberships.workspaceId,
-          contactListMemberships.listId,
-          contactListMemberships.contactId,
-        ],
-        set: { status: "active", source, updatedAt: now },
-      });
+      .onConflictDoNothing();
     return result.meta.changes;
   }
 
-  /** Removes the list membership rows for the selected non-archived contacts. */
-  private async deleteListMemberships(contactFilter: SQL, listId: string): Promise<number> {
-    const result = await this.database.orm.delete(contactListMemberships).where(
+  /**
+   * Removes manually added segment membership rows for the selected
+   * non-archived contacts; dynamic memberships stay.
+   */
+  private async deleteSegmentMemberships(contactFilter: SQL, segmentId: string): Promise<number> {
+    const result = await this.database.orm.delete(segmentMemberships).where(
       and(
-        eq(contactListMemberships.workspaceId, this.context.workspaceId),
+        eq(segmentMemberships.workspaceId, this.context.workspaceId),
         contactFilter,
-        eq(contactListMemberships.listId, listId),
+        eq(segmentMemberships.segmentId, segmentId),
+        eq(segmentMemberships.source, "static"),
         exists(
           this.database.orm
             .select({ value: sql`1` })
             .from(contacts)
             .where(
               and(
-                eq(contacts.workspaceId, contactListMemberships.workspaceId),
-                eq(contacts.id, contactListMemberships.contactId),
+                eq(contacts.workspaceId, segmentMemberships.workspaceId),
+                eq(contacts.id, segmentMemberships.contactId),
                 ne(contacts.status, "archived"),
               ),
             ),

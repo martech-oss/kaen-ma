@@ -32,7 +32,7 @@ export async function contactReport(
       color: primitiveString(row["color"]),
       contactCount: toNumber(row["contact_count"]),
     })),
-    topLists: data.topLists.map((row) => ({
+    topSegments: data.topSegments.map((row) => ({
       id: primitiveString(row["id"]),
       name: primitiveString(row["name"]),
       color: primitiveString(row["color"]),

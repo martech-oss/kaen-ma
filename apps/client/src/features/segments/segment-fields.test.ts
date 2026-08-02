@@ -16,7 +16,7 @@ describe("segment field editor", () => {
     expect(fields).toContain("company");
     expect(fields).not.toContain("event");
     expect(fields).not.toContain("custom_field");
-    expect(fields).not.toContain("list");
+    expect(fields).not.toContain("segment");
     expect(fields).not.toContain("subscription");
   });
 

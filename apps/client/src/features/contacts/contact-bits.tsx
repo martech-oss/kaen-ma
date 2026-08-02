@@ -19,8 +19,8 @@ import { type Contact } from "@kaenma/orpc";
 export type BulkAction =
   | "add_tag"
   | "remove_tag"
-  | "add_list"
-  | "remove_list"
+  | "add_segment"
+  | "remove_segment"
   | "archive"
   | "restore";
 

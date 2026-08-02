@@ -2,19 +2,12 @@ import { queryOptions } from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type { ContactListInput } from "@kaenma/orpc";
-import type {
-  CompanyOption,
-  ContactList as ListOption,
-  ContactOptions,
-  SegmentOption,
-  Tag as TagOption,
-} from "@kaenma/orpc";
+import type { CompanyOption, ContactOptions, SegmentOption, Tag as TagOption } from "@kaenma/orpc";
 
 export type {
   CompanyOption,
   CompanyOption as AccountOption,
   ContactOptions,
-  ListOption,
   SegmentOption,
   TagOption,
 };
@@ -29,7 +22,6 @@ export interface ContactSearch {
   status: ContactStatus;
   stage: string;
   tagId: string;
-  listId: string;
   accountId: string;
   segmentId: string;
   scoreMin: string;
@@ -43,7 +35,6 @@ export const contactSearchDefaults: ContactSearch = {
   status: "active",
   stage: "",
   tagId: "",
-  listId: "",
   accountId: "",
   segmentId: "",
   scoreMin: "",
@@ -73,7 +64,6 @@ export function parseContactSearch(search: Record<string, unknown>): ContactSear
     status,
     stage: stringValue("stage"),
     tagId: stringValue("tagId"),
-    listId: stringValue("listId"),
     accountId: stringValue("accountId"),
     segmentId: stringValue("segmentId"),
     scoreMin: stringValue("scoreMin"),
@@ -96,7 +86,6 @@ export function buildContactSearchInput(search: ContactSearch): ContactListInput
     ...(query ? { query } : {}),
     ...(search.stage ? { stage: search.stage } : {}),
     ...(search.tagId ? { tagId: search.tagId } : {}),
-    ...(search.listId ? { listId: search.listId } : {}),
     ...(search.accountId ? { companyId: search.accountId } : {}),
     ...(search.segmentId ? { segmentId: search.segmentId } : {}),
     ...(scoreMin === undefined ? {} : { scoreMin }),

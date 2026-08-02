@@ -89,7 +89,7 @@ export const companyContacts = sqliteTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     title: text(),
-    isPrimary: integer("is_primary").default(0).notNull(),
+    isPrimary: integer("is_primary", { mode: "boolean" }).default(false).notNull(),
     createdAt: text("created_at").notNull(),
   },
   (table) => [
@@ -182,7 +182,6 @@ export const scoreEvents = sqliteTable(
       .notNull()
       .references(() => contacts.id, { onDelete: "cascade" }),
     delta: integer().notNull(),
-    total: integer().notNull(),
     reason: text().notNull(),
     automationEnrollmentId: text("automation_enrollment_id").references(
       () => automationEnrollments.id,
@@ -231,66 +230,6 @@ export const contactEvents = sqliteTable(
       table.workspaceId,
       table.contactId,
       table.occurredAt,
-    ),
-  ],
-);
-
-export const contactLists = sqliteTable(
-  "contact_lists",
-  {
-    id: text().primaryKey().notNull(),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    name: text().notNull(),
-    slug: text().notNull(),
-    description: text().default("").notNull(),
-    color: text().default("#6366f1").notNull(),
-    createdAt: text("created_at").notNull(),
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("contact_lists_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
-    uniqueIndex("contact_lists_workspace_slug_unique").on(table.workspaceId, table.slug),
-  ],
-);
-
-export const contactListMemberships = sqliteTable(
-  "contact_list_memberships",
-  {
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    listId: text("list_id")
-      .notNull()
-      .references(() => contactLists.id, { onDelete: "cascade" }),
-    contactId: text("contact_id")
-      .notNull()
-      .references(() => contacts.id, { onDelete: "cascade" }),
-    status: text().default("active").notNull(),
-    source: text().default("manual").notNull(),
-    createdAt: text("created_at").notNull(),
-    updatedAt: text("updated_at").notNull(),
-  },
-  (table) => [
-    index("contact_list_memberships_workspace_list_status_idx").on(
-      table.workspaceId,
-      table.listId,
-      table.status,
-      table.contactId,
-    ),
-    index("contact_list_memberships_workspace_contact_idx").on(
-      table.workspaceId,
-      table.contactId,
-      table.listId,
-    ),
-    primaryKey({
-      columns: [table.workspaceId, table.listId, table.contactId],
-      name: "contact_list_memberships_workspace_id_list_id_contact_id_pk",
-    }),
-    check(
-      "contact_list_memberships_status_check",
-      sql`${table.status} IN ('active', 'unsubscribed')`,
     ),
   ],
 );

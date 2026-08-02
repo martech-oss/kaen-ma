@@ -1,4 +1,4 @@
-import { ListChecks, Plus, Tags } from "lucide-react";
+import { Plus, Tags } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 
@@ -7,7 +7,6 @@ import {
   EmptyState,
   ErrorAlert,
   FormInput,
-  FormTextarea,
   LoadingButton,
   PageLayout,
 } from "@/components/app-ui";
@@ -62,112 +61,6 @@ function useContactResources(initialResources: ContactResources): {
   }, []);
 
   return { resources, loading, error, load };
-}
-
-export function ContactListsPage({
-  initialResources,
-}: {
-  initialResources: ContactResources;
-}): ReactNode {
-  const { resources, loading, error, load } = useContactResources(initialResources);
-  const [showCreate, setShowCreate] = useState(false);
-
-  return (
-    <PageLayout
-      title="リスト"
-      action={
-        <Button onClick={() => setShowCreate(true)}>
-          <Plus data-icon="inline-start" />
-          リストを作成
-        </Button>
-      }
-    >
-      {error ? <ResourceLoadError message={error} onRetry={load} /> : null}
-      <Card>
-        <CardHeader className="border-b">
-          <CardTitle>すべてのリスト</CardTitle>
-          <CardDescription>リスト名、説明、登録されている連絡先数を確認できます。</CardDescription>
-          <CardAction>
-            {loading ? (
-              <Skeleton className="h-5 w-12 rounded-full" />
-            ) : (
-              <Badge variant="secondary">{resources.lists.length}件</Badge>
-            )}
-          </CardAction>
-        </CardHeader>
-        <CardContent className="px-0">
-          <Table>
-            <TableCaption className="sr-only">コンタクトリスト一覧</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-4">リスト</TableHead>
-                <TableHead>説明</TableHead>
-                <TableHead>スラッグ</TableHead>
-                <TableHead className="px-4 text-right">連絡先</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <ResourceTableSkeleton columns={4} />
-              ) : (
-                resources.lists.map((list) => (
-                  <TableRow key={list.id}>
-                    <TableCell className="px-4 font-medium">
-                      <div className="flex items-center gap-2">
-                        <span
-                          aria-hidden="true"
-                          className="size-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: list.color }}
-                        />
-                        {list.name}
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-sm whitespace-normal text-muted-foreground">
-                      {list.description || "説明なし"}
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-xs text-muted-foreground">{list.slug}</span>
-                    </TableCell>
-                    <TableCell className="px-4 text-right">
-                      <Badge variant="secondary">
-                        {Number(list.contactCount).toLocaleString()}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-          {!loading && resources.lists.length === 0 ? (
-            <EmptyState
-              compact
-              title="リストがまだありません"
-              description="配信先や運用目的に合わせた最初のリストを作成しましょう。"
-              action={
-                <Button variant="outline" onClick={() => setShowCreate(true)}>
-                  <ListChecks data-icon="inline-start" />
-                  リストを作成
-                </Button>
-              }
-            />
-          ) : null}
-        </CardContent>
-      </Card>
-      <AppDialog
-        open={showCreate}
-        onOpenChange={setShowCreate}
-        title="リストを作成"
-        description="連絡先をまとめるための名前と説明を設定します。"
-      >
-        <CreateListForm
-          onSaved={async () => {
-            await load();
-            setShowCreate(false);
-          }}
-        />
-      </AppDialog>
-    </PageLayout>
-  );
 }
 
 export function ContactTagsPage({
@@ -303,57 +196,6 @@ function ResourceTableSkeleton({ columns }: { columns: number }): ReactNode {
       ))}
     </TableRow>
   ));
-}
-
-function CreateListForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    setError("");
-    try {
-      await orpc.contactResources.createList({
-        name: getFormString(form, "name"),
-        description: getFormString(form, "description"),
-        color: getFormString(form, "color"),
-      });
-      await onSaved();
-      toast.success("リストを作成しました");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "リストを作成できませんでした");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={(event) => void submit(event)}>
-      <FieldGroup>
-        <FormInput label="名前" name="name" placeholder="例：ニュースレター購読者" required />
-        <FormTextarea
-          label="説明"
-          name="description"
-          placeholder="このリストの用途を入力"
-          rows={3}
-        />
-        <FormInput
-          label="カラー"
-          name="color"
-          type="color"
-          defaultValue="#6366f1"
-          description="一覧や連絡先詳細での識別に使用します。"
-          required
-        />
-        {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-        <LoadingButton busy={busy} busyLabel="作成中…" type="submit">
-          作成
-        </LoadingButton>
-      </FieldGroup>
-    </form>
-  );
 }
 
 function CreateTagForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {

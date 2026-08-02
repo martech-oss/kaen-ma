@@ -14,7 +14,6 @@ import {
   GitBranch,
   Globe2,
   LayoutTemplate,
-  ListChecks,
   LogOut,
   Mail,
   MessageSquareText,
@@ -66,7 +65,6 @@ const dashboardNavigation = linkOptions([
 const contactNavigation = linkOptions([
   { to: "/contacts", label: "連絡先", icon: UsersRound },
   { to: "/contacts/accounts", label: "アカウント", icon: Building2 },
-  { to: "/contacts/lists", label: "リスト", icon: ListChecks },
   { to: "/contacts/tags", label: "タグ", icon: Tags },
   { to: "/contacts/segments", label: "セグメント", icon: Shapes },
 ]);

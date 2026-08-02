@@ -4,16 +4,10 @@ import { user } from "../auth/schema";
 import { automationEnrollments, automations } from "../automations/schema";
 import { broadcasts } from "../broadcasts/schema";
 import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
-import {
-  contactEvents,
-  contactListMemberships,
-  contactLists,
-  contacts,
-  contactTags,
-  tags,
-} from "../contacts/schema";
+import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";
 import { dealStages, dealTasks, deals } from "../deals/schema";
 import { deliveries, deliveryEvents, emailTemplates } from "../messaging/schema";
+import { segmentMemberships, segments } from "../segments/schema";
 import { formSubmissions, forms, siteMessages } from "../web/schema";
 
 /**
@@ -99,7 +93,7 @@ export interface ContactsSummaryData {
   summary: ReportRow;
   trend: ReportRow[];
   topTags: ReportRow[];
-  topLists: ReportRow[];
+  topSegments: ReportRow[];
 }
 
 export interface AutomationsSummaryData {
@@ -263,12 +257,12 @@ export class ReportsRepository {
     };
   }
 
-  /** Summary, trend, top tags, and top lists - 4 independent queries run concurrently. */
+  /** Summary, trend, top tags, and top static segments - 4 independent queries run concurrently. */
   public async contactsSummary(
     workspaceId: string,
     range: ReportDateRange,
   ): Promise<ContactsSummaryData> {
-    const [summaryRows, trendRows, topTagRows, topListRows] = await this.runBatch(
+    const [summaryRows, trendRows, topTagRows, topSegmentRows] = await this.runBatch(
       sql`
         SELECT
           COUNT(*) AS total_contacts,
@@ -310,17 +304,17 @@ export class ReportsRepository {
         LIMIT 10
       `,
       sql`
-        SELECT ${contactLists.id}, ${contactLists.name}, ${contactLists.color},
-               COUNT(CASE WHEN ${contactListMemberships.status} = 'active' AND ${contacts.status} = 'active' THEN 1 END)
-                 AS contact_count
-        FROM ${contactLists}
-        LEFT JOIN ${contactListMemberships}
-          ON ${contactListMemberships.workspaceId} = ${contactLists.workspaceId} AND ${contactListMemberships.listId} = ${contactLists.id}
+        SELECT ${segments.id}, ${segments.name}, '#64748b' AS color,
+               COUNT(CASE WHEN ${contacts.status} = 'active' THEN 1 END) AS contact_count
+        FROM ${segments}
+        LEFT JOIN ${segmentMemberships}
+          ON ${segmentMemberships.workspaceId} = ${segments.workspaceId} AND ${segmentMemberships.segmentId} = ${segments.id}
+            AND ${segmentMemberships.source} = 'static'
         LEFT JOIN ${contacts}
-          ON ${contacts.workspaceId} = ${contactListMemberships.workspaceId} AND ${contacts.id} = ${contactListMemberships.contactId}
-        WHERE ${contactLists.workspaceId} = ${workspaceId}
-        GROUP BY ${contactLists.id}
-        ORDER BY contact_count DESC, ${contactLists.name} ASC
+          ON ${contacts.workspaceId} = ${segmentMemberships.workspaceId} AND ${contacts.id} = ${segmentMemberships.contactId}
+        WHERE ${segments.workspaceId} = ${workspaceId} AND ${segments.kind} = 'static'
+        GROUP BY ${segments.id}
+        ORDER BY contact_count DESC, ${segments.name} ASC
         LIMIT 10
       `,
     );
@@ -328,7 +322,7 @@ export class ReportsRepository {
       summary: summaryRows[0] ?? {},
       trend: trendRows,
       topTags: topTagRows,
-      topLists: topListRows,
+      topSegments: topSegmentRows,
     };
   }
 

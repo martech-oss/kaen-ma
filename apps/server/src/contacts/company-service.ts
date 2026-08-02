@@ -49,7 +49,7 @@ export async function getCompanyDetail(
       score: row.score,
       status: row.status as CompanyContactDto["status"],
       title: row.title,
-      isPrimary: Boolean(row.isPrimary),
+      isPrimary: row.isPrimary,
     })),
   };
 }

@@ -60,8 +60,8 @@ export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNod
       <AppDialog
         open={showForm}
         onOpenChange={setShowForm}
-        title="動的セグメント"
-        description="属性や行動条件から更新されるセグメントを作成します。"
+        title="セグメントを作成"
+        description="連絡先を手動でまとめる静的セグメント、または条件から自動更新される動的セグメントを作成します。"
       >
         <SegmentForm
           onSaved={async () => {
@@ -75,6 +75,7 @@ export function SegmentsPage({ segments }: { segments: SegmentRow[] }): ReactNod
 }
 
 function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
+  const [kind, setKind] = useState<"static" | "dynamic">("static");
   const [field, setField] = useState<SegmentField>("stage");
   const [operator, setOperator] = useState<SegmentOperator>("eq");
   const [busy, setBusy] = useState(false);
@@ -87,19 +88,18 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const name = getFormString(form, "name");
-    const filter: SegmentFilter = createSegmentCondition(
-      field,
-      operator,
-      getFormString(form, "value"),
-    );
+    const filter: SegmentFilter | undefined =
+      kind === "dynamic"
+        ? createSegmentCondition(field, operator, getFormString(form, "value"))
+        : undefined;
     setBusy(true);
     setError("");
     try {
       await orpc.segments.create({
         name,
         slug: slugify(name),
-        kind: "dynamic",
-        filter,
+        kind,
+        ...(filter ? { filter } : {}),
       });
       await onSaved();
     } catch (caught) {
@@ -112,54 +112,69 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
   return (
     <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
       <FormInput label="名前" name="name" required />
-      <div className="grid grid-cols-2 gap-3">
-        <FormNativeSelect
-          label="フィールド"
-          name="field"
-          value={field}
-          onChange={(event) => {
-            const nextField = event.target.value as SegmentField;
-            setField(nextField);
-            setOperator((current) => normalizeSegmentOperator(nextField, current));
-          }}
-        >
-          {segmentFieldOptions.map((option) => (
-            <FormSelectOption key={option.field} value={option.field}>
-              {option.label}
-            </FormSelectOption>
-          ))}
-        </FormNativeSelect>
-        <FormNativeSelect
-          label="演算子"
-          name="operator"
-          value={operator}
-          onChange={(event) => setOperator(event.target.value as SegmentOperator)}
-        >
-          {operatorOptions.map((option) => (
-            <FormSelectOption key={option.operator} value={option.operator}>
-              {option.label}
-            </FormSelectOption>
-          ))}
-        </FormNativeSelect>
-      </div>
-      {needsValue ? (
-        <FormInput
-          label="値"
-          name="value"
-          type={
-            operator === "in"
-              ? "text"
-              : fieldDefinition.valueType === "number"
-                ? "number"
-                : fieldDefinition.valueType === "date"
-                  ? "datetime-local"
-                  : "text"
-          }
-          {...(operator === "in" ? { description: "複数の値はカンマで区切って入力します。" } : {})}
-          required
-        />
-      ) : (
-        <input type="hidden" name="value" value="" />
+      <FormNativeSelect
+        label="種類"
+        name="kind"
+        value={kind}
+        onChange={(event) => setKind(event.target.value as "static" | "dynamic")}
+      >
+        <FormSelectOption value="static">静的(連絡先を手動で追加)</FormSelectOption>
+        <FormSelectOption value="dynamic">動的(条件に一致する連絡先を自動更新)</FormSelectOption>
+      </FormNativeSelect>
+      {kind === "dynamic" && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <FormNativeSelect
+              label="フィールド"
+              name="field"
+              value={field}
+              onChange={(event) => {
+                const nextField = event.target.value as SegmentField;
+                setField(nextField);
+                setOperator((current) => normalizeSegmentOperator(nextField, current));
+              }}
+            >
+              {segmentFieldOptions.map((option) => (
+                <FormSelectOption key={option.field} value={option.field}>
+                  {option.label}
+                </FormSelectOption>
+              ))}
+            </FormNativeSelect>
+            <FormNativeSelect
+              label="演算子"
+              name="operator"
+              value={operator}
+              onChange={(event) => setOperator(event.target.value as SegmentOperator)}
+            >
+              {operatorOptions.map((option) => (
+                <FormSelectOption key={option.operator} value={option.operator}>
+                  {option.label}
+                </FormSelectOption>
+              ))}
+            </FormNativeSelect>
+          </div>
+          {needsValue ? (
+            <FormInput
+              label="値"
+              name="value"
+              type={
+                operator === "in"
+                  ? "text"
+                  : fieldDefinition.valueType === "number"
+                    ? "number"
+                    : fieldDefinition.valueType === "date"
+                      ? "datetime-local"
+                      : "text"
+              }
+              {...(operator === "in"
+                ? { description: "複数の値はカンマで区切って入力します。" }
+                : {})}
+              required
+            />
+          ) : (
+            <input type="hidden" name="value" value="" />
+          )}
+        </>
       )}
       {error ? <ErrorAlert>{error}</ErrorAlert> : null}
       <LoadingButton busy={busy} className="w-full" type="submit">

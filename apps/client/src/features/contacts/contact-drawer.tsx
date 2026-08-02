@@ -2,7 +2,7 @@ import {
   Archive,
   Building2,
   Check,
-  ListPlus,
+  Filter,
   RotateCcw,
   Tag,
   Tags,
@@ -185,7 +185,7 @@ export function ContactDrawer({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <StatCard label="スコア" value={profile.contact.score} icon={<Zap />} />
                 <StatCard label="タグ" value={profile.tags.length} icon={<Tag />} />
-                <StatCard label="リスト" value={profile.lists.length} icon={<ListPlus />} />
+                <StatCard label="セグメント" value={profile.segments.length} icon={<Filter />} />
                 <StatCard label="会社" value={profile.companies.length} icon={<Building2 />} />
               </div>
 
@@ -206,20 +206,6 @@ export function ContactDrawer({
                 }
                 onRemove={(id) =>
                   mutate(() => orpc.contactResources.removeTag({ contactId, resourceId: id }))
-                }
-              />
-
-              <RelationEditor
-                title="リスト"
-                icon={<ListPlus className="size-4" />}
-                items={profile.lists}
-                options={options.lists}
-                disabled={profile.contact.status === "archived"}
-                onAdd={(id) =>
-                  mutate(() => orpc.contactResources.addList({ contactId, resourceId: id }))
-                }
-                onRemove={(id) =>
-                  mutate(() => orpc.contactResources.removeList({ contactId, resourceId: id }))
                 }
               />
 
@@ -426,7 +412,7 @@ function ActivityTimeline({ profile }: { profile: ContactProfile }): ReactNode {
         ...profile.scoreEvents.map((event) => ({
           id: event.id,
           type: event.delta > 0 ? `スコア +${event.delta}` : `スコア ${event.delta}`,
-          description: `${event.reason} · 合計 ${event.total}`,
+          description: event.reason,
           at: event.createdAt,
           tone: event.delta > 0 ? "emerald" : "amber",
         })),

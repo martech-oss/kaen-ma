@@ -7,7 +7,6 @@ import {
 import type {
   Contact,
   ContactBulkAction,
-  ContactListCreate,
   ContactOptions,
   ContactProfile,
   ContactScoreAdjust,
@@ -21,7 +20,7 @@ import { updateSegmentMemberCount } from "../segments/membership-service";
 
 /** A resource name already taken within the workspace. */
 export class ResourceConflictError extends Error {
-  public constructor(public readonly resource: "tag" | "list") {
+  public constructor(public readonly resource: "tag") {
     super(`${resource} already exists`);
     this.name = "ResourceConflictError";
   }
@@ -34,7 +33,6 @@ export async function getContactOptions(
   const rows = await new ContactResourceRepository(database, workspace).getContactOptionRows();
   return {
     tags: rows.tags,
-    lists: rows.lists,
     segments: rows.segments.map((row) => ({
       id: row.id,
       name: row.name,
@@ -62,7 +60,6 @@ export async function getContactProfile(
   return {
     contact,
     tags: rows.tags,
-    lists: rows.lists,
     segments: rows.segments.map((row) => ({
       id: row.id,
       name: row.name,
@@ -75,7 +72,7 @@ export async function getContactProfile(
       name: row.name,
       domain: row.domain,
       title: row.title,
-      isPrimary: Boolean(row.isPrimary),
+      isPrimary: row.isPrimary,
     })),
     scoreEvents: rows.scoreEvents,
     timeline: rows.timeline,
@@ -102,27 +99,6 @@ export async function createTag(
   return { id, slug, name: input.name, color: input.color };
 }
 
-export async function createContactList(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  input: ContactListCreate,
-): Promise<{ id: string; name: string; slug: string; description: string; color: string }> {
-  const id = uuidv7();
-  const slug = resourceSlug(input.name, id);
-  try {
-    await new ContactResourceRepository(database, workspace).createContactList({
-      id,
-      slug,
-      name: input.name,
-      description: input.description,
-      color: input.color,
-    });
-  } catch {
-    throw new ResourceConflictError("list");
-  }
-  return { id, slug, name: input.name, description: input.description, color: input.color };
-}
-
 export function addContactTag(
   database: KaenmaDatabase,
   workspace: WorkspaceContext,
@@ -140,28 +116,6 @@ export function removeContactTag(
   input: { contactId: string; resourceId: string },
 ): Promise<boolean> {
   return new ContactResourceRepository(database, workspace).removeContactTag(
-    input.contactId,
-    input.resourceId,
-  );
-}
-
-export function addContactList(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  input: { contactId: string; resourceId: string },
-): Promise<boolean> {
-  return new ContactResourceRepository(database, workspace).addContactList(
-    input.contactId,
-    input.resourceId,
-  );
-}
-
-export function removeContactList(
-  database: KaenmaDatabase,
-  workspace: WorkspaceContext,
-  input: { contactId: string; resourceId: string },
-): Promise<boolean> {
-  return new ContactResourceRepository(database, workspace).removeContactList(
     input.contactId,
     input.resourceId,
   );
@@ -257,10 +211,12 @@ export async function applyContactBulkAction(
     updated = await repository.bulkAddContactTag(contactIds, resourceId);
   } else if (input.action === "remove_tag") {
     updated = await repository.bulkRemoveContactTag(contactIds, resourceId);
-  } else if (input.action === "add_list") {
-    updated = await repository.bulkAddContactList(contactIds, resourceId);
+  } else if (input.action === "add_segment") {
+    updated = await repository.bulkAddContactSegment(contactIds, resourceId);
+    if (updated > 0) await updateSegmentMemberCount(database, workspace.workspaceId, resourceId);
   } else {
-    updated = await repository.bulkRemoveContactList(contactIds, resourceId);
+    updated = await repository.bulkRemoveContactSegment(contactIds, resourceId);
+    if (updated > 0) await updateSegmentMemberCount(database, workspace.workspaceId, resourceId);
   }
   return { kind: "ok", updated };
 }

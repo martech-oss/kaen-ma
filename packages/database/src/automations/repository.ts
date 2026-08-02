@@ -523,7 +523,9 @@ export class AutomationEngineRepository {
 
   /**
    * change_score action: applies the delta and records the score event
-   * against the enrollment, atomically.
+   * against the enrollment, atomically. The delta is applied as a SQL
+   * expression (not read-then-write) so the whole operation - not just the
+   * two writes - is race-free against a concurrent adjustment.
    */
   public async adjustContactScoreForEnrollment(
     workspaceId: string,
@@ -533,23 +535,16 @@ export class AutomationEngineRepository {
     now: string,
   ): Promise<void> {
     const orm = this.database.orm;
-    const current = await orm
-      .select({ score: contacts.score })
-      .from(contacts)
-      .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId)))
-      .get();
-    const total = (current?.score ?? 0) + amount;
     await orm.batch([
       orm
         .update(contacts)
-        .set({ score: total, updatedAt: now })
+        .set({ score: sql`${contacts.score} + ${amount}`, updatedAt: now })
         .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId))),
       orm.insert(scoreEvents).values({
         id: uuidv7(),
         workspaceId,
         contactId,
         delta: amount,
-        total,
         reason: "automation",
         automationEnrollmentId: enrollmentId,
         createdAt: now,

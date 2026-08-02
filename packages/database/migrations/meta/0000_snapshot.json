@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "6b729799-4448-4407-96f5-cb144f73fc03",
+  "id": "d8275204-e554-4bdf-a05a-45d30c92e1c4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "account": {
@@ -864,7 +864,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 0
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -1074,240 +1074,6 @@
             "id"
           ],
           "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {}
-    },
-    "contact_list_memberships": {
-      "name": "contact_list_memberships",
-      "columns": {
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "list_id": {
-          "name": "list_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "contact_id": {
-          "name": "contact_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'active'"
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'manual'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "contact_list_memberships_workspace_list_status_idx": {
-          "name": "contact_list_memberships_workspace_list_status_idx",
-          "columns": [
-            "workspace_id",
-            "list_id",
-            "status",
-            "contact_id"
-          ],
-          "isUnique": false
-        },
-        "contact_list_memberships_workspace_contact_idx": {
-          "name": "contact_list_memberships_workspace_contact_idx",
-          "columns": [
-            "workspace_id",
-            "contact_id",
-            "list_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "contact_list_memberships_workspace_id_organization_id_fk": {
-          "name": "contact_list_memberships_workspace_id_organization_id_fk",
-          "tableFrom": "contact_list_memberships",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "contact_list_memberships_list_id_contact_lists_id_fk": {
-          "name": "contact_list_memberships_list_id_contact_lists_id_fk",
-          "tableFrom": "contact_list_memberships",
-          "tableTo": "contact_lists",
-          "columnsFrom": [
-            "list_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "contact_list_memberships_contact_id_contacts_id_fk": {
-          "name": "contact_list_memberships_contact_id_contacts_id_fk",
-          "tableFrom": "contact_list_memberships",
-          "tableTo": "contacts",
-          "columnsFrom": [
-            "contact_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "contact_list_memberships_workspace_id_list_id_contact_id_pk": {
-          "columns": [
-            "workspace_id",
-            "list_id",
-            "contact_id"
-          ],
-          "name": "contact_list_memberships_workspace_id_list_id_contact_id_pk"
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "contact_list_memberships_status_check": {
-          "name": "contact_list_memberships_status_check",
-          "value": "\"contact_list_memberships\".\"status\" IN ('active', 'unsubscribed')"
-        }
-      }
-    },
-    "contact_lists": {
-      "name": "contact_lists",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "workspace_id": {
-          "name": "workspace_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "slug": {
-          "name": "slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "''"
-        },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'#6366f1'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "contact_lists_workspace_updated_idx": {
-          "name": "contact_lists_workspace_updated_idx",
-          "columns": [
-            "workspace_id",
-            "updated_at"
-          ],
-          "isUnique": false
-        },
-        "contact_lists_workspace_slug_unique": {
-          "name": "contact_lists_workspace_slug_unique",
-          "columns": [
-            "workspace_id",
-            "slug"
-          ],
-          "isUnique": true
-        }
-      },
-      "foreignKeys": {
-        "contact_lists_workspace_id_organization_id_fk": {
-          "name": "contact_lists_workspace_id_organization_id_fk",
-          "tableFrom": "contact_lists",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -1872,13 +1638,6 @@
         },
         "delta": {
           "name": "delta",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "total": {
-          "name": "total",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -3266,7 +3025,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 0
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -4250,7 +4009,7 @@
           "name": "recipient",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "topic_id": {
@@ -5065,29 +4824,28 @@
           "notNull": true,
           "autoincrement": false
         },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'pending'"
-        },
         "snapshot_at": {
           "name": "snapshot_at",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
-        "broadcast_recipients_status_idx": {
-          "name": "broadcast_recipients_status_idx",
+        "broadcast_recipients_pending_idx": {
+          "name": "broadcast_recipients_pending_idx",
           "columns": [
             "workspace_id",
             "broadcast_id",
-            "status"
+            "processed_at"
           ],
           "isUnique": false
         }
@@ -5643,7 +5401,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1
+          "default": true
         },
         "success_message": {
           "name": "success_message",
@@ -6246,7 +6004,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 0
+          "default": false
         },
         "allowed_domains": {
           "name": "allowed_domains",
@@ -6499,7 +6257,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1
+          "default": true
         },
         "created_at": {
           "name": "created_at",
@@ -6744,7 +6502,7 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": 1
+          "default": true
         },
         "created_at": {
           "name": "created_at",

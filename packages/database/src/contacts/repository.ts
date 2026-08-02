@@ -20,9 +20,10 @@ import type { WorkspaceContext } from "@kaenma/orpc";
 import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/orpc";
 
 import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { deliveries } from "../messaging/schema";
 import { segmentMemberships } from "../segments/schema";
 import { uuidv7 } from "../shared/uuid";
-import { companyContacts, contactListMemberships, contacts, contactTags } from "./schema";
+import { companyContacts, contacts, contactTags } from "./schema";
 
 export interface CursorPage<T> {
   items: T[];
@@ -49,7 +50,6 @@ export class ContactRepository {
     status?: "active" | "archived" | "anonymous" | "all" | undefined;
     stage?: string | undefined;
     tagId?: string | undefined;
-    listId?: string | undefined;
     companyId?: string | undefined;
     segmentId?: string | undefined;
     scoreMin?: number | undefined;
@@ -103,23 +103,6 @@ export class ContactRepository {
                 eq(contactTags.workspaceId, contacts.workspaceId),
                 eq(contactTags.contactId, contacts.id),
                 eq(contactTags.tagId, input.tagId),
-              ),
-            ),
-        ),
-      );
-    }
-    if (input.listId) {
-      conditions.push(
-        exists(
-          this.database.orm
-            .select({ value: sql`1` })
-            .from(contactListMemberships)
-            .where(
-              and(
-                eq(contactListMemberships.workspaceId, contacts.workspaceId),
-                eq(contactListMemberships.contactId, contacts.id),
-                eq(contactListMemberships.listId, input.listId),
-                eq(contactListMemberships.status, "active"),
               ),
             ),
         ),
@@ -257,19 +240,39 @@ export class ContactRepository {
     return this.getContact(id);
   }
 
+  /**
+   * Archives the contact and scrubs the plaintext email off its email
+   * deliveries (channel-scoped: a webhook delivery's `recipient` is an
+   * endpoint URL, not PII). `deliveries.payload` can still carry resolved
+   * template variables (email, name, ...) independently - out of scope here,
+   * see the P9 notes on this.
+   */
   public async archiveContact(id: string): Promise<boolean> {
     const now = new Date().toISOString();
-    const result = await this.database.orm
-      .update(contacts)
-      .set({ status: "archived", archivedAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(contacts.workspaceId, this.context.workspaceId),
-          eq(contacts.id, id),
-          ne(contacts.status, "archived"),
+    const orm = this.database.orm;
+    const [updated] = await orm.batch([
+      orm
+        .update(contacts)
+        .set({ status: "archived", archivedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(contacts.workspaceId, this.context.workspaceId),
+            eq(contacts.id, id),
+            ne(contacts.status, "archived"),
+          ),
         ),
-      );
-    return result.meta.changes > 0;
+      orm
+        .update(deliveries)
+        .set({ recipient: null })
+        .where(
+          and(
+            eq(deliveries.workspaceId, this.context.workspaceId),
+            eq(deliveries.contactId, id),
+            eq(deliveries.channel, "email"),
+          ),
+        ),
+    ]);
+    return updated.meta.changes > 0;
   }
 
   public async restoreContact(id: string): Promise<boolean> {
