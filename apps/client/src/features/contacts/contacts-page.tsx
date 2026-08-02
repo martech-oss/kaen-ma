@@ -1,30 +1,14 @@
-import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import {
-  Building2,
-  ChevronDown,
-  Filter,
-  Plus,
-  RefreshCw,
-  Search,
-  Tags,
-  UsersRound,
-  X,
-} from "lucide-react";
-import { type ReactNode, useCallback, useState } from "react";
+import { Building2, ChevronDown, Filter, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { AppDialog, ErrorAlert as ErrorNotice, PageLayout as Page } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import {
   InputGroup,
   InputGroupAddon,
@@ -32,15 +16,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 import { NativeSelectOption } from "@/components/ui/native-select";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   contactOptionsQueryKey,
@@ -54,6 +29,7 @@ import { formatLongDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
+import type { ContactSummary } from "@kaenma/orpc";
 
 import {
   type BulkAction,
@@ -72,11 +48,21 @@ import { createSegmentFilter } from "./segment-filter";
 
 export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }): ReactNode {
   const queryClient = useQueryClient();
-  const contactsQuery = useSuspenseQuery(contactsQueryOptions(initialSearch));
+  // Local, not URL-synced: cursor pagination resets whenever the URL-backed
+  // filters change (below), same trigger the query itself refetches on.
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  useEffect(() => {
+    setCursor(undefined);
+    setCursorHistory([]);
+  }, [initialSearch]);
+
+  const contactsQuery = useQuery(contactsQueryOptions(initialSearch, cursor));
   const optionsQuery = useSuspenseQuery(contactOptionsQueryOptions());
-  const contacts = contactsQuery.data.items;
+  const contacts = contactsQuery.data?.items ?? [];
   const options = optionsQuery.data;
-  const total = contactsQuery.data.total;
+  const total = contactsQuery.data?.total ?? 0;
+  const nextCursor = contactsQuery.data?.nextCursor;
   const loading = contactsQuery.isFetching;
   const [error, setError] = useState("");
   const {
@@ -135,6 +121,23 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   const allVisibleSelected =
     contacts.length > 0 && contacts.every((contact) => selected.has(contact.id));
 
+  function goToNextPage() {
+    if (!nextCursor) return;
+    setCursorHistory((history) => [...history, cursor ?? ""]);
+    setCursor(nextCursor);
+    setSelected(new Set());
+  }
+
+  function goToPreviousPage() {
+    setCursorHistory((history) => {
+      if (history.length === 0) return history;
+      const previous = history[history.length - 1];
+      setCursor(previous || undefined);
+      return history.slice(0, -1);
+    });
+    setSelected(new Set());
+  }
+
   async function applyBulkAction() {
     if (selected.size === 0) return;
     const needsResource = !["archive", "restore"].includes(bulkAction);
@@ -177,6 +180,107 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
       options,
     );
   }
+
+  const columns: DataTableColumn<ContactSummary>[] = [
+    {
+      key: "select",
+      header: (
+        <Checkbox
+          checked={allVisibleSelected}
+          onCheckedChange={(checked) =>
+            setSelected(checked ? new Set(contacts.map((contact) => contact.id)) : new Set())
+          }
+          aria-label="表示中の連絡先をすべて選択"
+        />
+      ),
+      cell: (contact) => (
+        <Checkbox
+          checked={selected.has(contact.id)}
+          onCheckedChange={(checked) => {
+            const next = new Set(selected);
+            if (checked) next.add(contact.id);
+            else next.delete(contact.id);
+            setSelected(next);
+          }}
+          onClick={(event) => event.stopPropagation()}
+          aria-label={`${contactName(contact)}を選択`}
+        />
+      ),
+      headClassName: "w-12 px-5",
+      cellClassName: "px-5",
+    },
+    {
+      key: "contact",
+      header: "連絡先",
+      cell: (contact) => (
+        <div className="flex items-center gap-3">
+          <ContactAvatar contact={contact} />
+          <div className="min-w-0">
+            <div className="truncate font-medium">{contactName(contact)}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {contact.email ?? contact.phone ?? contact.externalId ?? "匿名Contact"}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "状態",
+      cell: (contact) => (
+        <div className="flex flex-wrap gap-1.5">
+          <ContactStatusBadge status={contact.status} />
+          <Badge variant="outline">{contact.stage}</Badge>
+        </div>
+      ),
+    },
+    {
+      key: "classification",
+      header: "会社・分類",
+      cell: (contact) => (
+        <div className="flex flex-wrap gap-1">
+          {contact.companies.slice(0, 1).map((company) => (
+            <Badge key={company.id} variant="secondary">
+              <Building2 />
+              {company.name}
+            </Badge>
+          ))}
+          {contact.tags.slice(0, 3).map((tag) => (
+            <ColorChip key={tag.id} item={tag} />
+          ))}
+          {contact.companies.length + contact.tags.length === 0 && (
+            <span className="text-xs text-muted-foreground">未分類</span>
+          )}
+        </div>
+      ),
+      cellClassName: "max-w-80",
+    },
+    {
+      key: "score",
+      header: "スコア",
+      cell: (contact) => (
+        <Badge
+          variant="secondary"
+          className={cn(
+            "min-w-12 justify-center tabular-nums",
+            contact.score >= 50 && "bg-success text-success-foreground",
+            contact.score >= 20 && contact.score < 50 && "bg-warning text-warning-foreground",
+          )}
+        >
+          {contact.score}
+        </Badge>
+      ),
+      headClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "updatedAt",
+      header: "更新日",
+      cell: (contact) => formatLongDateTime(contact.updatedAt),
+      headClassName: "px-5 text-right",
+      cellClassName: "px-5 text-right text-xs text-muted-foreground",
+    },
+  ];
 
   return (
     <Page
@@ -398,143 +502,23 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
           </div>
         )}
         <CardContent className="px-0">
-          <Table className="min-w-[980px]">
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12 px-5">
-                  <Checkbox
-                    checked={allVisibleSelected}
-                    onCheckedChange={(checked) =>
-                      setSelected(
-                        checked ? new Set(contacts.map((contact) => contact.id)) : new Set(),
-                      )
-                    }
-                    aria-label="表示中の連絡先をすべて選択"
-                  />
-                </TableHead>
-                <TableHead>連絡先</TableHead>
-                <TableHead>状態</TableHead>
-                <TableHead>会社・分類</TableHead>
-                <TableHead className="text-right">スコア</TableHead>
-                <TableHead className="px-5 text-right">更新日</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading
-                ? Array.from({ length: 5 }).map((_, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="px-5">
-                        <Skeleton className="size-4" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-8 w-56" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-24" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="h-6 w-48" />
-                      </TableCell>
-                      <TableCell>
-                        <Skeleton className="ml-auto h-6 w-12" />
-                      </TableCell>
-                      <TableCell className="px-5">
-                        <Skeleton className="ml-auto h-4 w-28" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                : contacts.map((contact) => (
-                    <TableRow
-                      key={contact.id}
-                      className="cursor-pointer focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
-                      onClick={() => setActiveContactId(contact.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") setActiveContactId(contact.id);
-                      }}
-                      tabIndex={0}
-                    >
-                      <TableCell className="px-5" onClick={(event) => event.stopPropagation()}>
-                        <Checkbox
-                          checked={selected.has(contact.id)}
-                          onCheckedChange={(checked) => {
-                            const next = new Set(selected);
-                            if (checked) next.add(contact.id);
-                            else next.delete(contact.id);
-                            setSelected(next);
-                          }}
-                          aria-label={`${contactName(contact)}を選択`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <ContactAvatar contact={contact} />
-                          <div className="min-w-0">
-                            <div className="truncate font-medium">{contactName(contact)}</div>
-                            <div className="truncate text-xs text-muted-foreground">
-                              {contact.email ??
-                                contact.phone ??
-                                contact.externalId ??
-                                "匿名Contact"}
-                            </div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1.5">
-                          <ContactStatusBadge status={contact.status} />
-                          <Badge variant="outline">{contact.stage}</Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-w-80">
-                        <div className="flex flex-wrap gap-1">
-                          {contact.companies.slice(0, 1).map((company) => (
-                            <Badge key={company.id} variant="secondary">
-                              <Building2 />
-                              {company.name}
-                            </Badge>
-                          ))}
-                          {contact.tags.slice(0, 3).map((tag) => (
-                            <ColorChip key={tag.id} item={tag} />
-                          ))}
-                          {contact.companies.length + contact.tags.length === 0 && (
-                            <span className="text-xs text-muted-foreground">未分類</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "min-w-12 justify-center tabular-nums",
-                            contact.score >= 50 && "bg-success text-success-foreground",
-                            contact.score >= 20 &&
-                              contact.score < 50 &&
-                              "bg-warning text-warning-foreground",
-                          )}
-                        >
-                          {contact.score}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="px-5 text-right text-xs text-muted-foreground">
-                        {formatLongDateTime(contact.updatedAt)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-            </TableBody>
-          </Table>
-          {!loading && contacts.length === 0 && (
-            <Empty className="py-16">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <UsersRound />
-                </EmptyMedia>
-                <EmptyTitle>条件に一致する連絡先がありません</EmptyTitle>
-                <EmptyDescription>
-                  検索条件を変更するか、新しい連絡先を追加してください。
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
+          <DataTable
+            columns={columns}
+            rows={contacts}
+            rowKey={(contact) => contact.id}
+            caption="連絡先一覧"
+            loading={loading}
+            emptyTitle="条件に一致する連絡先がありません"
+            emptyDescription="検索条件を変更するか、新しい連絡先を追加してください。"
+            onRowClick={(contact) => setActiveContactId(contact.id)}
+            className="min-w-[980px]"
+            pagination={{
+              hasNextPage: Boolean(nextCursor),
+              hasPreviousPage: cursorHistory.length > 0,
+              onNext: goToNextPage,
+              onPrevious: goToPreviousPage,
+            }}
+          />
         </CardContent>
       </Card>
 

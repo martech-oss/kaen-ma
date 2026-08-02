@@ -21,6 +21,7 @@ import { toast } from "sonner";
 
 import {
   AppDialog,
+  ArchiveConfirm,
   EmptyState,
   FormNativeSelect,
   FormSelectOption,
@@ -451,12 +452,17 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
               </p>
             </CardContent>
           </Card>
-          <Button
-            variant="destructive"
-            className="self-start"
-            onClick={() => {
-              if (!window.confirm(`「${deal.name}」をアーカイブしますか？`)) return;
-              void archiveDeal
+          <ArchiveConfirm
+            label={deal.name}
+            trigger={<Button variant="destructive" className="self-start" />}
+            triggerContent={
+              <>
+                <Archive data-icon="inline-start" />
+                アーカイブ
+              </>
+            }
+            onConfirm={() =>
+              archiveDeal
                 .mutateAsync({ id: deal.id })
                 .then(async () => {
                   toast.success("商談をアーカイブしました");
@@ -467,12 +473,9 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
                   toast.error(
                     caught instanceof Error ? caught.message : "商談をアーカイブできませんでした",
                   );
-                });
-            }}
-          >
-            <Archive data-icon="inline-start" />
-            アーカイブ
-          </Button>
+                })
+            }
+          />
         </div>
       </div>
 

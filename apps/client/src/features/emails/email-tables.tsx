@@ -3,7 +3,7 @@ import { Pencil, RefreshCw, Send } from "lucide-react";
 import { type ReactNode } from "react";
 import { toast } from "sonner";
 
-import { EmptyState } from "@/components/app-ui";
+import { ArchiveConfirm, EmptyState } from "@/components/app-ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,8 +30,6 @@ import {
 import { type EmailCampaignRow, type EmailTemplateRow } from "@/features/emails/email-api";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
-
-import { ArchiveConfirm } from "./email-forms";
 
 export function CampaignTable({
   items,

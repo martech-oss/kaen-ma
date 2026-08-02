@@ -3,12 +3,10 @@ import { Plus, Shapes } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 
 import {
-  AppDialog,
-  ErrorAlert,
+  FormDialog,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
-  LoadingButton,
   PageLayout,
   ResourceCard,
   ResourceGrid,
@@ -23,6 +21,7 @@ import {
   segmentConditionNeedsValue,
   segmentFieldOptions,
 } from "@/features/segments/segment-fields";
+import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
@@ -63,30 +62,32 @@ export function SegmentsPage(): ReactNode {
         ))}
       </ResourceGrid>
       {segments.length === 0 ? <SimpleEmpty label="最初のセグメントを作成しましょう" /> : null}
-      <AppDialog
+      <SegmentFormDialog
         open={showForm}
         onOpenChange={setShowForm}
-        title="セグメントを作成"
-        description="連絡先を手動でまとめる静的セグメント、または条件から自動更新される動的セグメントを作成します。"
-      >
-        <SegmentForm
-          onSaved={async () => {
-            setShowForm(false);
-            await queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });
-          }}
-        />
-      </AppDialog>
+        onSaved={async () => {
+          setShowForm(false);
+          await queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });
+        }}
+      />
     </PageLayout>
   );
 }
 
-function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
+function SegmentFormDialog({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => Promise<void>;
+}): ReactNode {
   const createSegment = useMutation(orpcQuery.segments.create.mutationOptions());
+  const { busy, error, run } = useFormSubmission("セグメントを作成できませんでした");
   const [kind, setKind] = useState<"static" | "dynamic">("static");
   const [field, setField] = useState<SegmentField>("stage");
   const [operator, setOperator] = useState<SegmentOperator>("eq");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
   const fieldDefinition = getSegmentFieldDefinition(field);
   const operatorOptions = getSegmentOperatorOptions(field);
   const needsValue = segmentConditionNeedsValue(field, operator);
@@ -99,9 +100,7 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
       kind === "dynamic"
         ? createSegmentCondition(field, operator, getFormString(form, "value"))
         : undefined;
-    setBusy(true);
-    setError("");
-    try {
+    await run(async () => {
       await createSegment.mutateAsync({
         name,
         slug: slugify(name),
@@ -109,15 +108,20 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
         ...(filter ? { filter } : {}),
       });
       await onSaved();
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "セグメントを作成できませんでした");
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (
-    <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">
+    <FormDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="セグメントを作成"
+      description="連絡先を手動でまとめる静的セグメント、または条件から自動更新される動的セグメントを作成します。"
+      onSubmit={(event) => void submit(event)}
+      busy={busy}
+      error={error}
+      submitLabel="作成"
+    >
       <FormInput label="名前" name="name" required />
       <FormNativeSelect
         label="種類"
@@ -183,10 +187,6 @@ function SegmentForm({ onSaved }: { onSaved: () => Promise<void> }): ReactNode {
           )}
         </>
       )}
-      {error ? <ErrorAlert>{error}</ErrorAlert> : null}
-      <LoadingButton busy={busy} className="w-full" type="submit">
-        作成
-      </LoadingButton>
-    </form>
+    </FormDialog>
   );
 }

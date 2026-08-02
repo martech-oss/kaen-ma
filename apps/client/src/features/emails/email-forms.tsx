@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Archive, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
@@ -11,18 +11,6 @@ import {
   FormTextarea,
   LoadingButton,
 } from "@/components/app-ui";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import {
@@ -281,40 +269,5 @@ export function VariableForm({
         </LoadingButton>
       </FieldGroup>
     </form>
-  );
-}
-
-export function ArchiveConfirm({
-  label,
-  onConfirm,
-}: {
-  label: string;
-  onConfirm: () => void;
-}): ReactNode {
-  return (
-    <AlertDialog>
-      <AlertDialogTrigger
-        render={<Button size="sm" variant="ghost" aria-label={`${label}をアーカイブ`} />}
-      >
-        <Archive />
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogMedia>
-            <Archive />
-          </AlertDialogMedia>
-          <AlertDialogTitle>アーカイブしますか？</AlertDialogTitle>
-          <AlertDialogDescription>
-            「{label}」を通常の一覧から非表示にします。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>キャンセル</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={onConfirm}>
-            アーカイブ
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
   );
 }

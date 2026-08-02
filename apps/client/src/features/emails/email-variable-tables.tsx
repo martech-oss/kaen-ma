@@ -3,7 +3,7 @@ import { Copy, Pencil } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
-import { EmptyState } from "@/components/app-ui";
+import { ArchiveConfirm, EmptyState } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,8 +18,6 @@ import {
 import type { MessageVariableRow } from "@/features/emails/email-api";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
-
-import { ArchiveConfirm } from "./email-forms";
 
 export function VariableReference({ variables }: { variables: MessageVariableRow[] }): ReactNode {
   const builtInVariables = [

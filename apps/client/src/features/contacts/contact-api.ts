@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type { ContactListInput } from "@kaenma/orpc";
@@ -67,16 +67,20 @@ export function parseContactSearch(search: Record<string, unknown>): ContactSear
   };
 }
 
-export function buildContactSearchInput(search: ContactSearch): ContactListInput {
+/** Contacts are paginated 50 at a time via cursor, not fetched all-at-once. */
+export const CONTACTS_PAGE_SIZE = 50;
+
+export function buildContactSearchInput(search: ContactSearch, cursor?: string): ContactListInput {
   const query = search.q.trim();
   const scoreMin = optionalNumber(search.scoreMin);
   const scoreMax = optionalNumber(search.scoreMax);
 
   return {
-    limit: 100,
+    limit: CONTACTS_PAGE_SIZE,
     status: search.status,
     sort: search.sort,
     direction: search.direction,
+    ...(cursor ? { cursor } : {}),
     ...(query ? { query } : {}),
     ...(search.stage ? { stage: search.stage } : {}),
     ...(search.tagId ? { tagId: search.tagId } : {}),
@@ -87,9 +91,10 @@ export function buildContactSearchInput(search: ContactSearch): ContactListInput
   };
 }
 
-export function contactsQueryOptions(search: ContactSearch) {
+export function contactsQueryOptions(search: ContactSearch, cursor?: string) {
   return orpcQuery.contacts.list.queryOptions({
-    input: buildContactSearchInput(search),
+    input: buildContactSearchInput(search, cursor),
+    placeholderData: keepPreviousData,
   });
 }
 

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 
 import {
   AppDialog,
+  ArchiveConfirm,
   EmptyState,
   ErrorAlert,
   FormInput,
@@ -34,7 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { siteMessagesQueryOptions, type SiteMessageRow } from "@/features/website/website-api";
-import { ArchiveConfirm, PublishStatusBadge } from "@/features/website/website-shared";
+import { PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
@@ -147,7 +148,11 @@ export function SiteMessagesPage(): ReactNode {
                         >
                           <Pencil />
                         </Button>
-                        <ArchiveConfirm label={item.name} onConfirm={() => archive(item)} />
+                        <ArchiveConfirm
+                          label={item.name}
+                          description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
+                          onConfirm={() => archive(item)}
+                        />
                       </div>
                     </TableCell>
                   </TableRow>

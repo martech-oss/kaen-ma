@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import {
   AppDialog,
+  ArchiveConfirm,
   EmptyState,
   ErrorAlert,
   FormInput,
@@ -26,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { landingPagesQueryOptions, type LandingPageRow } from "@/features/website/website-api";
-import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
+import { CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
@@ -141,7 +142,11 @@ export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): 
                           >
                             <Pencil />
                           </Button>
-                          <ArchiveConfirm label={item.name} onConfirm={() => archive(item)} />
+                          <ArchiveConfirm
+                            label={item.name}
+                            description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
+                            onConfirm={() => archive(item)}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>

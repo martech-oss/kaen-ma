@@ -12,22 +12,11 @@ import {
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  ArchiveConfirm,
   ErrorAlert as ErrorNotice,
   FormInput as InputField,
   LoadingButton,
 } from "@/components/app-ui";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -146,36 +135,19 @@ export function ContactDrawer({
                     復元
                   </Button>
                 ) : (
-                  <AlertDialog>
-                    <AlertDialogTrigger
-                      render={<Button variant="destructive" className="ml-auto" />}
-                    >
-                      <Archive data-icon="inline-start" />
-                      アーカイブ
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogMedia>
-                          <Archive />
-                        </AlertDialogMedia>
-                        <AlertDialogTitle>連絡先をアーカイブしますか？</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          配信対象から外れます。必要になった場合は後から復元できます。
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                        <AlertDialogAction
-                          variant="destructive"
-                          onClick={() =>
-                            void mutate(() => orpc.contacts.archive({ id: contactId }))
-                          }
-                        >
-                          アーカイブ
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <ArchiveConfirm
+                    label={contactName(profile.contact)}
+                    title="連絡先をアーカイブしますか？"
+                    description="配信対象から外れます。必要になった場合は後から復元できます。"
+                    trigger={<Button variant="destructive" className="ml-auto" />}
+                    triggerContent={
+                      <>
+                        <Archive data-icon="inline-start" />
+                        アーカイブ
+                      </>
+                    }
+                    onConfirm={() => mutate(() => orpc.contacts.archive({ id: contactId }))}
+                  />
                 )}
               </div>
             </SheetHeader>

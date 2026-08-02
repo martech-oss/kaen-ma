@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildContactSearchInput,
+  CONTACTS_PAGE_SIZE,
   contactSearchDefaults,
   contactsQueryOptions,
   parseContactSearch,
@@ -29,7 +30,7 @@ describe("contact search params", () => {
     });
 
     expect(input).toEqual({
-      limit: 100,
+      limit: CONTACTS_PAGE_SIZE,
       status: "active",
       sort: "updatedAt",
       direction: "asc",

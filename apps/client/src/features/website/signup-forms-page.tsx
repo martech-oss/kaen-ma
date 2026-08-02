@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import {
   AppDialog,
+  ArchiveConfirm,
   EmptyState,
   ErrorAlert,
   FormInput,
@@ -41,7 +42,7 @@ import {
   type SignupFormDefinition,
   type SignupFormRow,
 } from "@/features/website/website-api";
-import { ArchiveConfirm, CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
+import { CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
@@ -162,7 +163,11 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
                           >
                             <Pencil />
                           </Button>
-                          <ArchiveConfirm label={item.name} onConfirm={() => archive(item)} />
+                          <ArchiveConfirm
+                            label={item.name}
+                            description={`「${item.name}」は公開を終了し、通常の一覧から非表示になります。`}
+                            onConfirm={() => archive(item)}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>
