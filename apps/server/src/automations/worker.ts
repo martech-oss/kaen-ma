@@ -1,25 +1,21 @@
 import { PermanentChannelError } from "@openengage/channels";
 import { computeDueAt, outgoingEdges } from "@openengage/core";
 import {
+  type AutomationDefinition,
+  type AutomationEdge,
+  type AutomationNode,
+} from "@openengage/core/automations";
+import {
   AutomationEngineRepository,
   createDatabase,
   type AutomationContactColumn,
   type AutomationJobRow,
 } from "@openengage/database";
-import {
-  automationDefinitionSchema,
-  type AutomationDefinition,
-  type AutomationEdge,
-  type AutomationNode,
-} from "@openengage/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { type RuntimeEnv } from "../env";
 import { createEmailDelivery, createWebhookDelivery } from "../messaging/delivery-worker";
-import { parseJsonRecord } from "../platform/values";
 import { primitiveString } from "../platform/values";
-
-export type { AutomationJobRow };
 
 export async function processAutomationJob(
   jobId: string,
@@ -33,9 +29,9 @@ export async function processAutomationJob(
   if (!started && job.status !== "running") return;
 
   try {
-    const definition = automationDefinitionSchema.parse(JSON.parse(job.graph));
-    const node = definition.nodes.find((candidate) => candidate.id === job.node_id);
-    if (!node) throw new PermanentChannelError(`Automation node ${job.node_id} is missing`);
+    const definition = job.graph;
+    const node = definition.nodes.find((candidate) => candidate.id === job.nodeId);
+    if (!node) throw new PermanentChannelError(`Automation node ${job.nodeId} is missing`);
     const result = await executeNode(node, definition, job, env);
     if (result.waitUntil) {
       await engine.parkJobUntil(job.id, leaseId, {
@@ -85,15 +81,14 @@ export async function executeNode(
       custom_event: "custom_event",
     }[node.config.event];
     const found = await engine.hasContactEventSince(
-      job.workspace_id,
-      job.contact_id,
+      job.workspaceId,
+      job.contactId,
       eventType,
-      job.entered_at,
+      job.enteredAt,
       node.config.resourceId ?? null,
     );
     if (found) return { branch: "yes" };
-    const payload = parseJsonRecord(job.payload);
-    if (payload["waiting"] === true) return { branch: "timeout" };
+    if (job.payload["waiting"] === true) return { branch: "timeout" };
     return {
       waitUntil: new Date(Date.now() + node.config.withinMinutes * 60_000).toISOString(),
     };
@@ -109,23 +104,23 @@ export async function executeNode(
       await createWebhookDelivery(action.endpointId, job, env);
       break;
     case "add_tag":
-      await engine.addContactTag(job.workspace_id, job.contact_id, action.tagId, now);
+      await engine.addContactTag(job.workspaceId, job.contactId, action.tagId, now);
       break;
     case "remove_tag":
-      await engine.removeContactTag(job.workspace_id, job.contact_id, action.tagId);
+      await engine.removeContactTag(job.workspaceId, job.contactId, action.tagId);
       break;
     case "add_segment":
       if (
         await engine.addAutomationSegmentMembership(
-          job.workspace_id,
+          job.workspaceId,
           action.segmentId,
-          job.contact_id,
+          job.contactId,
           now,
         )
       ) {
         await recordContactEvent(database, {
-          workspaceId: job.workspace_id,
-          contactId: job.contact_id,
+          workspaceId: job.workspaceId,
+          contactId: job.contactId,
           type: "segment_joined",
           resourceType: "segment",
           resourceId: action.segmentId,
@@ -133,13 +128,13 @@ export async function executeNode(
       }
       break;
     case "remove_segment":
-      await engine.removeSegmentMembership(job.workspace_id, action.segmentId, job.contact_id);
+      await engine.removeSegmentMembership(job.workspaceId, action.segmentId, job.contactId);
       break;
     case "change_score":
       await engine.adjustContactScoreForEnrollment(
-        job.workspace_id,
-        job.contact_id,
-        job.enrollment_id,
+        job.workspaceId,
+        job.contactId,
+        job.enrollmentId,
         action.amount,
         now,
       );
@@ -159,7 +154,7 @@ export async function finishNode(
   env: RuntimeEnv,
 ): Promise<void> {
   const engine = new AutomationEngineRepository(createDatabase(env.DB));
-  const next = outgoingEdges(definition, job.node_id, branch ?? "next")[0];
+  const next = outgoingEdges(definition, job.nodeId, branch ?? "next")[0];
   const now = new Date().toISOString();
   if (!next) {
     await engine.completeJobClosingEnrollment(job, leaseId, now);
@@ -174,19 +169,19 @@ export async function evaluateCondition(
   env: RuntimeEnv,
 ): Promise<boolean> {
   const fieldMap: Record<string, unknown> = {
-    email: job.contact_email,
-    first_name: job.first_name,
-    last_name: job.last_name,
+    email: job.contactEmail,
+    first_name: job.firstName,
+    last_name: job.lastName,
     phone: job.phone,
     stage: job.stage,
     score: job.score,
-    ...parseJsonRecord(job.custom_fields),
+    ...job.customFields,
   };
   if (node.config.field === "tag") {
     const engine = new AutomationEngineRepository(createDatabase(env.DB));
     const tagged = await engine.contactHasTagWithSlug(
-      job.workspace_id,
-      job.contact_id,
+      job.workspaceId,
+      job.contactId,
       String(node.config.value ?? ""),
     );
     return compare(tagged, node.config.operator, true);
@@ -231,8 +226,8 @@ export async function updateContactField(
   const column = columns[field];
   if (column) {
     await engine.updateContactColumn(
-      job.workspace_id,
-      job.contact_id,
+      job.workspaceId,
+      job.contactId,
       column,
       primitiveString(value),
       new Date().toISOString(),
@@ -242,11 +237,11 @@ export async function updateContactField(
   if (!/^[A-Za-z0-9_.-]{1,191}$/.test(field)) {
     throw new PermanentChannelError("Invalid custom field key");
   }
-  const fields = parseJsonRecord(job.custom_fields);
+  const fields = { ...job.customFields };
   fields[field] = value;
   await engine.replaceContactCustomFields(
-    job.workspace_id,
-    job.contact_id,
+    job.workspaceId,
+    job.contactId,
     JSON.stringify(fields),
     new Date().toISOString(),
   );

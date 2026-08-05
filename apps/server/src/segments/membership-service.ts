@@ -1,6 +1,5 @@
 import { compileSegmentFilter } from "@openengage/core";
 import { SegmentRepository, type OpenEngageDatabase } from "@openengage/database";
-import { segmentFilterSchema } from "@openengage/orpc";
 
 /**
  * These helpers are called from flows that only carry a workspace id (bulk
@@ -31,15 +30,8 @@ export async function refreshSegmentMemberships(
     await repository.updateMemberCount(segmentId);
     return true;
   }
-  let rawFilter: unknown;
-  try {
-    rawFilter = segment.filterAst ? JSON.parse(segment.filterAst) : null;
-  } catch {
-    return false;
-  }
-  const parsed = segmentFilterSchema.safeParse(rawFilter);
-  if (!parsed.success) return false;
-  const compiled = compileSegmentFilter(workspaceId, parsed.data);
+  if (!segment.filterAst) return false;
+  const compiled = compileSegmentFilter(workspaceId, segment.filterAst);
   await repository.replaceDynamicMemberships(segmentId, compiled);
   return true;
 }

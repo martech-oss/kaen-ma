@@ -1,5 +1,10 @@
 import * as z from "zod";
 
+export const jsonRecordSchema = z.record(z.string(), z.unknown());
+export type JsonRecord = z.infer<typeof jsonRecordSchema>;
+
+export const stringArraySchema = z.array(z.string());
+
 /**
  * The raw arrays behind each schema below are exported too, so
  * `@openengage/database`'s schema files can build their matching CHECK

@@ -1,9 +1,12 @@
-import type {
-  DealCreate,
-  DealStatus,
-  DealTaskCreate,
-  DealTaskStatus,
-  DealTaskType,
+import {
+  dealSummarySchema,
+  dealTaskSchema,
+  type DealCreate,
+  type DealSummary,
+  type DealTask,
+  type DealTaskCreate,
+  type DealTaskStatus,
+  type DealTaskType,
 } from "@openengage/core/deals";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { and, asc, count, desc, eq, isNull, like, min, ne, or, sql, type SQL } from "drizzle-orm";
@@ -25,67 +28,19 @@ const DEFAULT_STAGES = [
 
 /**
  * One deal row joined with its pipeline/stage/owner/contact/company names and
- * open-task counters. Field names are snake_case (mirrors {@link AutomationJobRow})
- * because this is the long-standing shape apps/server's `serializeDeal` maps
- * from.
+ * open-task counters. Repository rows use the same camelCase business shape
+ * exposed by core.
  */
-export interface DealRow {
-  id: string;
-  workspace_id: string;
-  pipeline_id: string;
-  pipeline_name: string;
-  stage_id: string;
-  stage_name: string;
-  stage_color: string;
-  stage_position: number;
-  stage_probability: number;
-  name: string;
-  value: number;
-  currency: string;
-  status: DealStatus;
-  owner_user_id: string | null;
-  owner_name: string | null;
-  owner_email: string | null;
-  contact_id: string | null;
-  contact_email: string | null;
-  contact_first_name: string | null;
-  contact_last_name: string | null;
-  company_id: string | null;
-  company_name: string | null;
-  expected_close_date: string | null;
-  description: string;
-  won_at: string | null;
-  lost_at: string | null;
-  archived_at: string | null;
-  created_at: string;
-  updated_at: string;
-  open_task_count: number;
-  next_task_at: string | null;
-}
+export type DealRow = DealSummary;
 
-/** A deal task joined with its assignee's name/email. Mirrors {@link DealRow}'s snake_case contract. */
-export interface DealTaskRow {
-  id: string;
-  deal_id: string;
-  type: DealTaskType;
-  title: string;
-  notes: string;
-  due_at: string | null;
-  status: DealTaskStatus;
-  assigned_user_id: string | null;
-  assignee_name: string | null;
-  assignee_email: string | null;
-  completed_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export type DealTaskRow = DealTask;
 
 export interface DealListSummaryRow {
-  open_count: number;
-  open_value: number;
-  won_count: number;
-  won_value: number;
-  lost_count: number;
+  openCount: number;
+  openValue: number;
+  wonCount: number;
+  wonValue: number;
+  lostCount: number;
 }
 
 export interface DealPipelineRow {
@@ -369,7 +324,7 @@ export class DealRepository {
         ),
       )
       .get();
-    return (row as DealRow | undefined) ?? null;
+    return row ? dealSummarySchema.parse(row) : null;
   }
 
   /**
@@ -408,21 +363,21 @@ export class DealRepository {
         .orderBy(asc(dealStages.position), desc(deals.updatedAt)),
       this.database.orm
         .select({
-          open_count: sql<number>`count(case when ${deals.status} = 'open' then 1 end)`.mapWith(
+          openCount: sql<number>`count(case when ${deals.status} = 'open' then 1 end)`.mapWith(
             Number,
           ),
-          open_value:
+          openValue:
             sql<number>`coalesce(sum(case when ${deals.status} = 'open' then ${deals.value} else 0 end), 0)`.mapWith(
               Number,
             ),
-          won_count: sql<number>`count(case when ${deals.status} = 'won' then 1 end)`.mapWith(
+          wonCount: sql<number>`count(case when ${deals.status} = 'won' then 1 end)`.mapWith(
             Number,
           ),
-          won_value:
+          wonValue:
             sql<number>`coalesce(sum(case when ${deals.status} = 'won' then ${deals.value} else 0 end), 0)`.mapWith(
               Number,
             ),
-          lost_count: sql<number>`count(case when ${deals.status} = 'lost' then 1 end)`.mapWith(
+          lostCount: sql<number>`count(case when ${deals.status} = 'lost' then 1 end)`.mapWith(
             Number,
           ),
         })
@@ -436,7 +391,7 @@ export class DealRepository {
         )
         .get(),
     ]);
-    return { items: items as DealRow[], summary };
+    return { items: items.map((row) => dealSummarySchema.parse(row)), summary };
   }
 
   public async listDealTasks(dealId: string): Promise<DealTaskRow[]> {
@@ -448,7 +403,7 @@ export class DealRepository {
         asc(dealTasks.dueAt),
         desc(dealTasks.createdAt),
       );
-    return rows as DealTaskRow[];
+    return rows.map((row) => dealTaskSchema.parse(row));
   }
 
   /** Inserts a deal (caller has already validated its references) and returns the joined row. */
@@ -567,7 +522,7 @@ export class DealRepository {
         ),
       )
       .get();
-    return (row as DealTaskRow | undefined) ?? null;
+    return row ? dealTaskSchema.parse(row) : null;
   }
 
   /** Inserts a deal task (caller has already validated the deal/assignee) and returns the joined row. */
@@ -660,13 +615,13 @@ export class DealRepository {
 
   /**
    * The deal+pipeline+stage+owner+contact+company join, with the two
-   * per-deal task counters. `open_task_count`/`next_task_at` are correlated
+   * per-deal task counters. `openTaskCount`/`nextTaskAt` are correlated
    * scalar subqueries built with the query builder (not raw `${column}`
    * interpolation in a select field) — that form renders the correlation
    * columns unqualified in this drizzle version, silently comparing a table
    * to itself. Verified via `.toSQL()`: the emitted WHERE clauses read
-   * `"deal_tasks"."workspace_id" = "deals"."workspace_id"` and
-   * `"deal_tasks"."deal_id" = "deals"."id"`, fully qualified both sides.
+   * `"deal_tasks"."workspaceId" = "deals"."workspaceId"` and
+   * `"deal_tasks"."dealId" = "deals"."id"`, fully qualified both sides.
    */
   private dealSelection() {
     const openTaskCount = this.database.orm
@@ -691,36 +646,36 @@ export class DealRepository {
       );
     return {
       id: deals.id,
-      workspace_id: deals.workspaceId,
-      pipeline_id: deals.pipelineId,
-      pipeline_name: dealPipelines.name,
-      stage_id: deals.stageId,
-      stage_name: dealStages.name,
-      stage_color: dealStages.color,
-      stage_position: dealStages.position,
-      stage_probability: dealStages.probability,
+      workspaceId: deals.workspaceId,
+      pipelineId: deals.pipelineId,
+      pipelineName: dealPipelines.name,
+      stageId: deals.stageId,
+      stageName: dealStages.name,
+      stageColor: dealStages.color,
+      stagePosition: dealStages.position,
+      stageProbability: dealStages.probability,
       name: deals.name,
       value: deals.value,
       currency: deals.currency,
       status: deals.status,
-      owner_user_id: deals.ownerUserId,
-      owner_name: user.name,
-      owner_email: user.email,
-      contact_id: deals.contactId,
-      contact_email: contacts.email,
-      contact_first_name: contacts.firstName,
-      contact_last_name: contacts.lastName,
-      company_id: deals.companyId,
-      company_name: companies.name,
-      expected_close_date: deals.expectedCloseDate,
+      ownerUserId: deals.ownerUserId,
+      ownerName: user.name,
+      ownerEmail: user.email,
+      contactId: deals.contactId,
+      contactEmail: contacts.email,
+      contactFirstName: contacts.firstName,
+      contactLastName: contacts.lastName,
+      companyId: deals.companyId,
+      companyName: companies.name,
+      expectedCloseDate: deals.expectedCloseDate,
       description: deals.description,
-      won_at: deals.wonAt,
-      lost_at: deals.lostAt,
-      archived_at: deals.archivedAt,
-      created_at: deals.createdAt,
-      updated_at: deals.updatedAt,
-      open_task_count: sql<number>`${openTaskCount}`.mapWith(Number).as("open_task_count"),
-      next_task_at: sql<string | null>`${nextTaskAt}`.as("next_task_at"),
+      wonAt: deals.wonAt,
+      lostAt: deals.lostAt,
+      archivedAt: deals.archivedAt,
+      createdAt: deals.createdAt,
+      updatedAt: deals.updatedAt,
+      openTaskCount: sql<number>`${openTaskCount}`.mapWith(Number).as("openTaskCount"),
+      nextTaskAt: sql<string | null>`${nextTaskAt}`.as("nextTaskAt"),
     };
   }
 
@@ -753,18 +708,18 @@ export class DealRepository {
   private taskSelection() {
     return {
       id: dealTasks.id,
-      deal_id: dealTasks.dealId,
+      dealId: dealTasks.dealId,
       type: dealTasks.type,
       title: dealTasks.title,
       notes: dealTasks.notes,
-      due_at: dealTasks.dueAt,
+      dueAt: dealTasks.dueAt,
       status: dealTasks.status,
-      assigned_user_id: dealTasks.assignedUserId,
-      assignee_name: user.name,
-      assignee_email: user.email,
-      completed_at: dealTasks.completedAt,
-      created_at: dealTasks.createdAt,
-      updated_at: dealTasks.updatedAt,
+      assignedUserId: dealTasks.assignedUserId,
+      assigneeName: user.name,
+      assigneeEmail: user.email,
+      completedAt: dealTasks.completedAt,
+      createdAt: dealTasks.createdAt,
+      updatedAt: dealTasks.updatedAt,
     };
   }
 

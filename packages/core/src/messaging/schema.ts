@@ -68,3 +68,35 @@ export const messageVariableWriteSchema = z.object({
   description: z.string().max(500).default(""),
 });
 export type MessageVariableWrite = z.infer<typeof messageVariableWriteSchema>;
+
+export const renderedEmailMessageSchema = z.object({
+  kind: z.literal("email"),
+  idempotencyKey: z.string(),
+  workspaceId: z.string().optional(),
+  deliveryId: z.string().optional(),
+  purpose: z.enum(["transactional", "marketing"]),
+  to: z.string(),
+  from: z.object({ email: z.string(), name: z.string().optional() }),
+  replyTo: z.string().optional(),
+  subject: z.string(),
+  html: z.string(),
+  text: z.string(),
+  metadata: z.record(z.string(), z.string()).optional(),
+});
+export type RenderedEmailMessage = z.infer<typeof renderedEmailMessageSchema>;
+
+export const webhookChannelMessageSchema = z.object({
+  kind: z.literal("webhook"),
+  idempotencyKey: z.string(),
+  workspaceId: z.string(),
+  deliveryId: z.string(),
+  payload: z.record(z.string(), z.unknown()),
+  endpointId: z.string().optional(),
+});
+export type WebhookChannelMessage = z.infer<typeof webhookChannelMessageSchema>;
+
+export const channelMessageSchema = z.discriminatedUnion("kind", [
+  renderedEmailMessageSchema,
+  webhookChannelMessageSchema,
+]);
+export type ChannelMessage = z.infer<typeof channelMessageSchema>;

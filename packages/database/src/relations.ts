@@ -19,9 +19,9 @@ import {
   contactEvents,
   contactTags,
   contacts,
-  scoreEvents,
   tags,
 } from "./contacts/schema";
+import { scoreEvents } from "./contacts/score-schema";
 import { dealPipelines, dealStages, dealTasks, deals } from "./deals/schema";
 import { deliveries, deliveryEvents, emailTemplates, inboundEmails } from "./messaging/schema";
 import { auditLogs } from "./platform/schema";

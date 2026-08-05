@@ -1,13 +1,13 @@
 import { compileSegmentFilter } from "@openengage/core";
+import type { Contact } from "@openengage/core/contacts";
+import type { SegmentFilter, SegmentRow } from "@openengage/core/segments";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import { SegmentRepository, type OpenEngageDatabase } from "@openengage/database";
-import type { Contact, SegmentFilter, SegmentRow, WorkspaceContext } from "@openengage/orpc";
-import { segmentFilterSchema } from "@openengage/orpc";
 
 import {
   nullablePrimitiveString,
   numericValue,
   parseJsonRecord,
-  parseJsonValue,
   primitiveString,
 } from "../platform/values";
 
@@ -21,18 +21,12 @@ export async function listSegments(
     name: row.name,
     slug: row.slug,
     kind: row.kind === "dynamic" ? "dynamic" : "static",
-    filterAst: parseFilter(row.filterAst),
+    filterAst: row.filterAst,
     memberCount: row.memberCount,
     evaluatedAt: row.evaluatedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   }));
-}
-
-function parseFilter(value: string | null): SegmentRow["filterAst"] {
-  if (!value) return null;
-  const parsed = segmentFilterSchema.safeParse(parseJsonValue<unknown>(value, null));
-  return parsed.success ? parsed.data : null;
 }
 
 const PREVIEW_LIMIT = 100;

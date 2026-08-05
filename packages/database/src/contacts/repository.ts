@@ -1,5 +1,10 @@
-import type { Contact, ContactCreate, ContactUpdate } from "@openengage/core/contacts";
-import type { WorkspaceContext } from "@openengage/core/shared";
+import {
+  contactSchema,
+  type Contact,
+  type ContactCreate,
+  type ContactUpdate,
+} from "@openengage/core/contacts";
+import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
 import {
   and,
   asc,
@@ -21,6 +26,8 @@ import {
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { deliveries } from "../messaging/schema";
 import { segmentMemberships } from "../segments/schema";
+import { escapeLike } from "../shared/database-utils";
+import { decodeJson } from "../shared/json-codec";
 import { uuidv7 } from "../shared/uuid";
 import { companyContacts, contacts, contactTags } from "./schema";
 
@@ -290,7 +297,7 @@ export class ContactRepository {
 }
 
 function toContact(row: ContactRow): Contact {
-  return {
+  return contactSchema.parse({
     id: row.id,
     workspaceId: row.workspaceId,
     visitorId: row.visitorId,
@@ -301,27 +308,12 @@ function toContact(row: ContactRow): Contact {
     externalId: row.externalId,
     stage: row.stage,
     score: row.score,
-    status: row.status as Contact["status"],
+    status: row.status,
     archivedAt: row.archivedAt,
-    customFields: safeJson(row.customFields),
+    customFields: decodeJson(row.customFields, jsonRecordSchema, "contacts.custom_fields"),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-  };
-}
-
-function safeJson(value: string): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-function escapeLike(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
+  });
 }
 
 function escapedLike(column: SQLWrapper, pattern: string): SQL {

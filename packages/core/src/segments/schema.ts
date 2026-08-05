@@ -63,3 +63,16 @@ export const segmentFilterSchema: z.ZodType<SegmentFilter> = z.lazy(() =>
     }),
   ]),
 );
+
+export const segmentRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  kind: z.enum(["static", "dynamic"]),
+  filterAst: segmentFilterSchema.nullable(),
+  memberCount: z.number().int().nonnegative(),
+  evaluatedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type SegmentRow = z.infer<typeof segmentRowSchema>;

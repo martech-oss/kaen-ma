@@ -3,6 +3,7 @@ import { authSchema } from "./auth/schema";
 import * as automationsSchema from "./automations/schema";
 import * as consentSchema from "./consent/schema";
 import * as contactsSchema from "./contacts/schema";
+import * as scoreSchema from "./contacts/score-schema";
 import * as dealsSchema from "./deals/schema";
 import * as messagingSchema from "./messaging/schema";
 import * as platformSchema from "./platform/schema";
@@ -15,6 +16,7 @@ import * as workspacesSchema from "./workspaces/schema";
 export * from "./agents/schema";
 export * from "./auth/schema";
 export * from "./contacts/schema";
+export * from "./contacts/score-schema";
 export * from "./segments/schema";
 export * from "./deals/schema";
 export * from "./consent/schema";
@@ -34,6 +36,7 @@ export const schema = {
   ...agentsSchema,
   ...authSchema,
   ...contactsSchema,
+  ...scoreSchema,
   ...segmentsSchema,
   ...dealsSchema,
   ...consentSchema,

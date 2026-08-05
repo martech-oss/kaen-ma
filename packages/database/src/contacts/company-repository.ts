@@ -3,6 +3,7 @@ import type { WorkspaceContext } from "@openengage/core/shared";
 import { and, asc, desc, eq, like, ne, or, sql } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
+import { escapeLike } from "../shared/database-utils";
 import { uuidv7 } from "../shared/uuid";
 import { companies, companyContacts, contacts } from "./schema";
 
@@ -221,8 +222,4 @@ export class CompanyRepository {
       );
     return result.meta.changes > 0;
   }
-}
-
-function escapeLike(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
 }

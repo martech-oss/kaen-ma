@@ -7,20 +7,19 @@ import {
 } from "@openengage/channels";
 import { renderContent, renderSubject } from "@openengage/content-renderer";
 import { evaluateSendEligibility, retryDelaySeconds } from "@openengage/core";
+import type { AutomationNode } from "@openengage/core/automations";
 import {
   ConsentRepository,
   MessagingWorkerRepository,
   uuidv7,
+  type AutomationJobRow,
   type DeliveryClaimRecord,
 } from "@openengage/database";
-import { contentDocumentSchema, type AutomationNode } from "@openengage/orpc";
 
-import { type AutomationJobRow } from "../automations/worker";
 import { type RuntimeEnv } from "../env";
 import { CloudflareEmailAdapter } from "../messaging/cloudflare-email";
 import { buildReplyAddress } from "../messaging/reply-address";
 import { decryptCredentials } from "../platform/crypto";
-import { parseJsonRecord } from "../platform/values";
 
 export type DeliveryRow = DeliveryClaimRecord;
 
@@ -31,21 +30,20 @@ export async function createEmailDelivery(
   job: AutomationJobRow,
   env: RuntimeEnv,
 ): Promise<void> {
-  if (!job.contact_email) throw new PermanentChannelError("Contact does not have an email");
+  if (!job.contactEmail) throw new PermanentChannelError("Contact does not have an email");
   const repository = new MessagingWorkerRepository(env.DB);
-  const template = await repository.findSendableTemplate(job.workspace_id, action.templateId);
+  const template = await repository.findSendableTemplate(job.workspaceId, action.templateId);
   if (!template) throw new PermanentChannelError("Email template is missing");
-  const message = await repository.readMessageVariables(job.workspace_id);
-  const workspace = await repository.readWorkspaceTemplateContext(job.workspace_id);
-  const customFields = parseJsonRecord(job.custom_fields);
+  const message = await repository.readMessageVariables(job.workspaceId);
+  const workspace = await repository.readWorkspaceTemplateContext(job.workspaceId);
   const contact = {
-    email: job.contact_email,
-    first_name: job.first_name,
-    last_name: job.last_name,
+    email: job.contactEmail,
+    first_name: job.firstName,
+    last_name: job.lastName,
     phone: job.phone,
     stage: job.stage,
     score: job.score,
-    ...customFields,
+    ...job.customFields,
   };
   const deliveryId = uuidv7();
   const renderContext = {
@@ -53,16 +51,15 @@ export async function createEmailDelivery(
     workspace,
     message,
   };
-  const content = contentDocumentSchema.parse(JSON.parse(template.content));
-  const rendered = renderContent(content, renderContext);
-  const replyTo = await buildReplyAddress(env, job.workspace_id, deliveryId, job.contact_id);
+  const rendered = renderContent(template.content, renderContext);
+  const replyTo = await buildReplyAddress(env, job.workspaceId, deliveryId, job.contactId);
   const payload: ChannelMessage = {
     kind: "email",
-    idempotencyKey: `${job.idempotency_key}:email`,
-    workspaceId: job.workspace_id,
+    idempotencyKey: `${job.idempotencyKey}:email`,
+    workspaceId: job.workspaceId,
     deliveryId,
     purpose: "transactional",
-    to: job.contact_email,
+    to: job.contactEmail,
     from: senderForPurpose(env, "transactional"),
     replyTo,
     subject: renderSubject(template.subject, renderContext),
@@ -70,13 +67,13 @@ export async function createEmailDelivery(
   };
   const created = await repository.insertQueuedDelivery({
     id: deliveryId,
-    workspaceId: job.workspace_id,
-    contactId: job.contact_id,
-    enrollmentId: job.enrollment_id,
+    workspaceId: job.workspaceId,
+    contactId: job.contactId,
+    enrollmentId: job.enrollmentId,
     channel: "email",
     purpose: "transactional",
     provider: "cloudflare",
-    recipient: job.contact_email,
+    recipient: job.contactEmail,
     topicId: action.topicId ?? null,
     templateId: template.id,
     idempotencyKey: payload.idempotencyKey,
@@ -93,24 +90,24 @@ export async function createWebhookDelivery(
   env: RuntimeEnv,
 ): Promise<void> {
   const repository = new MessagingWorkerRepository(env.DB);
-  const endpoint = await repository.findEnabledWebhookEndpoint(job.workspace_id, endpointId);
+  const endpoint = await repository.findEnabledWebhookEndpoint(job.workspaceId, endpointId);
   if (!endpoint) throw new PermanentChannelError("Webhook endpoint is missing");
   const deliveryId = uuidv7();
   const payload: ChannelMessage = {
     kind: "webhook",
-    idempotencyKey: `${job.idempotency_key}:webhook`,
-    workspaceId: job.workspace_id,
+    idempotencyKey: `${job.idempotencyKey}:webhook`,
+    workspaceId: job.workspaceId,
     deliveryId,
     payload: {
-      contactId: job.contact_id,
-      enrollmentId: job.enrollment_id,
+      contactId: job.contactId,
+      enrollmentId: job.enrollmentId,
     },
   };
   const created = await repository.insertQueuedDelivery({
     id: deliveryId,
-    workspaceId: job.workspace_id,
-    contactId: job.contact_id,
-    enrollmentId: job.enrollment_id,
+    workspaceId: job.workspaceId,
+    contactId: job.contactId,
+    enrollmentId: job.enrollmentId,
     channel: "webhook",
     purpose: "transactional",
     provider: "webhook",
@@ -140,9 +137,10 @@ export async function processDelivery(deliveryId: string, env: RuntimeEnv): Prom
         return;
       }
     }
-    const payload = JSON.parse(delivery.payload) as ChannelMessage & { endpointId?: string };
-    const adapter = await deliveryAdapter(delivery, payload.endpointId, env);
-    const result = await adapter.send(payload);
+    const endpointId =
+      delivery.payload.kind === "webhook" ? delivery.payload.endpointId : undefined;
+    const adapter = await deliveryAdapter(delivery, endpointId, env);
+    const result = await adapter.send(delivery.payload);
     await repository.markDeliveryAccepted({
       deliveryId: delivery.id,
       workspaceId: delivery.workspaceId,

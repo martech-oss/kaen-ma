@@ -1,5 +1,6 @@
+import { channelMessageSchema, type ChannelMessage } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import type { ContentDocument } from "@openengage/core/web";
+import { contentDocumentSchema, type ContentDocument } from "@openengage/core/web";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
@@ -7,6 +8,7 @@ import { organization } from "../auth/schema";
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { suppressions } from "../consent/schema";
 import { contactEvents } from "../contacts/schema";
+import { decodeJson, decodeNullableJson, encodeJson } from "../shared/json-codec";
 import { uuidv7 } from "../shared/uuid";
 import { webhookEndpoints } from "../workspaces/schema";
 import {
@@ -22,10 +24,10 @@ export interface EmailTemplateRecord {
   name: string;
   purpose: string;
   draftSubject: string;
-  draftContent: string;
+  draftContent: ContentDocument;
   draftRevision: number;
   publishedSubject: string | null;
-  publishedContent: string | null;
+  publishedContent: ContentDocument | null;
   publishedRevision: number | null;
   publishedAt: string | null;
   archivedAt: string | null;
@@ -55,7 +57,7 @@ export interface DeliveryClaimRecord {
   recipient: string | null;
   topicId: string | null;
   idempotencyKey: string;
-  payload: string;
+  payload: ChannelMessage;
   status: string;
   attempts: number;
 }
@@ -76,6 +78,27 @@ const emailTemplateSelection = {
   updatedAt: emailTemplates.updatedAt,
 };
 
+function decodeEmailTemplate(
+  row: Omit<EmailTemplateRecord, "draftContent" | "publishedContent"> & {
+    draftContent: string;
+    publishedContent: string | null;
+  },
+): EmailTemplateRecord {
+  return {
+    ...row,
+    draftContent: decodeJson(
+      row.draftContent,
+      contentDocumentSchema,
+      "email_templates.draft_content",
+    ),
+    publishedContent: decodeNullableJson(
+      row.publishedContent,
+      contentDocumentSchema,
+      "email_templates.published_content",
+    ),
+  };
+}
+
 /**
  * Admin-facing queries for email templates and message variables.
  *
@@ -94,7 +117,7 @@ export class MessagingRepository {
   }
 
   public async listEmailTemplates(archived: boolean): Promise<EmailTemplateRecord[]> {
-    return await this.database.orm
+    const rows = await this.database.orm
       .select(emailTemplateSelection)
       .from(emailTemplates)
       .where(
@@ -105,6 +128,7 @@ export class MessagingRepository {
       )
       .orderBy(desc(emailTemplates.updatedAt))
       .limit(200);
+    return rows.map(decodeEmailTemplate);
   }
 
   public async getEmailTemplate(id: string): Promise<EmailTemplateRecord | null> {
@@ -115,7 +139,7 @@ export class MessagingRepository {
         and(eq(emailTemplates.workspaceId, this.context.workspaceId), eq(emailTemplates.id, id)),
       )
       .get();
-    return row ?? null;
+    return row ? decodeEmailTemplate(row) : null;
   }
 
   public async createEmailTemplate(input: {
@@ -131,7 +155,11 @@ export class MessagingRepository {
       name: input.name,
       purpose: "transactional",
       draftSubject: input.subject,
-      draftContent: JSON.stringify(input.content),
+      draftContent: encodeJson(
+        input.content,
+        contentDocumentSchema,
+        "email_templates.draft_content",
+      ),
       createdAt: now,
       updatedAt: now,
     });
@@ -148,7 +176,11 @@ export class MessagingRepository {
       .set({
         name: input.name,
         draftSubject: input.subject,
-        draftContent: JSON.stringify(input.content),
+        draftContent: encodeJson(
+          input.content,
+          contentDocumentSchema,
+          "email_templates.draft_content",
+        ),
         draftRevision: sql`${emailTemplates.draftRevision} + 1`,
         updatedAt: now,
       })
@@ -302,7 +334,7 @@ export class MessagingWorkerRepository {
     id: string;
     purpose: "transactional";
     subject: string;
-    content: string;
+    content: ContentDocument;
   } | null> {
     const row = await this.database.orm
       .select({
@@ -323,7 +355,12 @@ export class MessagingWorkerRepository {
       )
       .get();
     if (!row?.subject || !row.content) return null;
-    return { id: row.id, purpose: "transactional", subject: row.subject, content: row.content };
+    return {
+      id: row.id,
+      purpose: "transactional",
+      subject: row.subject,
+      content: decodeJson(row.content, contentDocumentSchema, "email_templates.published_content"),
+    };
   }
 
   /** Live message variables as a key → value map, for template resolution. */
@@ -453,6 +490,7 @@ export class MessagingWorkerRepository {
       channel: row.channel as "email" | "webhook",
       purpose: row.purpose as "transactional" | "marketing",
       provider: row.provider as "cloudflare" | "webhook",
+      payload: decodeJson(row.payload, channelMessageSchema, "deliveries.payload"),
     };
   }
 

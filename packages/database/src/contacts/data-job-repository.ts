@@ -1,7 +1,8 @@
-import type { WorkspaceContext } from "@openengage/core/shared";
+import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
+import { decodeJson } from "../shared/json-codec";
 import { uuidv7 } from "../shared/uuid";
 import { contacts, importJobs } from "./schema";
 
@@ -266,13 +267,5 @@ async function completeJob(database: OpenEngageDatabase, jobId: string): Promise
 
 /** Parses an object-shaped JSON column, treating malformed values as empty. */
 function safeJsonRecord(value: string | null): Record<string, unknown> {
-  if (typeof value !== "string") return {};
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
+  return value === null ? {} : decodeJson(value, jsonRecordSchema, "contacts.custom_fields");
 }

@@ -15,3 +15,5 @@ export * from "./segments/repository";
 export * from "./web/repository";
 export * from "./workspaces/repository";
 export * from "./shared/uuid";
+export * from "./shared/json-codec";
+export * from "./shared/database-utils";

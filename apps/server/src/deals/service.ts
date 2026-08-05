@@ -88,11 +88,11 @@ export async function listDeals(
     data: {
       items: items.map(serializeDeal),
       summary: {
-        openCount: Number(summary?.open_count ?? 0),
-        openValue: Number(summary?.open_value ?? 0),
-        wonCount: Number(summary?.won_count ?? 0),
-        wonValue: Number(summary?.won_value ?? 0),
-        lostCount: Number(summary?.lost_count ?? 0),
+        openCount: Number(summary?.openCount ?? 0),
+        openValue: Number(summary?.openValue ?? 0),
+        wonCount: Number(summary?.wonCount ?? 0),
+        wonValue: Number(summary?.wonValue ?? 0),
+        lostCount: Number(summary?.lostCount ?? 0),
       },
     },
   };
@@ -145,25 +145,25 @@ export async function updateDeal(
 
   const merged: DealCreate = {
     name: input.name ?? current.name,
-    pipelineId: input.pipelineId ?? current.pipeline_id,
-    stageId: input.stageId ?? current.stage_id,
+    pipelineId: input.pipelineId ?? current.pipelineId,
+    stageId: input.stageId ?? current.stageId,
     value: input.value ?? Number(current.value),
     currency: input.currency ?? current.currency,
     status: input.status ?? current.status,
-    ownerUserId: input.ownerUserId === undefined ? current.owner_user_id : input.ownerUserId,
-    contactId: input.contactId === undefined ? current.contact_id : input.contactId,
-    companyId: input.companyId === undefined ? current.company_id : input.companyId,
+    ownerUserId: input.ownerUserId === undefined ? current.ownerUserId : input.ownerUserId,
+    contactId: input.contactId === undefined ? current.contactId : input.contactId,
+    companyId: input.companyId === undefined ? current.companyId : input.companyId,
     expectedCloseDate:
-      input.expectedCloseDate === undefined ? current.expected_close_date : input.expectedCloseDate,
+      input.expectedCloseDate === undefined ? current.expectedCloseDate : input.expectedCloseDate,
     description: input.description ?? current.description,
   };
   const referenceError = await repository.validateDealReferences(merged);
   if (referenceError) return { kind: "invalid_reference", message: referenceError };
 
   const now = new Date().toISOString();
-  const wonAt = merged.status === "won" ? (current.status === "won" ? current.won_at : now) : null;
+  const wonAt = merged.status === "won" ? (current.status === "won" ? current.wonAt : now) : null;
   const lostAt =
-    merged.status === "lost" ? (current.status === "lost" ? current.lost_at : now) : null;
+    merged.status === "lost" ? (current.status === "lost" ? current.lostAt : now) : null;
   await repository.updateDeal(current.id, { ...merged, wonAt, lostAt, updatedAt: now });
   background.waitUntil(
     writeAuditLog(database, workspace, {
@@ -189,7 +189,7 @@ export async function moveDeal(
   const repository = new DealRepository(database, workspace);
   const deal = await repository.getDeal(id);
   if (!deal) return { kind: "not_found" };
-  if (!(await repository.stageExistsInPipeline(deal.pipeline_id, stageId))) {
+  if (!(await repository.stageExistsInPipeline(deal.pipelineId, stageId))) {
     return { kind: "invalid_stage" };
   }
   const updated = await repository.moveDeal(deal.id, stageId);
@@ -198,7 +198,7 @@ export async function moveDeal(
       action: "deal.move",
       resourceType: "deal",
       resourceId: deal.id,
-      metadata: { previousStageId: deal.stage_id, stageId },
+      metadata: { previousStageId: deal.stageId, stageId },
     }),
   );
   return { kind: "ok", deal: serializeDeal(updated!) };
@@ -248,7 +248,7 @@ export async function updateDealTask(
   const current = await repository.getTask(dealId, taskId);
   if (!current) return { kind: "not_found" };
   const assignedUserId =
-    input.assignedUserId === undefined ? current.assigned_user_id : input.assignedUserId;
+    input.assignedUserId === undefined ? current.assignedUserId : input.assignedUserId;
   if (assignedUserId && !(await repository.memberExists(assignedUserId))) {
     return { kind: "invalid_assignee" };
   }
@@ -256,12 +256,12 @@ export async function updateDealTask(
   const now = new Date().toISOString();
   // Keep the original completion time when a task was already completed.
   const completedAt =
-    status === "completed" ? (current.status === "completed" ? current.completed_at : now) : null;
+    status === "completed" ? (current.status === "completed" ? current.completedAt : now) : null;
   const task = await repository.updateDealTask(dealId, taskId, {
     type: input.type ?? current.type,
     title: input.title ?? current.title,
     notes: input.notes ?? current.notes,
-    dueAt: input.dueAt === undefined ? current.due_at : input.dueAt,
+    dueAt: input.dueAt === undefined ? current.dueAt : input.dueAt,
     status,
     assignedUserId,
     completedAt,

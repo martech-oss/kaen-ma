@@ -1,29 +1,11 @@
-import type { DeliveryEvent, MessagePurpose } from "@openengage/core/shared";
+import type {
+  ChannelMessage,
+  RenderedEmailMessage,
+  WebhookChannelMessage,
+} from "@openengage/core/messaging";
+import type { DeliveryEvent } from "@openengage/core/shared";
 
-export interface RenderedEmailMessage {
-  kind: "email";
-  idempotencyKey: string;
-  workspaceId?: string;
-  deliveryId?: string;
-  purpose: MessagePurpose;
-  to: string;
-  from: { email: string; name?: string };
-  replyTo?: string;
-  subject: string;
-  html: string;
-  text: string;
-  metadata?: Record<string, string>;
-}
-
-export interface WebhookChannelMessage {
-  kind: "webhook";
-  idempotencyKey: string;
-  workspaceId: string;
-  deliveryId: string;
-  payload: Record<string, unknown>;
-}
-
-export type ChannelMessage = RenderedEmailMessage | WebhookChannelMessage;
+export type { ChannelMessage, RenderedEmailMessage, WebhookChannelMessage };
 
 export interface ChannelSendResult {
   providerMessageId: string;

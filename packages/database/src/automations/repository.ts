@@ -1,5 +1,9 @@
 import { assertJobTransition, type JobStatus } from "@openengage/core";
-import type { WorkspaceContext } from "@openengage/core/shared";
+import {
+  automationDefinitionSchema,
+  type AutomationDefinition,
+} from "@openengage/core/automations";
+import { jsonRecordSchema, type JsonRecord, type WorkspaceContext } from "@openengage/core/shared";
 import {
   and,
   asc,
@@ -18,9 +22,12 @@ import {
 } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
-import { contactEvents, contacts, contactTags, scoreEvents, tags } from "../contacts/schema";
+import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";
+import { scoreEvents } from "../contacts/score-schema";
 import { emailTemplates } from "../messaging/schema";
 import { segmentMemberships } from "../segments/schema";
+import { isConstraintError } from "../shared/database-utils";
+import { decodeJson, encodeJson } from "../shared/json-codec";
 import { uuidv7 } from "../shared/uuid";
 import {
   automationEnrollments,
@@ -89,32 +96,31 @@ function assertAutomationJobTransition(from: AutomationJobStatus, to: Automation
 
 /**
  * One executable automation job joined with the graph, enrollment and contact
- * data the worker needs. Field names are snake_case because this row is the
- * long-standing contract of the automation worker, also consumed by the
- * messaging delivery worker.
+ * data the worker needs. JSON columns are decoded and validated before the
+ * row leaves the database package.
  */
 export interface AutomationJobRow {
   id: string;
-  workspace_id: string;
-  enrollment_id: string;
-  automation_version_id: string;
-  node_id: string;
-  contact_id: string;
-  idempotency_key: string;
-  payload: string;
+  workspaceId: string;
+  enrollmentId: string;
+  automationVersionId: string;
+  nodeId: string;
+  contactId: string;
+  idempotencyKey: string;
+  payload: JsonRecord;
   status: string;
-  lease_id: string | null;
+  leaseId: string | null;
   attempts: number;
-  created_at: string;
-  entered_at: string;
-  graph: string;
-  contact_email: string | null;
-  first_name: string | null;
-  last_name: string | null;
+  createdAt: string;
+  enteredAt: string;
+  graph: AutomationDefinition;
+  contactEmail: string | null;
+  firstName: string | null;
+  lastName: string | null;
   phone: string | null;
   stage: string;
   score: number;
-  custom_fields: string;
+  customFields: JsonRecord;
 }
 
 /** Contact columns an automation "update_field" action may write directly. */
@@ -212,26 +218,26 @@ export class AutomationEngineRepository {
     const row = await this.database.orm
       .select({
         id: automationJobs.id,
-        workspace_id: automationJobs.workspaceId,
-        enrollment_id: automationJobs.enrollmentId,
-        automation_version_id: automationJobs.automationVersionId,
-        node_id: automationJobs.nodeId,
-        contact_id: automationJobs.contactId,
-        idempotency_key: automationJobs.idempotencyKey,
+        workspaceId: automationJobs.workspaceId,
+        enrollmentId: automationJobs.enrollmentId,
+        automationVersionId: automationJobs.automationVersionId,
+        nodeId: automationJobs.nodeId,
+        contactId: automationJobs.contactId,
+        idempotencyKey: automationJobs.idempotencyKey,
         payload: automationJobs.payload,
         status: automationJobs.status,
-        lease_id: automationJobs.leaseId,
+        leaseId: automationJobs.leaseId,
         attempts: automationJobs.attempts,
-        created_at: automationJobs.createdAt,
-        entered_at: automationEnrollments.enteredAt,
+        createdAt: automationJobs.createdAt,
+        enteredAt: automationEnrollments.enteredAt,
         graph: automationVersions.graph,
-        contact_email: contacts.email,
-        first_name: contacts.firstName,
-        last_name: contacts.lastName,
+        contactEmail: contacts.email,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
         phone: contacts.phone,
         stage: contacts.stage,
         score: contacts.score,
-        custom_fields: contacts.customFields,
+        customFields: contacts.customFields,
       })
       .from(automationJobs)
       .innerJoin(
@@ -263,7 +269,13 @@ export class AutomationEngineRepository {
         ),
       )
       .get();
-    return row ?? null;
+    if (!row) return null;
+    return {
+      ...row,
+      graph: decodeJson(row.graph, automationDefinitionSchema, "automation_versions.graph"),
+      payload: decodeJson(row.payload, jsonRecordSchema, "automation_jobs.payload"),
+      customFields: decodeJson(row.customFields, jsonRecordSchema, "contacts.customFields"),
+    };
   }
 
   /**
@@ -341,7 +353,7 @@ export class AutomationEngineRepository {
    * alone — the holder finishes its row regardless of status races.
    */
   public async completeJobClosingEnrollment(
-    job: Pick<AutomationJobRow, "id" | "workspace_id" | "enrollment_id">,
+    job: Pick<AutomationJobRow, "id" | "workspaceId" | "enrollmentId">,
     leaseId: string,
     now: string,
   ): Promise<void> {
@@ -354,8 +366,8 @@ export class AutomationEngineRepository {
         .set({ status: "completed", currentNodeId: null, completedAt: now, updatedAt: now })
         .where(
           and(
-            eq(automationEnrollments.workspaceId, job.workspace_id),
-            eq(automationEnrollments.id, job.enrollment_id),
+            eq(automationEnrollments.workspaceId, job.workspaceId),
+            eq(automationEnrollments.id, job.enrollmentId),
           ),
         ),
     ]);
@@ -370,7 +382,7 @@ export class AutomationEngineRepository {
   public async completeJobAdvancingEnrollment(
     job: Pick<
       AutomationJobRow,
-      "id" | "workspace_id" | "enrollment_id" | "automation_version_id" | "contact_id"
+      "id" | "workspaceId" | "enrollmentId" | "automationVersionId" | "contactId"
     >,
     leaseId: string,
     nextNodeId: string,
@@ -384,12 +396,12 @@ export class AutomationEngineRepository {
         .insert(automationJobs)
         .values({
           id: uuidv7(),
-          workspaceId: job.workspace_id,
-          enrollmentId: job.enrollment_id,
-          automationVersionId: job.automation_version_id,
+          workspaceId: job.workspaceId,
+          enrollmentId: job.enrollmentId,
+          automationVersionId: job.automationVersionId,
           nodeId: nextNodeId,
-          contactId: job.contact_id,
-          idempotencyKey: `${job.enrollment_id}:${nextNodeId}:${job.contact_id}`,
+          contactId: job.contactId,
+          idempotencyKey: `${job.enrollmentId}:${nextNodeId}:${job.contactId}`,
           status: "pending",
           dueAt: now,
           createdAt: now,
@@ -401,8 +413,8 @@ export class AutomationEngineRepository {
         .set({ currentNodeId: nextNodeId, updatedAt: now })
         .where(
           and(
-            eq(automationEnrollments.workspaceId, job.workspace_id),
-            eq(automationEnrollments.id, job.enrollment_id),
+            eq(automationEnrollments.workspaceId, job.workspaceId),
+            eq(automationEnrollments.id, job.enrollmentId),
             eq(automationEnrollments.status, "active"),
           ),
         ),
@@ -744,7 +756,7 @@ export class AutomationRepository {
     name: string;
     description: string;
     timezone: string;
-    graph: string;
+    graph: AutomationDefinition;
   }): Promise<{ id: string; draftVersionId: string }> {
     const id = uuidv7();
     const draftVersionId = uuidv7();
@@ -768,7 +780,7 @@ export class AutomationRepository {
         version: 1,
         status: "draft",
         timezone: input.timezone,
-        graph: input.graph,
+        graph: encodeJson(input.graph, automationDefinitionSchema, "automation_versions.graph"),
         createdAt: now,
       }),
     ]);
@@ -776,7 +788,9 @@ export class AutomationRepository {
   }
 
   /** The draft graph of one automation plus the automation status. */
-  public async getDraft(automationId: string): Promise<{ graph: string; status: string } | null> {
+  public async getDraft(
+    automationId: string,
+  ): Promise<{ graph: AutomationDefinition; status: string } | null> {
     const row = await this.database.orm
       .select({ graph: automationVersions.graph, status: automations.status })
       .from(automations)
@@ -794,7 +808,12 @@ export class AutomationRepository {
         ),
       )
       .get();
-    return row ?? null;
+    return row
+      ? {
+          ...row,
+          graph: decodeJson(row.graph, automationDefinitionSchema, "automation_versions.graph"),
+        }
+      : null;
   }
 
   /**
@@ -804,7 +823,7 @@ export class AutomationRepository {
    */
   public async saveDraft(
     automationId: string,
-    input: { name: string; description: string; timezone: string; graph: string },
+    input: { name: string; description: string; timezone: string; graph: AutomationDefinition },
   ): Promise<boolean> {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
@@ -814,7 +833,10 @@ export class AutomationRepository {
       .where(and(eq(automations.workspaceId, workspaceId), eq(automations.id, automationId)));
     const result = await orm
       .update(automationVersions)
-      .set({ timezone: input.timezone, graph: input.graph })
+      .set({
+        timezone: input.timezone,
+        graph: encodeJson(input.graph, automationDefinitionSchema, "automation_versions.graph"),
+      })
       .where(
         and(
           eq(automationVersions.workspaceId, workspaceId),
@@ -837,7 +859,7 @@ export class AutomationRepository {
   /** The automation's current draft version, if it is still publishable. */
   public async findPublishableDraft(
     automationId: string,
-  ): Promise<{ draftVersionId: string; version: number; graph: string } | null> {
+  ): Promise<{ draftVersionId: string; version: number; graph: AutomationDefinition } | null> {
     const row = await this.database.orm
       .select({
         draftVersionId: automationVersions.id,
@@ -860,7 +882,12 @@ export class AutomationRepository {
         ),
       )
       .get();
-    return row ?? null;
+    return row
+      ? {
+          ...row,
+          graph: decodeJson(row.graph, automationDefinitionSchema, "automation_versions.graph"),
+        }
+      : null;
   }
 
   /** Of the given templates, those published locally and ready to send. */
@@ -890,7 +917,7 @@ export class AutomationRepository {
     draftVersionId: string;
     currentVersion: number;
     timezone: string;
-    graph: string;
+    graph: AutomationDefinition;
     trigger: {
       sourceNodeId: string;
       source: string;
@@ -922,7 +949,7 @@ export class AutomationRepository {
         version: input.currentVersion + 1,
         status: "draft",
         timezone: input.timezone,
-        graph: input.graph,
+        graph: encodeJson(input.graph, automationDefinitionSchema, "automation_versions.graph"),
         createdAt: now,
       }),
       orm
@@ -1026,7 +1053,7 @@ export class AutomationRepository {
   /** The published version (id + graph) of one active automation. */
   public async findActivePublishedAutomation(
     automationId: string,
-  ): Promise<{ publishedVersionId: string; graph: string } | null> {
+  ): Promise<{ publishedVersionId: string; graph: AutomationDefinition } | null> {
     const row = await this.database.orm
       .select({ publishedVersionId: automationVersions.id, graph: automationVersions.graph })
       .from(automations)
@@ -1045,7 +1072,12 @@ export class AutomationRepository {
         ),
       )
       .get();
-    return row ?? null;
+    return row
+      ? {
+          ...row,
+          graph: decodeJson(row.graph, automationDefinitionSchema, "automation_versions.graph"),
+        }
+      : null;
   }
 
   /**
@@ -1085,8 +1117,8 @@ export class AutomationRepository {
               contactId: contacts.id,
               sourceEventId: sql<string>`${input.sourceEventId}`.as("source_event_id"),
               status: sql<string>`'active'`.as("status"),
-              currentNodeId: sql<string>`${input.sourceNodeId}`.as("current_node_id"),
-              enteredAt: sql<string>`${now}`.as("entered_at"),
+              currentNodeId: sql<string>`${input.sourceNodeId}`.as("current_nodeId"),
+              enteredAt: sql<string>`${now}`.as("enteredAt"),
               completedAt: sql<string | null>`NULL`.as("completed_at"),
               updatedAt: sql<string>`${now}`.as("updated_at"),
             })
@@ -1131,10 +1163,4 @@ export class AutomationRepository {
       Number,
     );
   }
-}
-
-/** D1 surfaces every unique/FK batch failure as a constraint message. */
-function isConstraintError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /constraint|unique|foreign key/i.test(message);
 }

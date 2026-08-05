@@ -1,15 +1,11 @@
 import { renderContent, renderSubject } from "@openengage/content-renderer";
+import { type EmailTemplate, type EmailTemplateWrite } from "@openengage/core/messaging";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   MessagingRepository,
   type EmailTemplateRecord,
   type OpenEngageDatabase,
 } from "@openengage/database";
-import {
-  contentDocumentSchema,
-  type EmailTemplate,
-  type EmailTemplateWrite,
-  type WorkspaceContext,
-} from "@openengage/orpc";
 
 export async function listEmailTemplates(
   database: OpenEngageDatabase,
@@ -76,13 +72,12 @@ export function archiveEmailTemplate(
 }
 
 function toEmailTemplate(row: EmailTemplateRecord): EmailTemplate {
-  const content = contentDocumentSchema.parse(JSON.parse(row.draftContent));
   return {
     id: row.id,
     name: row.name,
     purpose: "transactional",
     subject: row.draftSubject,
-    content,
+    content: row.draftContent,
     draftRevision: row.draftRevision,
     publishedRevision: row.publishedRevision,
     hasUnpublishedChanges: row.publishedRevision !== row.draftRevision,

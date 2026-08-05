@@ -1,20 +1,14 @@
-import type { SegmentFilter } from "@openengage/core/segments";
-import type { WorkspaceContext } from "@openengage/core/shared";
+import { segmentFilterSchema, type SegmentFilter } from "@openengage/core/segments";
+import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
 import { and, asc, count, desc, eq, exists, inArray, ne, sql, type SQL } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { deliveries } from "../messaging/schema";
 import { segmentMemberships, segments } from "../segments/schema";
+import { decodeJson, decodeNullableJson } from "../shared/json-codec";
 import { uuidv7 } from "../shared/uuid";
-import {
-  companies,
-  companyContacts,
-  contactEvents,
-  contacts,
-  contactTags,
-  scoreEvents,
-  tags,
-} from "./schema";
+import { companies, companyContacts, contactEvents, contacts, contactTags, tags } from "./schema";
+import { scoreEvents } from "./score-schema";
 
 export interface ContactEventRow {
   id: string;
@@ -558,28 +552,12 @@ export class ContactResourceRepository {
 type ContactEventQueryRow = Omit<ContactEventRow, "properties"> & { properties: string };
 
 function toContactEvent(row: ContactEventQueryRow): ContactEventRow {
-  return { ...row, properties: safeJsonRecord(row.properties) };
+  return {
+    ...row,
+    properties: decodeJson(row.properties, jsonRecordSchema, "contact_events.properties"),
+  };
 }
 
-/** Parses an object-shaped JSON column, treating malformed values as empty. */
-function safeJsonRecord(value: string | null): Record<string, unknown> {
-  if (typeof value !== "string") return {};
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-/** Parses a stored segment filter, treating malformed values as no filter. */
 function parseFilterAst(value: string | null): SegmentFilter | null {
-  if (typeof value !== "string") return null;
-  try {
-    return JSON.parse(value) as SegmentFilter | null;
-  } catch {
-    return null;
-  }
+  return decodeNullableJson(value, segmentFilterSchema, "segments.filter_ast");
 }
