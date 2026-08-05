@@ -113,12 +113,11 @@ export async function startEmailCampaign(
   env: RuntimeEnv,
   id: string,
 ): Promise<"ok" | "not_configured" | "not_startable"> {
-  if (!env.RESEND_SEND_API_KEY) return "not_configured";
-  if (!(await new BroadcastRepository(database, workspace).startBroadcast(id))) {
-    return "not_startable";
-  }
-  await env.CAMPAIGN_QUEUE.send({ kind: "broadcast_batch", broadcastId: id });
-  return "ok";
+  void database;
+  void workspace;
+  void env;
+  void id;
+  return "not_configured";
 }
 
 export function archiveEmailCampaign(

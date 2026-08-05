@@ -1,5 +1,7 @@
 import * as z from "zod";
 
+import { contentDocumentSchema } from "../web/content";
+
 export const broadcastStatusSchema = z.enum([
   "draft",
   "scheduled",
@@ -33,33 +35,35 @@ export const emailCampaignSchema = z.object({
 });
 export type EmailCampaign = z.infer<typeof emailCampaignSchema>;
 
-export const resendTemplateVariableSchema = z.object({
-  key: z.string(),
-  type: z.enum(["string", "number"]),
-  fallbackValue: z.union([z.string(), z.number()]).nullable(),
-});
-export type ResendTemplateVariable = z.infer<typeof resendTemplateVariableSchema>;
-
 export const emailTemplateSchema = z.object({
   id: z.string(),
   name: z.string(),
-  purpose: z.enum(["marketing", "transactional"]),
-  resendTemplateId: z.string(),
-  resendAlias: z.string().nullable(),
-  subject: z.string().nullable(),
-  remoteStatus: z.enum(["draft", "published"]),
-  remoteCurrentVersionId: z.string(),
-  hasUnpublishedVersions: z.boolean(),
-  variables: z.array(resendTemplateVariableSchema),
+  purpose: z.literal("transactional"),
+  subject: z.string(),
+  content: contentDocumentSchema,
+  draftRevision: z.number().int().positive(),
+  publishedRevision: z.number().int().positive().nullable(),
+  hasUnpublishedChanges: z.boolean(),
   publishedAt: z.string().nullable(),
-  lastSyncedAt: z.string(),
-  syncError: z.string().nullable(),
   archivedAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
   sendable: z.boolean(),
 });
 export type EmailTemplate = z.infer<typeof emailTemplateSchema>;
+
+export const emailTemplateWriteSchema = z.object({
+  name: z.string().trim().min(1).max(191),
+  subject: z.string().trim().min(1).max(998),
+  content: contentDocumentSchema,
+});
+export type EmailTemplateWrite = z.infer<typeof emailTemplateWriteSchema>;
+
+export const emailTemplatePreviewSchema = z.object({
+  subject: z.string(),
+  html: z.string(),
+  text: z.string(),
+});
 
 export const messageVariableSchema = z.object({
   id: z.string(),

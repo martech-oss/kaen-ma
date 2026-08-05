@@ -115,7 +115,7 @@ export const suppressions = sqliteTable(
       .where(sql`${table.email} IS NOT NULL`),
     check(
       "suppressions_reason_check",
-      sql`${table.reason} IN ('global_unsubscribe', 'bounce', 'complaint', 'manual')`,
+      sql`${table.reason} IN ('global_unsubscribe', 'bounce', 'complaint', 'provider', 'manual')`,
     ),
     check(
       "suppressions_target_check",

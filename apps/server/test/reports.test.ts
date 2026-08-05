@@ -119,7 +119,7 @@ describe("Reporting", () => {
          (id, workspace_id, contact_id, enrollment_id, channel, purpose, provider,
           recipient, idempotency_key, payload, status, provider_message_id,
           attempts, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'email', 'marketing', 'resend', 'active@example.com',
+         VALUES (?, ?, ?, ?, 'email', 'marketing', 'cloudflare', 'active@example.com',
                  ?, '{}', 'delivered', ?, 1, ?, ?)`,
       ).bind(
         deliveryId,
@@ -136,7 +136,7 @@ describe("Reporting", () => {
           `INSERT INTO delivery_events
            (id, workspace_id, delivery_id, provider, provider_event_id,
             provider_message_id, type, occurred_at, metadata, created_at)
-           VALUES (?, ?, ?, 'resend', ?, ?, ?, ?, '{}', ?)`,
+           VALUES (?, ?, ?, 'cloudflare', ?, ?, ?, ?, '{}', ?)`,
         ).bind(
           uuidv7(),
           workspaceId,

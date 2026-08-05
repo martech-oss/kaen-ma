@@ -1,167 +1,60 @@
+import type { ContentDocument } from "@openengage/orpc";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink } from "lucide-react";
-import { type FormEvent, type ReactNode } from "react";
+import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  FormDialog,
-  FormInput,
-  FormNativeSelect,
-  FormSelectOption,
-  FormTextarea,
-} from "@/components/app-ui";
+import { FormDialog, FormInput, FormTextarea } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import {
-  type EmailCampaignRow,
-  type EmailTemplateRow,
-  type MessageVariableRow,
-  type SegmentOption,
-  type TopicOption,
-} from "@/features/emails/email-api";
+  ContentDocumentEditor,
+  defaultContentDocument,
+} from "@/features/content/content-document-editor";
+import { type EmailTemplateRow, type MessageVariableRow } from "@/features/emails/email-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
-import { nullableString } from "@/lib/form-data";
-import { toDateTimeLocal } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
-
-export function CampaignForm({
-  open,
-  onOpenChange,
-  campaign,
-  segments,
-  templates,
-  topics,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  campaign: EmailCampaignRow | null;
-  segments: SegmentOption[];
-  templates: EmailTemplateRow[];
-  topics: TopicOption[];
-  onSaved: () => void;
-}): ReactNode {
-  const queryClient = useQueryClient();
-  const createCampaign = useMutation(orpcQuery.emails.createCampaign.mutationOptions());
-  const updateCampaign = useMutation(orpcQuery.emails.updateCampaign.mutationOptions());
-  const { busy, error, run } = useFormSubmission("メールキャンペーンを保存できませんでした");
-
-  async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const scheduledAt = getFormString(form, "scheduledAt").trim();
-    const payload = {
-      name: getFormString(form, "name"),
-      segmentId: getFormString(form, "segmentId"),
-      templateId: getFormString(form, "templateId"),
-      topicId: nullableString(form.get("topicId")),
-      scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
-    };
-    await run(async () => {
-      await (campaign
-        ? updateCampaign.mutateAsync({ id: campaign.id, ...payload })
-        : createCampaign.mutateAsync(payload));
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listCampaigns.key() });
-      toast.success(
-        campaign ? "メールキャンペーンを更新しました" : "メールキャンペーンを作成しました",
-      );
-      onSaved();
-    });
-  }
-
-  return (
-    <FormDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={campaign ? "メールキャンペーンを編集" : "メールキャンペーンを作成"}
-      description="配信対象、テンプレート、送信タイミングを設定します。"
-      className="sm:max-w-xl"
-      onSubmit={(event) => void submit(event)}
-      busy={busy}
-      error={error}
-      submitLabel={campaign ? "変更を保存" : "キャンペーンを作成"}
-    >
-      <FormInput
-        label="キャンペーン名"
-        name="name"
-        defaultValue={campaign?.name}
-        placeholder="8月のプロダクトアップデート"
-        required
-      />
-      <FormNativeSelect
-        label="配信対象セグメント"
-        name="segmentId"
-        defaultValue={campaign?.segmentId}
-        required
-      >
-        <FormSelectOption value="">選択してください</FormSelectOption>
-        {segments.map((segment) => (
-          <FormSelectOption key={segment.id} value={segment.id}>
-            {segment.name}（{segment.memberCount.toLocaleString()}件）
-          </FormSelectOption>
-        ))}
-      </FormNativeSelect>
-      <FormNativeSelect
-        label="メールテンプレート"
-        name="templateId"
-        defaultValue={campaign?.templateId}
-        required
-      >
-        <FormSelectOption value="">選択してください</FormSelectOption>
-        {templates.map((template) => (
-          <FormSelectOption key={template.id} value={template.id}>
-            {template.name}
-          </FormSelectOption>
-        ))}
-      </FormNativeSelect>
-      <FormNativeSelect
-        label="配信トピック"
-        name="topicId"
-        defaultValue={campaign?.topicId ?? ""}
-        description="未設定の場合はグローバルな配信停止設定を使用します。"
-      >
-        <FormSelectOption value="">グローバル</FormSelectOption>
-        {topics.map((topic) => (
-          <FormSelectOption key={topic.id} value={topic.id}>
-            {topic.name}
-            {topic.isDefault ? "（既定）" : ""}
-          </FormSelectOption>
-        ))}
-      </FormNativeSelect>
-      <FormInput
-        label="予約配信"
-        name="scheduledAt"
-        type="datetime-local"
-        defaultValue={toDateTimeLocal(campaign?.scheduledAt)}
-        description="空欄で保存すると下書きになります。"
-      />
-    </FormDialog>
-  );
-}
 
 export function TemplateForm({
   open,
   onOpenChange,
+  template,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  template: EmailTemplateRow | null;
   onSaved: () => void;
 }): ReactNode {
   const queryClient = useQueryClient();
-  const importTemplate = useMutation(orpcQuery.emails.importTemplate.mutationOptions());
-  const { busy, error, run } = useFormSubmission("Resend Templateを登録できませんでした");
+  const createTemplate = useMutation(orpcQuery.emails.createTemplate.mutationOptions());
+  const updateTemplate = useMutation(orpcQuery.emails.updateTemplate.mutationOptions());
+  const previewTemplate = useMutation(orpcQuery.emails.previewTemplate.mutationOptions());
+  const [content, setContent] = useState<ContentDocument>(
+    template?.content ?? defaultContentDocument(),
+  );
+  const [preview, setPreview] = useState<{ subject: string; html: string; text: string } | null>(
+    null,
+  );
+  const { busy, error, run } = useFormSubmission("テンプレートを保存できませんでした");
+
+  function readPayload(form: FormData) {
+    return {
+      name: getFormString(form, "name"),
+      subject: getFormString(form, "subject"),
+      content,
+    };
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await run(async () => {
-      await importTemplate.mutateAsync({
-        resendTemplateId: getFormString(form, "resendTemplateId"),
-        purpose: getFormString(form, "purpose") === "transactional" ? "transactional" : "marketing",
-      });
+      const payload = readPayload(form);
+      await (template
+        ? updateTemplate.mutateAsync({ id: template.id, ...payload })
+        : createTemplate.mutateAsync(payload));
       await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() });
-      toast.success("Resend Templateを登録しました");
+      toast.success(template ? "テンプレートを更新しました" : "テンプレートを作成しました");
       onSaved();
     });
   }
@@ -170,40 +63,59 @@ export function TemplateForm({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Resend Templateを登録"
-      description="Resendで作成・公開したテンプレートをOpenEngageから利用できるようにします。"
-      className="sm:max-w-xl"
+      title={template ? "Transactionalテンプレートを編集" : "Transactionalテンプレートを作成"}
+      description="OpenEngageが安全なHTMLとplain textを生成します。公開するまでAutomationには反映されません。"
+      className="sm:max-w-3xl"
       onSubmit={(event) => void submit(event)}
       busy={busy}
       error={error}
-      submitLabel="テンプレートを登録"
+      submitLabel={template ? "下書きを保存" : "テンプレートを作成"}
     >
       <FormInput
-        label="Resend Template IDまたはAlias"
-        name="resendTemplateId"
-        placeholder="welcome-email"
-        description="ResendのTemplates画面で公開済みのTemplate IDまたはAliasを入力します。"
+        label="管理名"
+        name="name"
+        defaultValue={template?.name}
+        placeholder="申込確認"
         required
       />
-      <FormNativeSelect label="用途" name="purpose" defaultValue="marketing">
-        <FormSelectOption value="marketing">Marketing（Resend）</FormSelectOption>
-        <FormSelectOption value="transactional">Transactional（Resend）</FormSelectOption>
-      </FormNativeSelect>
+      <FormInput
+        label="件名"
+        name="subject"
+        defaultValue={template?.subject}
+        placeholder="{{ contact.first_name }}さん、お申し込みありがとうございます"
+        maxLength={998}
+        required
+      />
+      <ContentDocumentEditor value={content} onChange={setContent} />
       <Button
         type="button"
         variant="outline"
-        render={
-          <a
-            href="https://resend.com/templates"
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Resend Templatesを開く"
-          />
-        }
+        onClick={(event) => {
+          const form = event.currentTarget.form;
+          if (!form) return;
+          void previewTemplate
+            .mutateAsync(readPayload(new FormData(form)))
+            .then(setPreview)
+            .catch((caught: unknown) =>
+              toast.error(
+                caught instanceof Error ? caught.message : "プレビューを生成できませんでした",
+              ),
+            );
+        }}
       >
-        <ExternalLink data-icon="inline-start" />
-        Resend Templatesを開く
+        プレビューを生成
       </Button>
+      {preview ? (
+        <div className="grid gap-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">{preview.subject}</p>
+          <iframe
+            title="メールHTMLプレビュー"
+            srcDoc={preview.html}
+            className="h-72 w-full rounded border"
+          />
+          <pre className="max-h-48 overflow-auto text-xs whitespace-pre-wrap">{preview.text}</pre>
+        </div>
+      ) : null}
     </FormDialog>
   );
 }
@@ -248,7 +160,7 @@ export function VariableForm({
       open={open}
       onOpenChange={onOpenChange}
       title={variable ? "メッセージ変数を編集" : "メッセージ変数を作成"}
-      description="Resend Template内では MESSAGE_KEY の形式で登録します。"
+      description="テンプレート内では {{ message.key }} の形式で利用します。"
       onSubmit={(event) => void submit(event)}
       busy={busy}
       error={error}

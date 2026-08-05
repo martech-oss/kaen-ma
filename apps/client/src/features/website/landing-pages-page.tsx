@@ -10,7 +10,6 @@ import {
   FormInput,
   FormNativeSelect,
   FormSelectOption,
-  FormTextarea,
   PageLayout,
 } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
@@ -18,6 +17,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { AssetPickerDialog } from "@/features/assets/asset-picker";
+import {
+  ContentDocumentEditor,
+  defaultContentDocument,
+} from "@/features/content/content-document-editor";
 import { landingPagesQueryOptions, type LandingPageRow } from "@/features/website/website-api";
 import { CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { useFormSubmission } from "@/hooks/use-form-submission";
@@ -218,13 +221,10 @@ function LandingPageEditor({
   onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const current = readLandingContent(item?.contentDocument ?? undefined);
   const { busy, error, run } = useFormSubmission("保存できませんでした");
-  // The rest of this form is uncontrolled; the hero image is the one field a
-  // dialog writes into, so it keeps local state plus a hidden input and the
-  // submit path stays FormData-driven. The parent's `key` remounts on edit.
-  const [heroImageSrc, setHeroImageSrc] = useState(current.heroImageSrc);
-  const [heroImageAlt, setHeroImageAlt] = useState(current.heroImageAlt);
+  const [content, setContent] = useState<ContentDocument>(
+    item?.contentDocument ?? defaultContentDocument(720),
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const createPage = useMutation(orpcQuery.website.createPage.mutationOptions());
@@ -238,14 +238,7 @@ function LandingPageEditor({
       name,
       slug: getFormString(formData, "slug").trim() || slugify(name),
       status: getFormString(formData, "status") === "published" ? "published" : "draft",
-      content: buildLandingContent({
-        headline: getFormString(formData, "headline"),
-        body: getFormString(formData, "body"),
-        ctaLabel: getFormString(formData, "ctaLabel"),
-        ctaUrl: getFormString(formData, "ctaUrl"),
-        heroImageSrc: getFormString(formData, "heroImageSrc"),
-        heroImageAlt: getFormString(formData, "heroImageAlt"),
-      }),
+      content,
     } as const;
     await run(async () => {
       await (item
@@ -288,147 +281,36 @@ function LandingPageEditor({
         <FormSelectOption value="draft">下書き</FormSelectOption>
         <FormSelectOption value="published">公開</FormSelectOption>
       </FormNativeSelect>
+      <ContentDocumentEditor value={content} onChange={setContent} />
       <Field>
-        <FieldLabel>ヒーロー画像</FieldLabel>
-        <input type="hidden" name="heroImageSrc" value={heroImageSrc} />
-        <input type="hidden" name="heroImageAlt" value={heroImageAlt} />
-        {heroImageSrc ? (
-          <img
-            src={heroImageSrc}
-            alt={heroImageAlt}
-            className="h-28 w-fit rounded-md border object-contain"
-          />
-        ) : null}
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
-            <ImageIcon data-icon="inline-start" />
-            {heroImageSrc ? "画像を変更" : "アセットから選択"}
-          </Button>
-          {heroImageSrc ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setHeroImageSrc("");
-                setHeroImageAlt("");
-              }}
-            >
-              削除
-            </Button>
-          ) : null}
-        </div>
-        <FieldDescription>公開設定のアセットのみ埋め込めます。</FieldDescription>
+        <FieldLabel>アセット画像</FieldLabel>
+        <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+          <ImageIcon data-icon="inline-start" />
+          画像ブロックを追加
+        </Button>
+        <FieldDescription>公開設定のアセットを本文の末尾へ追加します。</FieldDescription>
       </Field>
       <AssetPickerDialog
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         onSelect={(asset) => {
-          setHeroImageSrc(asset.publicUrl ?? "");
-          setHeroImageAlt(asset.name);
+          if (asset.publicUrl) {
+            setContent((current) => ({
+              ...current,
+              blocks: [
+                ...current.blocks,
+                {
+                  id: `image-${crypto.randomUUID()}`,
+                  type: "image",
+                  src: asset.publicUrl ?? "",
+                  alt: asset.name,
+                },
+              ],
+            }));
+          }
           setPickerOpen(false);
         }}
       />
-      <FormInput
-        label="見出し"
-        name="headline"
-        defaultValue={current.headline}
-        placeholder="マーケティングを、もっとシンプルに。"
-        required
-      />
-      <FormTextarea label="本文" name="body" defaultValue={current.body} rows={4} required />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormInput
-          label="CTAラベル"
-          name="ctaLabel"
-          defaultValue={current.ctaLabel}
-          placeholder="無料で始める"
-        />
-        <FormInput
-          label="CTAリンク"
-          name="ctaUrl"
-          type="url"
-          defaultValue={current.ctaUrl}
-          placeholder="https://example.com/signup"
-        />
-      </div>
     </FormDialog>
   );
-}
-
-function buildLandingContent(values: {
-  headline: string;
-  body: string;
-  ctaLabel: string;
-  ctaUrl: string;
-  heroImageSrc: string;
-  heroImageAlt: string;
-}): ContentDocument {
-  return {
-    schemaVersion: 1,
-    backgroundColor: "#f4f5f7",
-    contentColor: "#ffffff",
-    width: 720,
-    blocks: [
-      // The asset library hands over an absolute, cache-busted public URL, so
-      // `image.src` stays the plain `z.url()` it has always been.
-      ...(values.heroImageSrc
-        ? [
-            {
-              id: "hero-image",
-              type: "image" as const,
-              src: values.heroImageSrc,
-              alt: values.heroImageAlt,
-            },
-          ]
-        : []),
-      {
-        id: "hero",
-        type: "text",
-        html: `<h1>${values.headline}</h1><p>${values.body}</p>`,
-      },
-      ...(values.ctaLabel && values.ctaUrl
-        ? [
-            {
-              id: "cta",
-              type: "button" as const,
-              label: values.ctaLabel,
-              href: values.ctaUrl,
-              color: "#171717",
-            },
-          ]
-        : []),
-    ],
-  };
-}
-
-function readLandingContent(document?: ContentDocument): {
-  headline: string;
-  body: string;
-  ctaLabel: string;
-  ctaUrl: string;
-  heroImageSrc: string;
-  heroImageAlt: string;
-} {
-  const text = document?.blocks.find((block) => block.type === "text");
-  const button = document?.blocks.find((block) => block.type === "button");
-  const image = document?.blocks.find((block) => block.type === "image");
-  const html = text?.type === "text" ? text.html : "";
-  return {
-    headline: decodeBasicHtml(html.match(/<h1>(.*?)<\/h1>/i)?.[1] ?? ""),
-    body: decodeBasicHtml(html.match(/<p>(.*?)<\/p>/i)?.[1] ?? ""),
-    ctaLabel: button?.type === "button" ? button.label : "",
-    ctaUrl: button?.type === "button" ? button.href : "",
-    heroImageSrc: image?.type === "image" ? image.src : "",
-    heroImageAlt: image?.type === "image" ? image.alt : "",
-  };
-}
-
-function decodeBasicHtml(value: string): string {
-  return value
-    .replaceAll("&amp;", "&")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#039;", "'");
 }

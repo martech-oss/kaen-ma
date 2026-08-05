@@ -3,20 +3,17 @@ import {
   archiveEmailCampaign,
   archiveEmailTemplate,
   archiveMessageVariable,
-  createEmailCampaign,
+  createEmailTemplate,
   createMessageVariable,
   getEmailCampaign,
-  importEmailTemplate,
   listBroadcastSegmentOptions,
   listEmailCampaigns,
   listEmailTemplates,
   listMessageVariables,
   listSubscriptionTopicOptions,
-  RemoteTemplateError,
-  startEmailCampaign,
-  syncEmailTemplate,
-  TemplateAlreadyRegisteredError,
-  updateEmailCampaign,
+  previewEmailTemplate,
+  publishEmailTemplate,
+  updateEmailTemplate,
   updateMessageVariable,
   VariableConflictError,
 } from "./service";
@@ -36,35 +33,24 @@ export const getEmailCampaignProcedure = authed.emails.getCampaign.handler(
 export const createEmailCampaignProcedure = authed.emails.createCampaign.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const outcome = await createEmailCampaign(context.database, context.workspace, input);
-    if (outcome.kind === "invalid_resources") throw errors.INVALID_BROADCAST_RESOURCES();
-    return { id: outcome.id };
+    void input;
+    throw errors.MARKETING_DISABLED();
   },
 );
 
 export const updateEmailCampaignProcedure = authed.emails.updateCampaign.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const { id, ...changes } = input;
-    const outcome = await updateEmailCampaign(context.database, context.workspace, id, changes);
-    if (outcome.kind === "invalid_resources") throw errors.INVALID_BROADCAST_RESOURCES();
-    if (outcome.kind === "not_editable") throw errors.NOT_EDITABLE();
-    return { updated: true as const };
+    void input;
+    throw errors.MARKETING_DISABLED();
   },
 );
 
 export const startEmailCampaignProcedure = authed.emails.startCampaign.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const outcome = await startEmailCampaign(
-      context.database,
-      context.workspace,
-      context.env,
-      input.id,
-    );
-    if (outcome === "not_configured") throw errors.RESEND_NOT_CONFIGURED();
-    if (outcome === "not_startable") throw errors.NOT_STARTABLE();
-    return { started: true as const };
+    void input;
+    throw errors.MARKETING_DISABLED();
   },
 );
 
@@ -82,39 +68,38 @@ export const listTemplatesProcedure = authed.emails.listTemplates.handler(({ con
   listEmailTemplates(context.database, context.workspace, input.archived),
 );
 
-export const importTemplateProcedure = authed.emails.importTemplate.handler(
+export const createTemplateProcedure = authed.emails.createTemplate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    try {
-      return await importEmailTemplate(context.database, context.workspace, context.env, input);
-    } catch (error) {
-      if (error instanceof TemplateAlreadyRegisteredError) throw errors.ALREADY_REGISTERED();
-      if (error instanceof RemoteTemplateError) {
-        throw error.transient
-          ? errors.REMOTE_TEMPORARILY_UNAVAILABLE({ message: error.message })
-          : errors.REMOTE_TEMPLATE_UNAVAILABLE({ message: error.message });
-      }
-      throw error;
-    }
+    return await createEmailTemplate(context.database, context.workspace, input);
   },
 );
 
-export const syncTemplateProcedure = authed.emails.syncTemplate.handler(
+export const updateTemplateProcedure = authed.emails.updateTemplate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    try {
-      if (!(await syncEmailTemplate(context.database, context.workspace, context.env, input.id))) {
-        throw errors.NOT_FOUND();
-      }
-    } catch (error) {
-      if (error instanceof RemoteTemplateError) {
-        throw error.transient
-          ? errors.REMOTE_TEMPORARILY_UNAVAILABLE({ message: error.message })
-          : errors.REMOTE_TEMPLATE_UNAVAILABLE({ message: error.message });
-      }
-      throw error;
+    const { id, ...changes } = input;
+    if (!(await updateEmailTemplate(context.database, context.workspace, id, changes))) {
+      throw errors.NOT_FOUND();
     }
-    return { synced: true as const };
+    return { updated: true as const };
+  },
+);
+
+export const previewTemplateProcedure = authed.emails.previewTemplate.handler(
+  ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    return previewEmailTemplate(input);
+  },
+);
+
+export const publishTemplateProcedure = authed.emails.publishTemplate.handler(
+  async ({ context, input, errors }) => {
+    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    if (!(await publishEmailTemplate(context.database, context.workspace, input.id))) {
+      throw errors.NOT_FOUND();
+    }
+    return { published: true as const };
   },
 );
 

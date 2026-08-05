@@ -18,18 +18,13 @@ export const emailTemplates = sqliteTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text().notNull(),
     purpose: text().notNull(),
-    resendTemplateId: text("resend_template_id").notNull(),
-    resendAlias: text("resend_alias"),
-    subject: text(),
-    remoteStatus: text("remote_status").default("draft").notNull(),
-    remoteCurrentVersionId: text("remote_current_version_id").notNull(),
-    hasUnpublishedVersions: integer("has_unpublished_versions", { mode: "boolean" })
-      .default(false)
-      .notNull(),
-    variables: text().default("[]").notNull(),
+    draftSubject: text("draft_subject").notNull(),
+    draftContent: text("draft_content").notNull(),
+    draftRevision: integer("draft_revision").default(1).notNull(),
+    publishedSubject: text("published_subject"),
+    publishedContent: text("published_content"),
+    publishedRevision: integer("published_revision"),
     publishedAt: text("published_at"),
-    lastSyncedAt: text("last_synced_at").notNull(),
-    syncError: text("sync_error"),
     archivedAt: text("archived_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -40,12 +35,7 @@ export const emailTemplates = sqliteTable(
       table.archivedAt,
       table.updatedAt,
     ),
-    uniqueIndex("email_templates_resend_template_unique").on(table.resendTemplateId),
     checkEnum("email_templates_purpose_check", table.purpose, MESSAGE_PURPOSES),
-    check(
-      "email_templates_remote_status_check",
-      sql`${table.remoteStatus} IN ('draft', 'published')`,
-    ),
   ],
 );
 
@@ -125,6 +115,7 @@ export const deliveries = sqliteTable(
       table.channel,
       table.createdAt,
     ),
+    index("deliveries_provider_message_idx").on(table.provider, table.providerMessageId),
     uniqueIndex("deliveries_workspace_idempotency_unique").on(
       table.workspaceId,
       table.idempotencyKey,

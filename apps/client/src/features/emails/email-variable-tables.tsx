@@ -13,11 +13,11 @@ import { orpcQuery } from "@/lib/orpc";
 
 export function VariableReference({ variables }: { variables: MessageVariableRow[] }): ReactNode {
   const builtInVariables = [
-    ["{{{CONTACT_FIRST_NAME}}}", "連絡先の名"],
-    ["{{{CONTACT_LAST_NAME}}}", "連絡先の姓"],
-    ["{{{CONTACT_EMAIL}}}", "メールアドレス"],
-    ["{{{OPENENGAGE_UNSUBSCRIBE_URL}}}", "配信停止URL（Marketing必須）"],
-    ["{{{CONTACT_CUSTOM_KEY}}}", "カスタム属性（KEYを置換）"],
+    ["{{ contact.first_name }}", "連絡先の名"],
+    ["{{ contact.last_name }}", "連絡先の姓"],
+    ["{{ contact.email }}", "メールアドレス"],
+    ["{{ workspace.name }}", "Workspace名"],
+    ["{{ contact.custom_key }}", "カスタム属性（custom_keyを置換）"],
     ...variables.map(
       (variable) =>
         [messageVariableToken(variable.key), `メッセージ変数: ${variable.name}`] as const,
@@ -26,10 +26,8 @@ export function VariableReference({ variables }: { variables: MessageVariableRow
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Resend Template変数</CardTitle>
-        <CardDescription>
-          Resend側で同名の変数を登録し、テンプレート内で利用してください。
-        </CardDescription>
+        <CardTitle>テンプレート変数</CardTitle>
+        <CardDescription>OpenEngageが送信時に安全に展開します。</CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
         {builtInVariables.map(([token, label]) => (
@@ -159,6 +157,6 @@ async function copyValue(value: string): Promise<void> {
 }
 
 function messageVariableToken(key: string): string {
-  const normalized = key.replaceAll(/[^A-Za-z0-9]+/g, "_").toUpperCase();
-  return `{{{MESSAGE_${normalized}}}}`;
+  const normalized = key.replaceAll(/[^A-Za-z0-9_]+/g, "_").toLowerCase();
+  return `{{ message.${normalized} }}`;
 }

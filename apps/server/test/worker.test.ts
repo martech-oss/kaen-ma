@@ -197,8 +197,7 @@ describe("OpenEngage Worker", () => {
   });
 
   it("manages the full contact profile through authenticated API routes", async () => {
-    const { client, workspaceId } = await seedWorkspaceClient(env.DB);
-    const now = new Date().toISOString();
+    const { client } = await seedWorkspaceClient(env.DB);
 
     const tag = await client.contactResources.createTag({ name: "VIP", color: "#6366f1" });
     expect(tag.id).toBeTruthy();
@@ -271,69 +270,119 @@ describe("OpenEngage Worker", () => {
       }),
     ).resolves.toEqual({ updated: true });
 
-    const templateId = uuidv7();
-    // raw seed: migrate in P6/P7 (email template row belongs to the messaging domain)
-    await env.DB.prepare(
-      `INSERT INTO email_templates
-       (id, workspace_id, name, purpose, resend_template_id, resend_alias, subject,
-        remote_status, remote_current_version_id, has_unpublished_versions,
-        variables, published_at, last_synced_at, created_at, updated_at)
-       VALUES (?, ?, 'Welcome', 'marketing', ?, 'welcome', ?, 'published',
-               'resend-version-id', 0, ?, ?, ?, ?, ?)`,
-    )
-      .bind(
-        templateId,
-        workspaceId,
-        `resend-${templateId}`,
-        "{{{MESSAGE_BRAND_NAME}}} update",
-        JSON.stringify([
-          { key: "MESSAGE_BRAND_NAME", type: "string", fallbackValue: null },
-          { key: "OPENENGAGE_UNSUBSCRIBE_URL", type: "string", fallbackValue: null },
-        ]),
-        now,
-        now,
-        now,
-        now,
-      )
-      .run();
+    const content = {
+      schemaVersion: 1 as const,
+      backgroundColor: "#f4f5f7",
+      contentColor: "#ffffff",
+      width: 600,
+      blocks: [
+        {
+          id: "body",
+          type: "text" as const,
+          html: "<p>Hello {{ contact.first_name }} from {{ workspace.name }}</p>",
+        },
+      ],
+    };
+    const template = await client.emails.createTemplate({
+      name: "Welcome",
+      subject: "Welcome {{ contact.first_name }}",
+      content,
+    });
+    const templateId = template.id;
     const templates = await client.emails.listTemplates({ archived: false });
     expect(templates.find((template) => template.id === templateId)).toMatchObject({
-      resendAlias: "welcome",
-      subject: "{{{MESSAGE_BRAND_NAME}}} update",
-      remoteStatus: "published",
-      sendable: true,
-    });
-
-    const broadcast = await client.emails.createCampaign({
-      name: "August update",
-      segmentId: segment.id,
-      templateId,
-      topicId: null,
-      scheduledAt: null,
+      name: "Welcome",
+      subject: "Welcome {{ contact.first_name }}",
+      draftRevision: 1,
+      publishedRevision: null,
+      hasUnpublishedChanges: true,
+      sendable: false,
     });
     await expect(
-      client.emails.updateCampaign({
-        id: broadcast.id,
-        name: "August update edited",
+      client.emails.previewTemplate({
+        subject: "Welcome\n{{ contact.first_name }}",
+        content,
+      }),
+    ).resolves.toMatchObject({
+      subject: "Welcome 太郎",
+      html: expect.stringContaining("Hello 太郎 from OpenEngage Workspace"),
+      text: expect.stringContaining("Hello 太郎 from OpenEngage Workspace"),
+    });
+    await expect(client.emails.publishTemplate({ id: templateId })).resolves.toEqual({
+      published: true,
+    });
+    expect(
+      (await client.emails.listTemplates({ archived: false })).find(
+        (template) => template.id === templateId,
+      ),
+    ).toMatchObject({
+      publishedRevision: 1,
+      hasUnpublishedChanges: false,
+      sendable: true,
+    });
+    await expect(
+      client.emails.updateTemplate({
+        id: templateId,
+        name: "Welcome edited",
+        subject: "Updated {{ contact.first_name }}",
+        content,
+      }),
+    ).resolves.toEqual({ updated: true });
+    expect(
+      (await client.emails.listTemplates({ archived: false })).find(
+        (template) => template.id === templateId,
+      ),
+    ).toMatchObject({
+      draftRevision: 2,
+      publishedRevision: 1,
+      hasUnpublishedChanges: true,
+      sendable: true,
+    });
+    const snapshot = await env.DB.prepare(
+      `SELECT draft_subject AS draftSubject, published_subject AS publishedSubject,
+              draft_revision AS draftRevision, published_revision AS publishedRevision
+       FROM email_templates WHERE id = ?`,
+    )
+      .bind(templateId)
+      .first<{
+        draftSubject: string;
+        publishedSubject: string;
+        draftRevision: number;
+        publishedRevision: number;
+      }>();
+    expect(snapshot).toEqual({
+      draftSubject: "Updated {{ contact.first_name }}",
+      publishedSubject: "Welcome {{ contact.first_name }}",
+      draftRevision: 2,
+      publishedRevision: 1,
+    });
+
+    await expect(
+      client.emails.createCampaign({
+        name: "Disabled marketing campaign",
         segmentId: segment.id,
         templateId,
         topicId: null,
         scheduledAt: null,
       }),
-    ).resolves.toEqual({ updated: true });
-    const broadcasts = await client.emails.listCampaigns({ archived: false });
-    expect(broadcasts).toEqual([
-      expect.objectContaining({
-        id: broadcast.id,
-        name: "August update edited",
-        segmentName: "Tokyo VIP",
-      }),
-    ]);
-    await expect(client.emails.archiveCampaign({ id: broadcast.id })).resolves.toEqual({
-      archived: true,
+    ).rejects.toMatchObject({
+      code: "MARKETING_DISABLED",
+      status: 503,
     });
-    const archivedBroadcasts = await client.emails.listCampaigns({ archived: true });
-    expect(archivedBroadcasts).toEqual([expect.objectContaining({ id: broadcast.id })]);
+    await expect(
+      client.emails.updateCampaign({
+        id: "disabled-campaign",
+        name: "Disabled marketing campaign",
+        segmentId: segment.id,
+        templateId,
+        topicId: null,
+        scheduledAt: null,
+      }),
+    ).rejects.toMatchObject({ code: "MARKETING_DISABLED", status: 503 });
+    await expect(client.emails.startCampaign({ id: "disabled-campaign" })).rejects.toMatchObject({
+      code: "MARKETING_DISABLED",
+      status: 503,
+    });
     await expect(client.emails.archiveTemplate({ id: templateId })).resolves.toEqual({
       archived: true,
     });

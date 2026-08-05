@@ -120,6 +120,7 @@ function normalizeDeliveryType(value: string): DeliveryEvent["type"] | null {
   const allowed: DeliveryEvent["type"][] = [
     "accepted",
     "delivered",
+    "deferred",
     "opened",
     "clicked",
     "bounced",
@@ -127,6 +128,7 @@ function normalizeDeliveryType(value: string): DeliveryEvent["type"] | null {
     "unsubscribed",
     "replied",
     "failed",
+    "rejected",
   ];
   return allowed.includes(candidate as DeliveryEvent["type"])
     ? (candidate as DeliveryEvent["type"])

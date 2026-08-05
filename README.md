@@ -5,7 +5,7 @@ Cloudflare上で完結する、オープンソースのマーケティングオ�
 Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」という考え方を、TypeScriptとCloudflare Workers向けに再構築しています。Mautic APIやPHPプラグインとの互換性は目的としていません。
 
 > [!IMPORTANT]
-> 現在は `v0.1` の開発版です。本番投入前に、送信ドメイン、同意要件、Resend設定、負荷特性、バックアップ手順を環境ごとに検証してください。
+> 現在は `v0.1` の開発版です。本番投入前に、Cloudflare Email Sendingの送信ドメイン、同意要件、負荷特性、バックアップ手順を環境ごとに検証してください。
 
 ## 特徴
 
@@ -14,8 +14,8 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 - R2によるAsset、CSV、受信添付ファイル、イベントアーカイブの保存
 - 画像・eBook・スライドを管理するAssetライブラリと、Worker経由の公開URL配信
 - Queuesと1分Cronによる再開可能なオートメーション実行
-- Resend Hosted TemplatesによるTransactional・Marketingメール
-- React Emailで管理する認証メールテンプレート
+- Cloudflare Email ServiceによるTransactionalメール
+- React Emailで管理する認証メールと、OpenEngage内で管理・公開するWorkspaceテンプレート
 - React Flowを使ったビジュアルオートメーションビルダー
 - ステージ型パイプライン、商談、営業タスクを管理するDeals CRM
 - Contact・Automation・Email・Deals・Siteを横断するReporting
@@ -27,12 +27,14 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 
 OpenEngageはメールの用途を型と実行時検証の両方で分離します。
 
-| 用途            | プロバイダー | 使用例                                       |
-| --------------- | ------------ | -------------------------------------------- |
-| `transactional` | Resend       | メール確認、招待、パスワード再設定、申込確認 |
-| `marketing`     | Resend       | Automation、Segment配信、Broadcast           |
+| 用途            | プロバイダー             | 使用例                                              |
+| --------------- | ------------------------ | --------------------------------------------------- |
+| `transactional` | Cloudflare Email Service | メール確認、招待、パスワード再設定、Automation通知  |
+| `marketing`     | 無効                     | Campaign、予約送信、Broadcastは`MARKETING_DISABLED` |
 
-送信元アドレスは用途ごとに分けます。配信停止・購読Topic・同意状態はOpenEngageを正本とし、配信と開封・クリック・Bounceなどのイベント取得にはResendを使います。
+Cloudflare Email ServiceはTransactional専用として扱います。Marketingの画面導線は非表示で、作成・更新・予約・開始API、Cron、Queue consumerの全経路に送信ガードがあります。
+
+認証メールはReact Email、WorkspaceのAutomationメールは`ContentDocument`からOpenEngage内でHTMLとplain textを生成します。Automationは公開済みsnapshotだけを使用し、生成済みの件名・HTML・textをDeliveryへ保存してからQueueへ投入します。送信後の`delivered`、`deferred`、`bounced`、`failed`、`rejected`、`complained`はCloudflare QueuesのEmail Sending event subscriptionで取り込みます。`opened`と`clicked`は現時点では計測しません。
 
 ## アーキテクチャ
 
@@ -48,7 +50,9 @@ flowchart LR
     S --> R["R2<br>Asset・CSV・Archive"]
     S --> Q["Queues<br>Automation・Delivery"]
     Q --> S
-    S --> RE["Resend Hosted Templates<br>Transactional・Marketing"]
+    S --> ES["Cloudflare Email Service<br>EMAIL Binding / Transactional"]
+    ES --> EQ["Email Sending events<br>Queue subscription"]
+    EQ --> S
     S --> WH["Outbound Webhook"]
     ER["Cloudflare Email Routing"] --> S
 ```
@@ -64,12 +68,12 @@ apps/
   agent/                 非公開Flue Agent Worker、Durable Objects
 packages/
   orpc/                  ドメイン別のoRPC contractとDTO Zod schema(APIの単一の正本)
-  channels/              Resend、Webhook adapter
+  channels/              Channel型、Webhook adapter
   core/                  Segment、Automation、Consent、Scheduleの純粋ロジック
-  create-openengage/         Setup、doctor、backup、update CLI
+  create-openengage/     Setup、doctor、backup、update CLI
   database/              Drizzle schema/client、D1 migration、repository
   content-renderer/      Landing Page等の安全なHTML/Text renderer
-  email-templates/       認証メール用React EmailとResend同期スクリプト
+  email-templates/       認証メール用React Emailと直接レンダラー
   mcp-server/            OpenEngage MCP server
   sdk/                   contract型付きTypeScript SDK
 ```
@@ -89,9 +93,9 @@ platform / reports / segments / web / workspaces
 - Node.js 22.12以上
 - pnpm 11
 - Cloudflareアカウント
-- Workers Paidプランを推奨
+- Workers Paidプラン
 - D1、R2、Queues
-- Resend（送信ドメイン、送信用API key、Template管理用API key）
+- Cloudflare DNS上のドメインとCloudflare Email Sendingのonboarding
 - 受信メールを利用する場合はCloudflare Email Routing
 
 ## ローカル開発
@@ -115,23 +119,10 @@ BETTER_AUTH_SECRET=32文字以上のランダム値
 CREDENTIAL_ENCRYPTION_KEY=32バイト相当のランダム値
 TRACKING_SIGNING_SECRET=32文字以上のランダム値
 TURNSTILE_SECRET=任意
-RESEND_SEND_API_KEY=メール送信に必須
-RESEND_MANAGEMENT_API_KEY=Resend Templateの登録・同期に必須
-RESEND_WEBHOOK_SECRET=Resend Webhookを利用する場合は必須
 ```
 
 `CREDENTIAL_ENCRYPTION_KEY`は、Outbound Webhookの署名資格情報をD1へ保存する際のAES-GCMマスターキーです。運用開始後に不用意に変更すると、保存済み資格情報を復号できなくなります。
-Resendの資格情報はD1へ保存せず、WorkerのSecret bindingからのみ読み込みます。
-
-認証メールはReact Emailで編集し、Resend Hosted Templatesへ同期します。
-
-```bash
-RESEND_MANAGEMENT_API_KEY=re_xxx \
-  pnpm --filter @openengage/email-templates resend:sync
-```
-
-このコマンドは`openengage-password-reset`、`openengage-email-verification`、
-`openengage-organization-invitation`を作成または更新し、最新バージョンを公開します。
+Email SendingはAPI keyやSecretを使わず、Server Workerの`EMAIL` bindingを利用します。ローカル設定は`remote: true`を指定していないため、メールを実送信せずWranglerのシミュレーターが受け取ります。
 
 ### 3. D1 migration
 
@@ -205,6 +196,8 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 - `CAMPAIGN_QUEUE`: オートメーション、Broadcast、Import/Export
   (Binding名・Queue名(`openengage-campaign`)は歴史的名残りで、内容はAutomationにリネーム済みです。稼働中のCloudflare Queueリソースの改名は本リポジトリのリネーム範囲外としています)
 - `DELIVERY_QUEUE`: Email、Webhook delivery
+- `EMAIL`: Transactional送信用のEmail Sending binding。`allowed_sender_addresses`で送信元を限定
+- `openengage-email-events`: Email Sendingの6種類の配送イベントを受け取るQueue consumer
 
 `apps/agent/wrangler.jsonc`は`workers_dev: false`の非公開Worker `openengage-agent`と、
 Serverのnamed entrypoint `AgentBackend`を呼び出す`SERVER_AGENT_API` bindingを定義します。
@@ -224,12 +217,15 @@ pnpm wrangler secret put BETTER_AUTH_SECRET
 pnpm wrangler secret put CREDENTIAL_ENCRYPTION_KEY
 pnpm wrangler secret put TRACKING_SIGNING_SECRET
 pnpm wrangler secret put TURNSTILE_SECRET
-pnpm wrangler secret put RESEND_SEND_API_KEY
-pnpm wrangler secret put RESEND_MANAGEMENT_API_KEY
-pnpm wrangler secret put RESEND_WEBHOOK_SECRET
 ```
 
-Resend Dashboardには`https://<APP_URL>/api/webhooks/resend`をWebhook URLとして登録し、`email.sent`、`email.delivered`、`email.opened`、`email.clicked`、`email.bounced`、`email.complained`、`email.failed`、`email.suppressed`を購読します。発行されたSigning secretは`RESEND_WEBHOOK_SECRET`として登録してください。OpenEngageは送信時に付与したWorkspace・Delivery tagから対象を特定します。
+送信ドメインを有効化します。
+
+```bash
+pnpm --filter @openengage/server exec wrangler email sending enable mail.example.com
+```
+
+`openengage-email-events` QueueをCloudflare Dashboardで開き、SubscriptionsからEmail Sendingを選択します。送信ドメインを指定し、`message.delivered`、`message.deferred`、`message.bounced`、`message.failed`、`message.rejected`、`message.complained`を購読してください。現在のリポジトリが固定するWranglerではEmail Sending sourceを作成できないため、購読作成のみDashboard操作です。`create-openengage doctor`はdomain、binding、Queue、6イベントの設定を検査します。
 
 ### Migrationとデプロイ
 
@@ -257,9 +253,9 @@ Agent設定でnamed RPC bindingを有効化してからClientをデプロイし�
 2. 確認メールからメールアドレスを検証する
 3. OrganizationとしてWorkspaceを作成する
 4. 必要に応じて購読Topicを作成する
-5. WorkerのSecret bindingへResendの送信・Template管理API keyとWebhook signing secretを登録する
+5. Cloudflare Email Sendingのdomain、`EMAIL` binding、イベント購読を構成する
 6. ContactまたはCSVを取り込む
-7. ResendでTemplateを公開し、OpenEngageのメールテンプレート画面から登録する
+7. OpenEngageでTransactionalテンプレートを作成・preview・公開する
 8. オートメーションを作成・検証・公開する
 
 Better AuthのOrganizationをOpenEngageのWorkspaceとして扱います。
@@ -293,17 +289,9 @@ Better AuthのOrganizationをOpenEngageのWorkspaceとして扱います。
 
 公開バージョンは不変です。公開後は同じグラフから新しいdraftが作られ、進行中Contactは参加時のバージョンを完走します。
 
-## Broadcast
+## Marketing Campaign
 
-BroadcastはMarketingメール専用です。
-
-1. 開始時刻をD1へ記録
-2. Segmentの受信者を`broadcast_recipients`へ分割スナップショット
-3. 同じDelivery Queueへ投入
-4. 送信直前に同意と抑止を再評価
-5. Resendの公開済みHosted Templateを使って受信者ごとに送信
-
-オートメーションメールとBroadcastは同じDeliveryテーブル、同意判定、イベント正規化を使用します。
+Marketing Campaignは将来再開できるようprovider非依存のread/archiveモデルだけを残しています。現在はナビゲーションと画面から非表示で、作成・更新・予約・開始、scheduled promotion、Broadcast Queue処理をすべて`503 MARKETING_DISABLED`または恒久失敗として停止します。Cloudflare Email ServiceへMarketingメールが流れる経路はありません。
 
 ## Deals CRM
 
@@ -319,8 +307,8 @@ Dealsはワークスペースごとのパイプラインで商談を管理しま
 Reportingは最大366日の期間を指定し、D1に保存された実データをリアルタイムに集計します。
 
 - 連絡先: 総数、アクティブ数、追加・アーカイブ推移、上位リスト・タグ
-- オートメーション: 参加・完了、進行中、メール開封・クリック
-- メール: 送信・到達・開封・クリック・バウンス・配信停止
+- オートメーション: 参加・完了、進行中、メール配送
+- メール: 受付・到達・遅延・失敗・拒否・バウンス・苦情抑止
 - 商談: 作成・獲得・失注、担当者別成績、通貨別フォーキャスト、タスク
 - サイト: PV、ユニーク訪問者、特定済み率、フォーム、サイトメッセージ
 
@@ -547,8 +535,7 @@ node packages/create-openengage/dist/index.js update
 node packages/create-openengage/dist/index.js domain add
 ```
 
-`create-openengage`はD1、R2、Queues、Secrets、Migration、Agent bootstrap、Server → Agent → Clientの
-3 Worker deployment、相互Service Bindingの名前置換を順番に構成します。
+`create-openengage`は送信domainとTransactionalのfrom address/nameを質問し、Email Sendingの有効化、D1、R2、Queues、Secrets、Migration、Agent bootstrap、Server → Agent → Clientの3 Worker deployment、相互Service BindingとEmail bindingの名前置換を順番に構成します。Email Sending event subscriptionだけはDashboard手順を表示します。
 
 開発中のローカルテンプレートを使う場合:
 
@@ -560,7 +547,7 @@ GitHub・npm公開後は`npx create-openengage`として利用する予定です
 
 ## Email Routing
 
-オートメーションとBroadcastは、署名付きのReply-Toアドレスを生成します。
+オートメーションのTransactionalメールは、署名付きのReply-Toアドレスを生成します。
 
 ```text
 r+<signed-token>@reply.example.com
@@ -585,7 +572,7 @@ Email Routing handlerは次を確認します。
 - Preference Center
 - 送信直前の再判定
 
-TransactionalメールもBounce、Complaintなどの抑止対象です。Marketingメールはさらにグローバル停止、Topic状態、頻度上限を確認します。
+TransactionalメールもBounce、Complaintなどの抑止対象です。Marketing用のグローバル停止、Topic状態、頻度上限モデルは将来用に保持しますが、現在は送信自体を停止しています。
 
 ## セキュリティ
 
@@ -595,7 +582,7 @@ TransactionalメールもBounce、Complaintなどの抑止対象です。Marketi
 - Cookieを使う変更系APIでOriginを検証
 - Segment ASTを許可済み演算子からparameterized SQLへ変換
 - オートメーション公開時のグラフ検証
-- Provider credentialをAES-GCMで暗号化
+- Outbound Webhook credentialをAES-GCMで暗号化
 - WebhookをHMAC、timestamp、event IDで検証
 - Tracking、解除、Reply TokenをHMAC署名
 - Webhook送信先のHTTPS強制とprivate/link-local IP拒否
@@ -631,6 +618,10 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 - 同意判定
 - Job状態遷移とRetry
 - Email rendererのescape
+- Cloudflare Email adapterのエラー分類と5 MiBガード
+- Email Sendingの6イベント、冪等化、未知message、Bounce・Complaint抑止
+- Transactionalテンプレートのdraft、preview、publish、snapshot固定
+- Marketing APIと直接Queue投入の停止
 - Webhook URLのSSRF対策
 - WorkspaceをまたぐContact直接参照の拒否
 - Dealのステージ移動、獲得・失注、タスク状態遷移
@@ -640,7 +631,8 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 ## 現在の制約
 
 - `wrangler.jsonc`のD1 ID、送信元ドメイン、Reply domainは環境ごとの設定が必要です。
-- Resend Webhookは`/api/webhooks/resend`で受け取り、raw bodyと`svix-*`ヘッダーを使ってResend標準の署名を検証します。
+- Email Sending event subscriptionの作成はCloudflare Dashboardで行う必要があります。
+- Email Serviceの`opened`と`clicked`イベントは現時点で取り込みません。
 - 大規模なCSVやSegmentは、実データ分布を使った負荷試験が必要です。
 - D1は唯一の業務DBですが、古い詳細イベントと大容量ファイルはR2へ退避します。
 - SMS、LINE、Push、Mautic API/PHPプラグイン互換、SAML/SCIMは対象外です。
@@ -648,7 +640,8 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 
 ## 開発ロードマップ
 
-- 管理画面のLanding Page、Project、Broadcast編集UIの拡充
+- 管理画面のLanding Page、Project UIの拡充
+- Marketing Campaign再開時のprovider、同意、計測設計
 - Click redirectの完全なリンク書き換え
 - Segment差分評価と大規模データ向けQuery最適化
 - R2アーカイブの復元・検索Tool

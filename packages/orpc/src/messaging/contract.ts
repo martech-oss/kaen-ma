@@ -6,7 +6,9 @@ import {
   broadcastSegmentOptionSchema,
   broadcastWriteSchema,
   emailCampaignSchema,
+  emailTemplatePreviewSchema,
   emailTemplateSchema,
+  emailTemplateWriteSchema,
   messageVariableSchema,
   messageVariableWriteSchema,
   subscriptionTopicOptionSchema,
@@ -42,7 +44,11 @@ export const emailsContract = {
     .output(emailCampaignSchema),
   createCampaign: oc
     .route({ method: "POST", path: "/broadcasts", successStatus: 201 })
-    .errors({ ...base, ...invalidResources })
+    .errors({
+      ...base,
+      ...invalidResources,
+      MARKETING_DISABLED: { status: 503, message: "Marketingメールは現在利用できません" },
+    })
     .input(broadcastWriteSchema)
     .output(z.object({ id: z.string() })),
   updateCampaign: oc
@@ -50,6 +56,7 @@ export const emailsContract = {
     .errors({
       ...base,
       ...invalidResources,
+      MARKETING_DISABLED: { status: 503, message: "Marketingメールは現在利用できません" },
       NOT_EDITABLE: {
         status: 409,
         message: "送信済みまたはアーカイブ済みのメールキャンペーンは編集できません",
@@ -61,9 +68,9 @@ export const emailsContract = {
     .route({ method: "POST", path: "/broadcasts/{id}/start", successStatus: 202 })
     .errors({
       ...base,
-      RESEND_NOT_CONFIGURED: {
-        status: 422,
-        message: "RESEND_SEND_API_KEY環境変数が設定されていません",
+      MARKETING_DISABLED: {
+        status: 503,
+        message: "Marketingメールは現在利用できません",
       },
       NOT_STARTABLE: { status: 409, message: "Broadcastは既に開始済みか存在しません" },
     })
@@ -83,46 +90,26 @@ export const emailsContract = {
     .errors(workspaceErrors)
     .input(archivedInput)
     .output(z.array(emailTemplateSchema)),
-  importTemplate: oc
+  createTemplate: oc
     .route({ method: "POST", path: "/email-templates", successStatus: 201 })
-    .errors({
-      ...base,
-      REMOTE_TEMPLATE_UNAVAILABLE: {
-        status: 422,
-        message: "Resend Templateを取得できません",
-      },
-      REMOTE_TEMPORARILY_UNAVAILABLE: {
-        status: 503,
-        message: "Resendへ一時的に接続できません",
-      },
-      ALREADY_REGISTERED: {
-        status: 409,
-        message: "このResend Templateは既に登録されています",
-      },
-    })
-    .input(
-      z.object({
-        resendTemplateId: z.string().trim().min(1).max(191),
-        purpose: z.enum(["marketing", "transactional"]),
-      }),
-    )
+    .errors(base)
+    .input(emailTemplateWriteSchema)
     .output(z.object({ id: z.string() })),
-  syncTemplate: oc
-    .route({ method: "POST", path: "/email-templates/{id}/sync" })
-    .errors({
-      ...base,
-      NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" },
-      REMOTE_TEMPLATE_UNAVAILABLE: {
-        status: 422,
-        message: "Resend Templateを取得できません",
-      },
-      REMOTE_TEMPORARILY_UNAVAILABLE: {
-        status: 503,
-        message: "Resendへ一時的に接続できません",
-      },
-    })
+  updateTemplate: oc
+    .route({ method: "PATCH", path: "/email-templates/{id}" })
+    .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })
+    .input(emailTemplateWriteSchema.extend({ id: z.string().min(1) }))
+    .output(z.object({ updated: z.literal(true) })),
+  previewTemplate: oc
+    .route({ method: "POST", path: "/email-templates/preview" })
+    .errors(base)
+    .input(emailTemplateWriteSchema.pick({ subject: true, content: true }))
+    .output(emailTemplatePreviewSchema),
+  publishTemplate: oc
+    .route({ method: "POST", path: "/email-templates/{id}/publish" })
+    .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })
     .input(idInput)
-    .output(z.object({ synced: z.literal(true) })),
+    .output(z.object({ published: z.literal(true) })),
   archiveTemplate: oc
     .route({ method: "POST", path: "/email-templates/{id}/archive" })
     .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })

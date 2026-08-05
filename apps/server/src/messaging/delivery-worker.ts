@@ -1,10 +1,11 @@
 import {
   OutboundWebhookAdapter,
   PermanentChannelError,
-  ResendEmailAdapter,
+  RecipientSuppressedChannelError,
   TransientChannelError,
   type ChannelMessage,
 } from "@openengage/channels";
+import { renderContent, renderSubject } from "@openengage/content-renderer";
 import { evaluateSendEligibility, retryDelaySeconds } from "@openengage/core";
 import {
   ConsentRepository,
@@ -12,13 +13,13 @@ import {
   uuidv7,
   type DeliveryClaimRecord,
 } from "@openengage/database";
-import { type AutomationNode } from "@openengage/orpc";
+import { contentDocumentSchema, type AutomationNode } from "@openengage/orpc";
 
 import { type AutomationJobRow } from "../automations/worker";
 import { type RuntimeEnv } from "../env";
+import { CloudflareEmailAdapter } from "../messaging/cloudflare-email";
 import { buildReplyAddress } from "../messaging/reply-address";
-import { parseTemplateVariables, resolveTemplateVariables } from "../messaging/resend";
-import { createSignedToken, decryptCredentials } from "../platform/crypto";
+import { decryptCredentials } from "../platform/crypto";
 import { parseJsonRecord } from "../platform/values";
 
 export type DeliveryRow = DeliveryClaimRecord;
@@ -34,10 +35,8 @@ export async function createEmailDelivery(
   const repository = new MessagingWorkerRepository(env.DB);
   const template = await repository.findSendableTemplate(job.workspace_id, action.templateId);
   if (!template) throw new PermanentChannelError("Email template is missing");
-  if (template.remoteStatus !== "published" || template.syncError) {
-    throw new PermanentChannelError(template.syncError ?? "Email template is not published");
-  }
   const message = await repository.readMessageVariables(job.workspace_id);
+  const workspace = await repository.readWorkspaceTemplateContext(job.workspace_id);
   const customFields = parseJsonRecord(job.custom_fields);
   const contact = {
     email: job.contact_email,
@@ -46,41 +45,28 @@ export async function createEmailDelivery(
     phone: job.phone,
     stage: job.stage,
     score: job.score,
+    ...customFields,
   };
-  const unsubscribeToken =
-    template.purpose === "marketing"
-      ? await createSignedToken(env.TRACKING_SIGNING_SECRET, {
-          workspaceId: job.workspace_id,
-          resourceId: action.topicId ?? "global",
-          contactId: job.contact_id,
-          expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-          purpose: "unsubscribe",
-        })
-      : null;
   const deliveryId = uuidv7();
-  const unsubscribeUrl = unsubscribeToken ? `${env.APP_URL}/u/${unsubscribeToken}` : undefined;
-  const preferenceUrl = unsubscribeToken
-    ? `${env.APP_URL}/preference/${unsubscribeToken}`
-    : undefined;
-  const variables = resolveTemplateVariables(parseTemplateVariables(template.variables), {
+  const renderContext = {
     contact,
-    customFields,
+    workspace,
     message,
-    ...(unsubscribeUrl ? { unsubscribeUrl } : {}),
-    ...(preferenceUrl ? { preferenceUrl } : {}),
-  });
+  };
+  const content = contentDocumentSchema.parse(JSON.parse(template.content));
+  const rendered = renderContent(content, renderContext);
   const replyTo = await buildReplyAddress(env, job.workspace_id, deliveryId, job.contact_id);
   const payload: ChannelMessage = {
     kind: "email",
     idempotencyKey: `${job.idempotency_key}:email`,
     workspaceId: job.workspace_id,
     deliveryId,
-    purpose: template.purpose,
+    purpose: "transactional",
     to: job.contact_email,
-    from: senderForPurpose(env, template.purpose),
+    from: senderForPurpose(env, "transactional"),
     replyTo,
-    template: { id: template.resendTemplateId, variables },
-    ...(unsubscribeUrl ? { metadata: { unsubscribeUrl } } : {}),
+    subject: renderSubject(template.subject, renderContext),
+    ...rendered,
   };
   const created = await repository.insertQueuedDelivery({
     id: deliveryId,
@@ -88,8 +74,8 @@ export async function createEmailDelivery(
     contactId: job.contact_id,
     enrollmentId: job.enrollment_id,
     channel: "email",
-    purpose: template.purpose,
-    provider: "resend",
+    purpose: "transactional",
+    provider: "cloudflare",
     recipient: job.contact_email,
     topicId: action.topicId ?? null,
     templateId: template.id,
@@ -165,6 +151,10 @@ export async function processDelivery(deliveryId: string, env: RuntimeEnv): Prom
       acceptedAt: result.acceptedAt,
     });
   } catch (error) {
+    if (error instanceof RecipientSuppressedChannelError) {
+      await repository.markDeliveryProviderSuppressed(delivery.id);
+      return;
+    }
     const permanent = error instanceof PermanentChannelError;
     const delay = retryDelaySeconds(delivery.attempts + 1);
     await repository.recordDeliveryAttemptFailure(delivery.id, {
@@ -182,13 +172,11 @@ export async function deliveryAdapter(
   endpointId: string | undefined,
   env: RuntimeEnv,
 ) {
-  if (delivery.provider === "resend") {
-    const apiKey = env.RESEND_SEND_API_KEY;
-    if (!apiKey) throw new PermanentChannelError("Resend is not configured");
-    return new ResendEmailAdapter({
-      apiKey,
-      ...(env.RESEND_WEBHOOK_SECRET ? { webhookSecret: env.RESEND_WEBHOOK_SECRET } : {}),
-    });
+  if (delivery.provider === "cloudflare") {
+    if (delivery.purpose !== "transactional") {
+      throw new PermanentChannelError("Marketing email is disabled");
+    }
+    return new CloudflareEmailAdapter(env.EMAIL);
   }
   if (!endpointId) throw new PermanentChannelError("Webhook endpoint is missing");
   const endpoint = await new MessagingWorkerRepository(env.DB).findEnabledWebhookEndpointWithSecret(
@@ -207,9 +195,8 @@ export function senderForPurpose(
   env: RuntimeEnv,
   purpose: "marketing" | "transactional",
 ): { email: string; name?: string } {
-  return purpose === "marketing"
-    ? { email: env.MARKETING_FROM_EMAIL, name: env.MARKETING_FROM_NAME }
-    : { email: env.TRANSACTIONAL_FROM_EMAIL, name: env.TRANSACTIONAL_FROM_NAME };
+  if (purpose === "marketing") throw new PermanentChannelError("Marketing email is disabled");
+  return { email: env.TRANSACTIONAL_FROM_EMAIL, name: env.TRANSACTIONAL_FROM_NAME };
 }
 
 export async function readConsentGate(delivery: DeliveryRow, env: RuntimeEnv) {

@@ -11,8 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@openengage/orpc": "workspace:*",
-    "resend": "^6.18.1"
+    "@openengage/orpc": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260728.1",

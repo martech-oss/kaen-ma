@@ -1,7 +1,6 @@
 import { PermanentChannelError } from "@openengage/channels";
 import { retryDelaySeconds } from "@openengage/core";
 import {
-  BroadcastWorkerRepository,
   AutomationEngineRepository,
   claimDueJobs,
   createDatabase,
@@ -10,9 +9,9 @@ import {
 
 import { enrollInactiveContacts } from "../automations/enrollment";
 import { processAutomationJob } from "../automations/worker";
-import { processBroadcastBatch } from "../broadcasts/worker";
 import { processContactExport, processContactImport } from "../contacts/worker";
 import { type RuntimeEnv } from "../env";
+import { processCloudflareEmailEvent } from "../messaging/cloudflare-events";
 import { processDelivery } from "../messaging/delivery-worker";
 import { logError } from "../observability";
 import { persistDeadLetter, runDailyMaintenance } from "../platform/maintenance-worker";
@@ -48,17 +47,6 @@ export async function scheduled(
   }
   if (messages.length > 0) await env.CAMPAIGN_QUEUE.sendBatch(messages);
 
-  const broadcastWorker = new BroadcastWorkerRepository(database);
-  for (const broadcast of await broadcastWorker.listDueScheduledBroadcasts(now)) {
-    if (await broadcastWorker.promoteScheduledBroadcast(broadcast.id, now)) {
-      await env.CAMPAIGN_QUEUE.send({
-        kind: "broadcast_batch",
-        broadcastId: broadcast.id,
-        phase: "snapshot",
-      });
-    }
-  }
-
   const dueDeliveries = await new MessagingWorkerRepository(database).scanDueDeliveries(now);
   if (dueDeliveries.length > 0) {
     await env.DELIVERY_QUEUE.sendBatch(
@@ -71,13 +59,13 @@ export async function scheduled(
 
 export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Promise<void> {
   for (const message of batch.messages) {
-    if (batch.queue === "openengage-dead-letter") {
+    if (isQueue(batch.queue, "dead-letter")) {
       await persistDeadLetter(batch.queue, message.body, message.attempts, env);
       message.ack();
       continue;
     }
     try {
-      if (batch.queue === "openengage-campaign") {
+      if (isQueue(batch.queue, "campaign")) {
         const parsed = campaignQueueBatchMessageSchema.safeParse(message.body);
         if (!parsed.success) throw new PermanentChannelError("Invalid campaign queue message");
         switch (parsed.data.kind) {
@@ -85,13 +73,7 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
             await processAutomationJob(parsed.data.jobId, parsed.data.leaseId, env);
             break;
           case "broadcast_batch":
-            await processBroadcastBatch(
-              parsed.data.broadcastId,
-              parsed.data.phase,
-              parsed.data.cursor,
-              env,
-            );
-            break;
+            throw new PermanentChannelError("Marketing email is disabled");
           case "contact_import":
             await processContactImport(
               parsed.data.importJobId,
@@ -104,10 +86,12 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
             await processContactExport(parsed.data.exportJobId, env);
             break;
         }
-      } else if (batch.queue === "openengage-delivery") {
+      } else if (isQueue(batch.queue, "delivery")) {
         const parsed = deliveryQueueMessageSchema.safeParse(message.body);
         if (!parsed.success) throw new PermanentChannelError("Invalid delivery queue message");
         await processDelivery(parsed.data.deliveryId, env);
+      } else if (isQueue(batch.queue, "email-events")) {
+        await processCloudflareEmailEvent(message.body, env);
       } else {
         throw new PermanentChannelError(`Unknown queue: ${batch.queue}`);
       }
@@ -126,4 +110,8 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
       }
     }
   }
+}
+
+function isQueue(actual: string, suffix: string): boolean {
+  return actual === `openengage-${suffix}` || actual.endsWith(`-${suffix}`);
 }

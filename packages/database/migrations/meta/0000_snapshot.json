@@ -1,9 +1,91 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "f9591ba8-b0e0-437c-a1ef-a8a6ed352793",
+  "id": "4b22f823-4b8f-4bd0-af33-fe90f32980df",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
+    "agent_conversations": {
+      "name": "agent_conversations",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workspace_id": {
+          "name": "workspace_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "agent_key": {
+          "name": "agent_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "agent_conversations_owner_created_idx": {
+          "name": "agent_conversations_owner_created_idx",
+          "columns": [
+            "workspace_id",
+            "owner_user_id",
+            "created_at"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "agent_conversations_workspace_id_organization_id_fk": {
+          "name": "agent_conversations_workspace_id_organization_id_fk",
+          "tableFrom": "agent_conversations",
+          "tableTo": "organization",
+          "columnsFrom": [
+            "workspace_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "agent_conversations_owner_user_id_user_id_fk": {
+          "name": "agent_conversations_owner_user_id_user_id_fk",
+          "tableFrom": "agent_conversations",
+          "tableTo": "user",
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "account": {
       "name": "account",
       "columns": {
@@ -3176,7 +3258,7 @@
       "checkConstraints": {
         "suppressions_reason_check": {
           "name": "suppressions_reason_check",
-          "value": "\"suppressions\".\"reason\" IN ('global_unsubscribe', 'bounce', 'complaint', 'manual')"
+          "value": "\"suppressions\".\"reason\" IN ('global_unsubscribe', 'bounce', 'complaint', 'provider', 'manual')"
         },
         "suppressions_target_check": {
           "name": "suppressions_target_check",
@@ -4120,6 +4202,14 @@
           ],
           "isUnique": false
         },
+        "deliveries_provider_message_idx": {
+          "name": "deliveries_provider_message_idx",
+          "columns": [
+            "provider",
+            "provider_message_id"
+          ],
+          "isUnique": false
+        },
         "deliveries_workspace_idempotency_unique": {
           "name": "deliveries_workspace_idempotency_unique",
           "columns": [
@@ -4222,7 +4312,7 @@
         },
         "deliveries_provider_check": {
           "name": "deliveries_provider_check",
-          "value": "\"deliveries\".\"provider\" IN ('resend', 'webhook')"
+          "value": "\"deliveries\".\"provider\" IN ('cloudflare', 'webhook')"
         },
         "deliveries_status_check": {
           "name": "deliveries_status_check",
@@ -4373,7 +4463,7 @@
       "checkConstraints": {
         "delivery_events_type_check": {
           "name": "delivery_events_type_check",
-          "value": "\"delivery_events\".\"type\" IN ('accepted', 'delivered', 'opened', 'clicked', 'bounced', 'complained', 'unsubscribed', 'replied', 'failed')"
+          "value": "\"delivery_events\".\"type\" IN ('accepted', 'delivered', 'deferred', 'opened', 'clicked', 'bounced', 'complained', 'unsubscribed', 'replied', 'failed', 'rejected')"
         }
       }
     },
@@ -4408,74 +4498,51 @@
           "notNull": true,
           "autoincrement": false
         },
-        "resend_template_id": {
-          "name": "resend_template_id",
+        "draft_subject": {
+          "name": "draft_subject",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "resend_alias": {
-          "name": "resend_alias",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "subject": {
-          "name": "subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "remote_status": {
-          "name": "remote_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'draft'"
-        },
-        "remote_current_version_id": {
-          "name": "remote_current_version_id",
+        "draft_content": {
+          "name": "draft_content",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
-        "has_unpublished_versions": {
-          "name": "has_unpublished_versions",
+        "draft_revision": {
+          "name": "draft_revision",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": false
+          "default": 1
         },
-        "variables": {
-          "name": "variables",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
-        "published_at": {
-          "name": "published_at",
+        "published_subject": {
+          "name": "published_subject",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
-        "last_synced_at": {
-          "name": "last_synced_at",
+        "published_content": {
+          "name": "published_content",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
-        "sync_error": {
-          "name": "sync_error",
+        "published_revision": {
+          "name": "published_revision",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "published_at": {
+          "name": "published_at",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -4512,13 +4579,6 @@
             "updated_at"
           ],
           "isUnique": false
-        },
-        "email_templates_resend_template_unique": {
-          "name": "email_templates_resend_template_unique",
-          "columns": [
-            "resend_template_id"
-          ],
-          "isUnique": true
         }
       },
       "foreignKeys": {
@@ -4542,10 +4602,6 @@
         "email_templates_purpose_check": {
           "name": "email_templates_purpose_check",
           "value": "\"email_templates\".\"purpose\" IN ('transactional', 'marketing')"
-        },
-        "email_templates_remote_status_check": {
-          "name": "email_templates_remote_status_check",
-          "value": "\"email_templates\".\"remote_status\" IN ('draft', 'published')"
         }
       }
     },
@@ -6394,7 +6450,7 @@
       "checkConstraints": {
         "provider_configs_provider_check": {
           "name": "provider_configs_provider_check",
-          "value": "\"provider_configs\".\"provider\" IN ('resend', 'webhook')"
+          "value": "\"provider_configs\".\"provider\" IN ('cloudflare', 'webhook')"
         }
       }
     },

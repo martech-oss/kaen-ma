@@ -17,7 +17,12 @@ import {
 import { execa } from "execa";
 import pc from "picocolors";
 
-import { initialWorkerDeployCommands, rewriteWorkerConfigs } from "./provisioning";
+import {
+  cloudflareResourceNames,
+  initialWorkerDeployCommands,
+  readConfiguredResources,
+  rewriteWorkerConfigs,
+} from "./provisioning";
 
 const command = process.argv[2] ?? "create";
 
@@ -54,6 +59,31 @@ async function create(): Promise<void> {
     },
   });
   if (isCancel(appUrlAnswer)) return abort();
+  const defaultSendingDomain = new URL(String(appUrlAnswer)).hostname;
+  const sendingDomainAnswer = await text({
+    message: "Cloudflare Email Sending domain",
+    placeholder: defaultSendingDomain,
+    defaultValue: defaultSendingDomain,
+    validate: (value) =>
+      /^[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(value) ? undefined : "Enter a valid domain",
+  });
+  if (isCancel(sendingDomainAnswer)) return abort();
+  const transactionalFromEmail = await text({
+    message: "Transactional from address",
+    placeholder: `notifications@${String(sendingDomainAnswer)}`,
+    defaultValue: `notifications@${String(sendingDomainAnswer)}`,
+    validate: (value) =>
+      value.toLowerCase().endsWith(`@${String(sendingDomainAnswer).toLowerCase()}`)
+        ? undefined
+        : "The address must use the Email Sending domain",
+  });
+  if (isCancel(transactionalFromEmail)) return abort();
+  const transactionalFromName = await text({
+    message: "Transactional from name",
+    defaultValue: "OpenEngage",
+    validate: (value) => (value.trim() ? undefined : "Sender name is required"),
+  });
+  if (isCancel(transactionalFromName)) return abort();
   const provisionAnswer = await confirm({
     message: "Provision D1, R2, Queues, secrets, migrations, and deploy now?",
     initialValue: true,
@@ -80,28 +110,73 @@ async function create(): Promise<void> {
     outro(`Run ${pc.cyan("npx create-openengage doctor")} from the project when ready.`);
     return;
   }
-  await provision(projectDirectory, String(appUrlAnswer));
+  await provision(projectDirectory, String(appUrlAnswer), {
+    sendingDomain: String(sendingDomainAnswer),
+    fromEmail: String(transactionalFromEmail),
+    fromName: String(transactionalFromName),
+  });
   outro(`OpenEngage deployed from ${pc.cyan(projectDirectory)}`);
 }
 
-async function provision(projectDirectory: string, appUrl: string): Promise<void> {
+async function provision(
+  projectDirectory: string,
+  appUrl: string,
+  email: { sendingDomain: string; fromEmail: string; fromName: string },
+): Promise<void> {
   const projectName = slugify(basename(projectDirectory));
-  await execa("pnpm", ["wrangler", "whoami"], { cwd: projectDirectory });
-  const d1 = await execa("pnpm", ["wrangler", "d1", "create", `${projectName}-db`, "--json"], {
+  const resources = cloudflareResourceNames(projectName);
+  await execa("pnpm", ["--filter", "@openengage/server", "exec", "wrangler", "whoami"], {
     cwd: projectDirectory,
   });
+  await execa(
+    "pnpm",
+    [
+      "--filter",
+      "@openengage/server",
+      "exec",
+      "wrangler",
+      "email",
+      "sending",
+      "enable",
+      email.sendingDomain,
+    ],
+    { cwd: projectDirectory },
+  );
+  const d1 = await execa(
+    "pnpm",
+    [
+      "--filter",
+      "@openengage/server",
+      "exec",
+      "wrangler",
+      "d1",
+      "create",
+      resources.database,
+      "--json",
+    ],
+    { cwd: projectDirectory },
+  );
   const d1Payload = JSON.parse(d1.stdout) as { uuid?: string } | Array<{ uuid?: string }>;
   const databaseId = Array.isArray(d1Payload) ? d1Payload[0]?.uuid : d1Payload.uuid;
   if (!databaseId) throw new Error("Wrangler did not return a D1 database ID");
   await runAllowExisting(
     "pnpm",
-    ["wrangler", "r2", "bucket", "create", `${projectName}-assets`],
+    [
+      "--filter",
+      "@openengage/server",
+      "exec",
+      "wrangler",
+      "r2",
+      "bucket",
+      "create",
+      resources.bucket,
+    ],
     projectDirectory,
   );
-  for (const queueName of ["campaign", "delivery", "dead-letter"]) {
+  for (const queueName of Object.values(resources.queues)) {
     await runAllowExisting(
       "pnpm",
-      ["wrangler", "queues", "create", `${projectName}-${queueName}`],
+      ["--filter", "@openengage/server", "exec", "wrangler", "queues", "create", queueName],
       projectDirectory,
     );
   }
@@ -112,6 +187,8 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
     projectName,
     appUrl,
     databaseId,
+    transactionalFromEmail: email.fromEmail,
+    transactionalFromName: email.fromName,
     server: await readFile(serverConfigPath, "utf8"),
     agent: await readFile(agentConfigPath, "utf8"),
     client: await readFile(clientConfigPath, "utf8"),
@@ -132,35 +209,8 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
   if (!isCancel(turnstile) && turnstile) {
     await putSecret(projectDirectory, "TURNSTILE_SECRET", String(turnstile));
   }
-  const resendSendApiKey = await password({
-    message: "Resend send API key (optional)",
-    mask: "•",
-  });
-  if (!isCancel(resendSendApiKey) && resendSendApiKey) {
-    await putSecret(projectDirectory, "RESEND_SEND_API_KEY", String(resendSendApiKey));
-  }
-  const resendManagementApiKey = await password({
-    message: "Resend template management API key (optional)",
-    mask: "•",
-  });
-  if (!isCancel(resendManagementApiKey) && resendManagementApiKey) {
-    await putSecret(projectDirectory, "RESEND_MANAGEMENT_API_KEY", String(resendManagementApiKey));
-  }
-  const resendWebhookSecret = await password({
-    message: "Resend webhook signing secret (optional)",
-    mask: "•",
-  });
-  if (!isCancel(resendWebhookSecret) && resendWebhookSecret) {
-    await putSecret(projectDirectory, "RESEND_WEBHOOK_SECRET", String(resendWebhookSecret));
-  }
   const progress = spinner();
-  progress.start("Syncing templates, applying migrations, and deploying");
-  if (!isCancel(resendManagementApiKey) && resendManagementApiKey) {
-    await execa("pnpm", ["--filter", "@openengage/email-templates", "resend:sync"], {
-      cwd: projectDirectory,
-      env: { RESEND_MANAGEMENT_API_KEY: String(resendManagementApiKey) },
-    });
-  }
+  progress.start("Applying migrations and deploying");
   await execa(
     "pnpm",
     [
@@ -171,7 +221,7 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
       "d1",
       "migrations",
       "apply",
-      `${projectName}-db`,
+      resources.database,
       "--remote",
     ],
     { cwd: projectDirectory, input: "y\n" },
@@ -182,13 +232,24 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
     await execa("pnpm", [...args], { cwd: projectDirectory });
   }
   progress.stop("Infrastructure and Workers are ready");
+  note(
+    `Cloudflare DashboardでQueue ${resources.queues.emailEvents}へEmail Sending (${email.sendingDomain}) の delivered, deferred, bounced, failed, rejected, complained を購読してください。完了後に create-openengage doctor を実行してください。`,
+    "Email event subscription required",
+  );
 }
 
 async function doctor(): Promise<void> {
   const projectDirectory = process.cwd();
+  const config = await readFile(resolve(projectDirectory, "apps/server/wrangler.jsonc"), "utf8");
+  const resources = readConfiguredResources(config);
   const checks: Array<{ name: string; ok: boolean; detail: string }> = [];
   checks.push(
-    await commandCheck("Cloudflare login", "pnpm", ["wrangler", "whoami"], projectDirectory),
+    await commandCheck(
+      "Cloudflare login",
+      "pnpm",
+      ["--filter", "@openengage/server", "exec", "wrangler", "whoami"],
+      projectDirectory,
+    ),
   );
   checks.push(await commandCheck("Worker bindings", "pnpm", ["cf:types"], projectDirectory));
   checks.push(
@@ -202,7 +263,7 @@ async function doctor(): Promise<void> {
         "wrangler",
         "d1",
         "execute",
-        "openengage-db",
+        resources.database,
         "--remote",
         "--command",
         "SELECT COUNT(*) FROM d1_migrations",
@@ -211,10 +272,21 @@ async function doctor(): Promise<void> {
     ),
   );
   checks.push(
-    await commandCheck("Queues", "pnpm", ["wrangler", "queues", "list"], projectDirectory),
+    await commandOutputIncludesCheck(
+      "Queues",
+      "pnpm",
+      ["--filter", "@openengage/server", "exec", "wrangler", "queues", "list", "--json"],
+      projectDirectory,
+      resources.emailEventsQueue,
+    ),
   );
   checks.push(
-    await commandCheck("R2", "pnpm", ["wrangler", "r2", "bucket", "list"], projectDirectory),
+    await commandCheck(
+      "R2",
+      "pnpm",
+      ["--filter", "@openengage/server", "exec", "wrangler", "r2", "bucket", "list"],
+      projectDirectory,
+    ),
   );
   checks.push(
     await commandCheck(
@@ -224,7 +296,38 @@ async function doctor(): Promise<void> {
       projectDirectory,
     ),
   );
-  const config = await readFile(resolve(projectDirectory, "apps/server/wrangler.jsonc"), "utf8");
+  checks.push(
+    await commandOutputIncludesCheck(
+      "Email Sending domain",
+      "pnpm",
+      [
+        "--filter",
+        "@openengage/server",
+        "exec",
+        "wrangler",
+        "email",
+        "sending",
+        "list",
+        resources.sendingDomain,
+      ],
+      projectDirectory,
+      resources.sendingDomain,
+    ),
+  );
+  checks.push({
+    name: "EMAIL binding",
+    ok: resources.hasEmailBinding,
+    detail: resources.hasEmailBinding
+      ? `restricted to ${resources.fromEmail}`
+      : "configure EMAIL with allowed_sender_addresses",
+  });
+  checks.push(
+    await emailEventSubscriptionCheck(
+      projectDirectory,
+      resources.emailEventsQueue,
+      resources.sendingDomain,
+    ),
+  );
   checks.push({
     name: "D1 database ID",
     ok: !config.includes("00000000-0000-0000-0000-000000000000"),
@@ -266,6 +369,8 @@ async function backup(): Promise<void> {
   });
   if (isCancel(outputAnswer)) return abort();
   const output = resolve(String(outputAnswer));
+  const serverConfig = await readFile(resolve(process.cwd(), "apps/server/wrangler.jsonc"), "utf8");
+  const databaseName = readConfiguredResources(serverConfig).database;
   await mkdir(resolve(output, ".."), { recursive: true });
   await execa(
     "pnpm",
@@ -276,7 +381,7 @@ async function backup(): Promise<void> {
       "wrangler",
       "d1",
       "export",
-      "openengage-db",
+      databaseName,
       "--remote",
       "--output",
       output,
@@ -339,6 +444,68 @@ async function commandCheck(
   } catch (error) {
     return {
       name,
+      ok: false,
+      detail: error instanceof Error ? (error.message.split("\n")[0] ?? "failed") : String(error),
+    };
+  }
+}
+
+async function commandOutputIncludesCheck(
+  name: string,
+  file: string,
+  args: string[],
+  cwd: string,
+  expected: string,
+): Promise<{ name: string; ok: boolean; detail: string }> {
+  if (!expected) return { name, ok: false, detail: "resource is not configured" };
+  try {
+    const result = await execa(file, args, { cwd });
+    const ok = result.stdout.includes(expected);
+    return { name, ok, detail: ok ? expected : `${expected} was not found` };
+  } catch (error) {
+    return {
+      name,
+      ok: false,
+      detail: error instanceof Error ? (error.message.split("\n")[0] ?? "failed") : String(error),
+    };
+  }
+}
+
+async function emailEventSubscriptionCheck(
+  cwd: string,
+  queueName: string,
+  sendingDomain: string,
+): Promise<{ name: string; ok: boolean; detail: string }> {
+  const required = ["delivered", "deferred", "bounced", "failed", "rejected", "complained"];
+  try {
+    const result = await execa(
+      "pnpm",
+      [
+        "--filter",
+        "@openengage/server",
+        "exec",
+        "wrangler",
+        "queues",
+        "subscription",
+        "list",
+        queueName,
+        "--json",
+      ],
+      { cwd },
+    );
+    const output = result.stdout.toLowerCase();
+    const ok =
+      output.includes("email.sending") &&
+      output.includes(sendingDomain.toLowerCase()) &&
+      required.every((event) => output.includes(event));
+    return {
+      name: "Email event subscription",
+      ok,
+      detail: ok ? "configured" : "subscribe the six Email Sending events in Cloudflare Dashboard",
+    };
+  } catch (error) {
+    return {
+      name: "Email event subscription",
       ok: false,
       detail: error instanceof Error ? (error.message.split("\n")[0] ?? "failed") : String(error),
     };

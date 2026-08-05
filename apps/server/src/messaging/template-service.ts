@@ -1,34 +1,15 @@
-import {
-  PermanentChannelError,
-  TransientChannelError,
-  type ResendHostedTemplate,
-} from "@openengage/channels";
+import { renderContent, renderSubject } from "@openengage/content-renderer";
 import {
   MessagingRepository,
   type EmailTemplateRecord,
   type OpenEngageDatabase,
 } from "@openengage/database";
-import type { WorkspaceContext } from "@openengage/orpc";
-import type { EmailTemplate, ResendTemplateVariable } from "@openengage/orpc";
-
-import type { RuntimeEnv } from "../env";
-import { createResendTemplateAdapter, templateCompatibilityError } from "../messaging/resend";
-import { parseJsonValue } from "../platform/values";
-
-/** Raised when Resend cannot serve a template; `transient` picks the status. */
-export class RemoteTemplateError extends Error {
-  public constructor(
-    public readonly transient: boolean,
-    message: string,
-  ) {
-    super(message);
-    this.name = "RemoteTemplateError";
-  }
-}
-
-export class TemplateAlreadyRegisteredError extends Error {
-  public override readonly name = "TemplateAlreadyRegisteredError";
-}
+import {
+  contentDocumentSchema,
+  type EmailTemplate,
+  type EmailTemplateWrite,
+  type WorkspaceContext,
+} from "@openengage/orpc";
 
 export async function listEmailTemplates(
   database: OpenEngageDatabase,
@@ -39,54 +20,51 @@ export async function listEmailTemplates(
   return rows.map(toEmailTemplate);
 }
 
-export async function importEmailTemplate(
+export function createEmailTemplate(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
-  env: RuntimeEnv,
-  input: { resendTemplateId: string; purpose: "marketing" | "transactional" },
+  input: EmailTemplateWrite,
 ): Promise<{ id: string }> {
-  const remote = await fetchRemoteTemplate(env, input.resendTemplateId);
-  const repository = new MessagingRepository(database, workspace);
-  const existing = await repository.findEmailTemplateByResendId(remote.id);
-  if (existing) throw new TemplateAlreadyRegisteredError();
-  return await repository.createEmailTemplate({
-    name: remote.name,
-    purpose: input.purpose,
-    resendTemplateId: remote.id,
-    resendAlias: remote.alias,
-    subject: remote.subject,
-    remoteStatus: remote.status,
-    remoteCurrentVersionId: remote.currentVersionId,
-    hasUnpublishedVersions: remote.hasUnpublishedVersions,
-    variables: JSON.stringify(remote.variables),
-    publishedAt: remote.publishedAt,
-    syncError: templateCompatibilityError(remote, input.purpose),
-  });
+  return new MessagingRepository(database, workspace).createEmailTemplate(input);
 }
 
-export async function syncEmailTemplate(
+export function updateEmailTemplate(
   database: OpenEngageDatabase,
   workspace: WorkspaceContext,
-  env: RuntimeEnv,
+  id: string,
+  input: EmailTemplateWrite,
+): Promise<boolean> {
+  return new MessagingRepository(database, workspace).updateEmailTemplate(id, input);
+}
+
+export function publishEmailTemplate(
+  database: OpenEngageDatabase,
+  workspace: WorkspaceContext,
   id: string,
 ): Promise<boolean> {
-  const repository = new MessagingRepository(database, workspace);
-  const local = await repository.getEmailTemplate(id);
-  if (!local) return false;
-  const purpose = local.purpose === "transactional" ? "transactional" : "marketing";
-  const remote = await fetchRemoteTemplate(env, local.resendTemplateId);
-  await repository.updateEmailTemplateFromRemote(local.id, {
-    name: remote.name,
-    resendAlias: remote.alias,
-    subject: remote.subject,
-    remoteStatus: remote.status,
-    remoteCurrentVersionId: remote.currentVersionId,
-    hasUnpublishedVersions: remote.hasUnpublishedVersions,
-    variables: JSON.stringify(remote.variables),
-    publishedAt: remote.publishedAt,
-    syncError: templateCompatibilityError(remote, purpose),
-  });
-  return true;
+  return new MessagingRepository(database, workspace).publishEmailTemplate(id);
+}
+
+export function previewEmailTemplate(input: Pick<EmailTemplateWrite, "subject" | "content">): {
+  subject: string;
+  html: string;
+  text: string;
+} {
+  const context = {
+    contact: {
+      email: "taro@example.com",
+      first_name: "太郎",
+      last_name: "山田",
+      stage: "lead",
+      score: 10,
+    },
+    workspace: { name: "OpenEngage Workspace" },
+    message: { brand: "OpenEngage" },
+  };
+  return {
+    subject: renderSubject(input.subject, context),
+    ...renderContent(input.content, context),
+  };
 }
 
 export function archiveEmailTemplate(
@@ -98,37 +76,20 @@ export function archiveEmailTemplate(
 }
 
 function toEmailTemplate(row: EmailTemplateRecord): EmailTemplate {
-  const remoteStatus = row.remoteStatus === "published" ? "published" : "draft";
+  const content = contentDocumentSchema.parse(JSON.parse(row.draftContent));
   return {
     id: row.id,
     name: row.name,
-    purpose: row.purpose === "transactional" ? "transactional" : "marketing",
-    resendTemplateId: row.resendTemplateId,
-    resendAlias: row.resendAlias,
-    subject: row.subject,
-    remoteStatus,
-    remoteCurrentVersionId: row.remoteCurrentVersionId,
-    hasUnpublishedVersions: row.hasUnpublishedVersions,
-    variables: parseJsonValue<ResendTemplateVariable[]>(row.variables, []),
+    purpose: "transactional",
+    subject: row.draftSubject,
+    content,
+    draftRevision: row.draftRevision,
+    publishedRevision: row.publishedRevision,
+    hasUnpublishedChanges: row.publishedRevision !== row.draftRevision,
     publishedAt: row.publishedAt,
-    lastSyncedAt: row.lastSyncedAt,
-    syncError: row.syncError,
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
-    sendable: remoteStatus === "published" && !row.syncError && !row.archivedAt,
+    sendable: row.publishedRevision !== null && !row.archivedAt,
   };
-}
-
-async function fetchRemoteTemplate(
-  env: RuntimeEnv,
-  identifier: string,
-): Promise<ResendHostedTemplate> {
-  try {
-    return await createResendTemplateAdapter(env).get(identifier);
-  } catch (error) {
-    if (error instanceof PermanentChannelError) throw new RemoteTemplateError(false, error.message);
-    if (error instanceof TransientChannelError) throw new RemoteTemplateError(true, error.message);
-    throw error;
-  }
 }

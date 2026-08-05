@@ -1,6 +1,6 @@
 import type { DeliveryEvent, MessagePurpose } from "@openengage/orpc";
 
-export interface HostedEmailMessage {
+export interface RenderedEmailMessage {
   kind: "email";
   idempotencyKey: string;
   workspaceId?: string;
@@ -9,10 +9,9 @@ export interface HostedEmailMessage {
   to: string;
   from: { email: string; name?: string };
   replyTo?: string;
-  template: {
-    id: string;
-    variables?: Record<string, string | number>;
-  };
+  subject: string;
+  html: string;
+  text: string;
   metadata?: Record<string, string>;
 }
 
@@ -24,7 +23,7 @@ export interface WebhookChannelMessage {
   payload: Record<string, unknown>;
 }
 
-export type ChannelMessage = HostedEmailMessage | WebhookChannelMessage;
+export type ChannelMessage = RenderedEmailMessage | WebhookChannelMessage;
 
 export interface ChannelSendResult {
   providerMessageId: string;
@@ -42,9 +41,12 @@ export interface WebhookVerification {
 }
 
 export interface ChannelAdapter {
-  readonly provider: "resend" | "webhook";
+  readonly provider: "cloudflare" | "webhook";
   send(message: ChannelMessage): Promise<ChannelSendResult>;
+  healthCheck(): Promise<ChannelHealth>;
+}
+
+export interface WebhookChannelAdapter extends ChannelAdapter {
   verifyWebhook(request: Request, rawBody: string): Promise<WebhookVerification>;
   normalizeEvents(payload: unknown, eventId?: string): DeliveryEvent[];
-  healthCheck(): Promise<ChannelHealth>;
 }

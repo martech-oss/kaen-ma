@@ -1,3 +1,14 @@
+CREATE TABLE `agent_conversations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`workspace_id` text NOT NULL,
+	`owner_user_id` text NOT NULL,
+	`agent_key` text NOT NULL,
+	`created_at` text NOT NULL,
+	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`owner_user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `agent_conversations_owner_created_idx` ON `agent_conversations` (`workspace_id`,`owner_user_id`,`created_at`);--> statement-breakpoint
 CREATE TABLE `account` (
 	`id` text PRIMARY KEY NOT NULL,
 	`account_id` text NOT NULL,
@@ -429,7 +440,7 @@ CREATE TABLE `suppressions` (
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "suppressions_reason_check" CHECK("suppressions"."reason" IN ('global_unsubscribe', 'bounce', 'complaint', 'manual')),
+	CONSTRAINT "suppressions_reason_check" CHECK("suppressions"."reason" IN ('global_unsubscribe', 'bounce', 'complaint', 'provider', 'manual')),
 	CONSTRAINT "suppressions_target_check" CHECK("suppressions"."contact_id" IS NOT NULL OR "suppressions"."email" IS NOT NULL)
 );
 --> statement-breakpoint
@@ -565,13 +576,14 @@ CREATE TABLE `deliveries` (
 	FOREIGN KEY (`template_id`) REFERENCES `email_templates`(`id`) ON UPDATE no action ON DELETE set null,
 	CONSTRAINT "deliveries_channel_check" CHECK("deliveries"."channel" IN ('email', 'webhook')),
 	CONSTRAINT "deliveries_purpose_check" CHECK("deliveries"."purpose" IN ('transactional', 'marketing')),
-	CONSTRAINT "deliveries_provider_check" CHECK("deliveries"."provider" IN ('resend', 'webhook')),
+	CONSTRAINT "deliveries_provider_check" CHECK("deliveries"."provider" IN ('cloudflare', 'webhook')),
 	CONSTRAINT "deliveries_status_check" CHECK("deliveries"."status" IN ('queued', 'sending', 'accepted', 'delivered', 'failed', 'suppressed', 'cancelled'))
 );
 --> statement-breakpoint
 CREATE INDEX `deliveries_workspace_contact_created_idx` ON `deliveries` (`workspace_id`,`contact_id`,`created_at`);--> statement-breakpoint
 CREATE INDEX `deliveries_workspace_status_next_idx` ON `deliveries` (`workspace_id`,`status`,`next_attempt_at`);--> statement-breakpoint
 CREATE INDEX `deliveries_workspace_channel_created_idx` ON `deliveries` (`workspace_id`,`channel`,`created_at`);--> statement-breakpoint
+CREATE INDEX `deliveries_provider_message_idx` ON `deliveries` (`provider`,`provider_message_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `deliveries_workspace_idempotency_unique` ON `deliveries` (`workspace_id`,`idempotency_key`);--> statement-breakpoint
 CREATE TABLE `delivery_events` (
 	`id` text PRIMARY KEY NOT NULL,
@@ -587,7 +599,7 @@ CREATE TABLE `delivery_events` (
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`delivery_id`) REFERENCES `deliveries`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "delivery_events_type_check" CHECK("delivery_events"."type" IN ('accepted', 'delivered', 'opened', 'clicked', 'bounced', 'complained', 'unsubscribed', 'replied', 'failed'))
+	CONSTRAINT "delivery_events_type_check" CHECK("delivery_events"."type" IN ('accepted', 'delivered', 'deferred', 'opened', 'clicked', 'bounced', 'complained', 'unsubscribed', 'replied', 'failed', 'rejected'))
 );
 --> statement-breakpoint
 CREATE INDEX `delivery_events_workspace_delivery_idx` ON `delivery_events` (`workspace_id`,`delivery_id`,`occurred_at`);--> statement-breakpoint
@@ -598,26 +610,21 @@ CREATE TABLE `email_templates` (
 	`workspace_id` text NOT NULL,
 	`name` text NOT NULL,
 	`purpose` text NOT NULL,
-	`resend_template_id` text NOT NULL,
-	`resend_alias` text,
-	`subject` text,
-	`remote_status` text DEFAULT 'draft' NOT NULL,
-	`remote_current_version_id` text NOT NULL,
-	`has_unpublished_versions` integer DEFAULT false NOT NULL,
-	`variables` text DEFAULT '[]' NOT NULL,
+	`draft_subject` text NOT NULL,
+	`draft_content` text NOT NULL,
+	`draft_revision` integer DEFAULT 1 NOT NULL,
+	`published_subject` text,
+	`published_content` text,
+	`published_revision` integer,
 	`published_at` text,
-	`last_synced_at` text NOT NULL,
-	`sync_error` text,
 	`archived_at` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "email_templates_purpose_check" CHECK("email_templates"."purpose" IN ('transactional', 'marketing')),
-	CONSTRAINT "email_templates_remote_status_check" CHECK("email_templates"."remote_status" IN ('draft', 'published'))
+	CONSTRAINT "email_templates_purpose_check" CHECK("email_templates"."purpose" IN ('transactional', 'marketing'))
 );
 --> statement-breakpoint
 CREATE INDEX `email_templates_workspace_archived_updated_idx` ON `email_templates` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
-CREATE UNIQUE INDEX `email_templates_resend_template_unique` ON `email_templates` (`resend_template_id`);--> statement-breakpoint
 CREATE TABLE `inbound_emails` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -868,7 +875,7 @@ CREATE TABLE `provider_configs` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "provider_configs_provider_check" CHECK("provider_configs"."provider" IN ('resend', 'webhook'))
+	CONSTRAINT "provider_configs_provider_check" CHECK("provider_configs"."provider" IN ('cloudflare', 'webhook'))
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `provider_configs_workspace_provider_name_unique` ON `provider_configs` (`workspace_id`,`provider`,`name`);--> statement-breakpoint

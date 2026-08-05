@@ -1,11 +1,12 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { PermanentChannelError, ResendEmailAdapter } from "@openengage/channels";
 import { authSchema, createDatabase } from "@openengage/database";
+import { renderSystemEmail, type SystemEmailInput } from "@openengage/email-templates";
 import { betterAuth } from "better-auth/minimal";
 import { organization, twoFactor } from "better-auth/plugins";
 import { adminAc, memberAc, ownerAc } from "better-auth/plugins/organization/access";
 
 import type { RuntimeEnv } from "../env";
+import { CloudflareEmailAdapter } from "../messaging/cloudflare-email";
 
 export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
   const database = createDatabase(env.DB).orm;
@@ -36,9 +37,10 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
       minPasswordLength: 12,
       async sendResetPassword({ user, url }) {
         await sendAuthEmail(env, {
+          kind: "password-reset",
           to: user.email,
-          templateId: env.RESEND_TEMPLATE_PASSWORD_RESET,
-          variables: { APP_NAME: env.APP_NAME, ACTION_URL: url },
+          appName: env.APP_NAME,
+          actionUrl: url,
         });
       },
     },
@@ -47,9 +49,10 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
       autoSignInAfterVerification: true,
       async sendVerificationEmail({ user, url }) {
         await sendAuthEmail(env, {
+          kind: "email-verification",
           to: user.email,
-          templateId: env.RESEND_TEMPLATE_EMAIL_VERIFICATION,
-          variables: { APP_NAME: env.APP_NAME, ACTION_URL: url },
+          appName: env.APP_NAME,
+          actionUrl: url,
         });
       },
     },
@@ -72,14 +75,12 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
         async sendInvitationEmail(data) {
           const url = `${baseURL}/accept-invitation?id=${encodeURIComponent(data.id)}`;
           await sendAuthEmail(env, {
+            kind: "organization-invitation",
             to: data.email,
-            templateId: env.RESEND_TEMPLATE_ORGANIZATION_INVITATION,
-            variables: {
-              APP_NAME: env.APP_NAME,
-              ACTION_URL: url,
-              INVITER_NAME: data.inviter.user.name,
-              ORGANIZATION_NAME: data.organization.name,
-            },
+            appName: env.APP_NAME,
+            actionUrl: url,
+            inviterName: data.inviter.user.name,
+            organizationName: data.organization.name,
           });
         },
       }),
@@ -123,39 +124,28 @@ export function resolveAuthBaseURL(
 
 async function sendAuthEmail(
   env: RuntimeEnv,
-  input: {
-    to: string;
-    templateId: string;
-    variables: Record<string, string | number>;
-  },
+  input: SystemEmailInput & { to: string },
 ): Promise<void> {
-  if (!env.RESEND_SEND_API_KEY) {
-    throw new PermanentChannelError("RESEND_SEND_API_KEY is not configured");
-  }
-  const adapter = new ResendEmailAdapter({ apiKey: env.RESEND_SEND_API_KEY });
+  const { to, ...templateInput } = input;
+  const rendered = await renderSystemEmail(templateInput);
+  const adapter = new CloudflareEmailAdapter(env.EMAIL);
   await adapter.send({
     kind: "email",
-    idempotencyKey: `auth:${input.templateId}:${await authEmailKey(input.to, input.variables)}`,
+    idempotencyKey: `auth:${input.kind}:${await authEmailKey(to, rendered.subject)}`,
     purpose: "transactional",
-    to: input.to,
+    to,
     from: {
       email: env.TRANSACTIONAL_FROM_EMAIL,
       name: env.TRANSACTIONAL_FROM_NAME,
     },
-    template: {
-      id: input.templateId,
-      variables: input.variables,
-    },
+    ...rendered,
   });
 }
 
-async function authEmailKey(
-  recipient: string,
-  variables: Record<string, string | number>,
-): Promise<string> {
+async function authEmailKey(recipient: string, subject: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(JSON.stringify([recipient, variables])),
+    new TextEncoder().encode(JSON.stringify([recipient, subject])),
   );
   return [...new Uint8Array(digest)]
     .slice(0, 16)

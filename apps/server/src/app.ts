@@ -6,7 +6,6 @@ import { registerAgentGatewayRoutes } from "./agents/gateway";
 import { apiError, requestContext } from "./auth/access";
 import { createAuth } from "./auth/service";
 import { type AppEnvironment } from "./env";
-import { registerEmailWebhookRoutes } from "./messaging/webhook-routes";
 import { logError } from "./observability";
 import { createOrpcRequestHandler } from "./orpc/handler";
 import { createOpenApiRequestHandler, generateOpenApiDocument } from "./orpc/openapi-handler";
@@ -59,7 +58,6 @@ app.get("/api/openapi.json", async (context) =>
 );
 registerAgentGatewayRoutes(app);
 registerAssetRoutes(app);
-registerEmailWebhookRoutes(app);
 registerPublicRoutes(app);
 app.notFound((context) => apiError(context, 404, "not_found", "リソースが見つかりません"));
 app.onError((error, context) => {

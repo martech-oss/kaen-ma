@@ -19,7 +19,6 @@ import {
   Mail,
   MessageSquareText,
   PanelsTopLeft,
-  Send,
   Settings,
   Shapes,
   Tags,
@@ -77,7 +76,6 @@ const automationNavigation = linkOptions([
 const dealNavigation = linkOptions([{ to: "/deals", label: "Deals", icon: BriefcaseBusiness }]);
 
 const emailNavigation = linkOptions([
-  { to: "/emails", label: "キャンペーン", icon: Send },
   { to: "/emails/templates", label: "テンプレート", icon: FileText },
   { to: "/emails/variables", label: "メッセージ変数", icon: Braces },
   { to: "/emails/archive", label: "アーカイブ", icon: Archive },

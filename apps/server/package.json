@@ -19,6 +19,7 @@
     "@openengage/content-renderer": "workspace:*",
     "@openengage/core": "workspace:*",
     "@openengage/database": "workspace:*",
+    "@openengage/email-templates": "workspace:*",
     "@openengage/orpc": "workspace:*",
     "@orpc/openapi": "1.14.13",
     "@orpc/server": "^1.14.13",

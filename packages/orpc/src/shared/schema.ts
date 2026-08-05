@@ -20,7 +20,7 @@ export const CHANNELS = ["email", "webhook"] as const;
 export const channelSchema = z.enum(CHANNELS);
 export type Channel = z.infer<typeof channelSchema>;
 
-export const PROVIDERS = ["resend", "webhook"] as const;
+export const PROVIDERS = ["cloudflare", "webhook"] as const;
 export const providerSchema = z.enum(PROVIDERS);
 export type Provider = z.infer<typeof providerSchema>;
 
@@ -44,6 +44,7 @@ export type AssetChecksumAlgorithm = z.infer<typeof assetChecksumAlgorithmSchema
 export const DELIVERY_EVENT_TYPES = [
   "accepted",
   "delivered",
+  "deferred",
   "opened",
   "clicked",
   "bounced",
@@ -51,6 +52,7 @@ export const DELIVERY_EVENT_TYPES = [
   "unsubscribed",
   "replied",
   "failed",
+  "rejected",
 ] as const;
 export const deliveryEventTypeSchema = z.enum(DELIVERY_EVENT_TYPES);
 export type DeliveryEventType = z.infer<typeof deliveryEventTypeSchema>;
@@ -66,7 +68,7 @@ export interface DeliveryEvent {
   id: string;
   workspaceId: string;
   deliveryId: string;
-  provider: "resend" | "webhook";
+  provider: "cloudflare" | "webhook";
   providerMessageId?: string;
   type: DeliveryEventType;
   occurredAt: string;

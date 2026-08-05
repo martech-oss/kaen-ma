@@ -1,7 +1,8 @@
-import type { WorkspaceContext } from "@openengage/orpc";
+import type { ContentDocument, WorkspaceContext } from "@openengage/orpc";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
+import { organization } from "../auth/schema";
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { suppressions } from "../consent/schema";
 import { contactEvents } from "../contacts/schema";
@@ -19,16 +20,13 @@ export interface EmailTemplateRecord {
   id: string;
   name: string;
   purpose: string;
-  resendTemplateId: string;
-  resendAlias: string | null;
-  subject: string | null;
-  remoteStatus: string;
-  remoteCurrentVersionId: string;
-  hasUnpublishedVersions: boolean;
-  variables: string;
+  draftSubject: string;
+  draftContent: string;
+  draftRevision: number;
+  publishedSubject: string | null;
+  publishedContent: string | null;
+  publishedRevision: number | null;
   publishedAt: string | null;
-  lastSyncedAt: string;
-  syncError: string | null;
   archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -52,7 +50,7 @@ export interface DeliveryClaimRecord {
   contactId: string | null;
   channel: "email" | "webhook";
   purpose: "transactional" | "marketing";
-  provider: "resend" | "webhook";
+  provider: "cloudflare" | "webhook";
   recipient: string | null;
   topicId: string | null;
   idempotencyKey: string;
@@ -65,16 +63,13 @@ const emailTemplateSelection = {
   id: emailTemplates.id,
   name: emailTemplates.name,
   purpose: emailTemplates.purpose,
-  resendTemplateId: emailTemplates.resendTemplateId,
-  resendAlias: emailTemplates.resendAlias,
-  subject: emailTemplates.subject,
-  remoteStatus: emailTemplates.remoteStatus,
-  remoteCurrentVersionId: emailTemplates.remoteCurrentVersionId,
-  hasUnpublishedVersions: emailTemplates.hasUnpublishedVersions,
-  variables: emailTemplates.variables,
+  draftSubject: emailTemplates.draftSubject,
+  draftContent: emailTemplates.draftContent,
+  draftRevision: emailTemplates.draftRevision,
+  publishedSubject: emailTemplates.publishedSubject,
+  publishedContent: emailTemplates.publishedContent,
+  publishedRevision: emailTemplates.publishedRevision,
   publishedAt: emailTemplates.publishedAt,
-  lastSyncedAt: emailTemplates.lastSyncedAt,
-  syncError: emailTemplates.syncError,
   archivedAt: emailTemplates.archivedAt,
   createdAt: emailTemplates.createdAt,
   updatedAt: emailTemplates.updatedAt,
@@ -122,35 +117,10 @@ export class MessagingRepository {
     return row ?? null;
   }
 
-  /**
-   * Intentionally not workspace-scoped: `resend_template_id` is globally
-   * unique, and the import flow rejects a template already registered by any
-   * workspace.
-   */
-  public async findEmailTemplateByResendId(
-    resendTemplateId: string,
-  ): Promise<{ id: string } | null> {
-    const row = await this.database.orm
-      .select({ id: emailTemplates.id })
-      .from(emailTemplates)
-      .where(eq(emailTemplates.resendTemplateId, resendTemplateId))
-      .get();
-    return row ?? null;
-  }
-
-  /** Registers an imported Resend template; `variables` is serialized JSON. */
   public async createEmailTemplate(input: {
     name: string;
-    purpose: "marketing" | "transactional";
-    resendTemplateId: string;
-    resendAlias: string | null;
-    subject: string | null;
-    remoteStatus: "draft" | "published";
-    remoteCurrentVersionId: string;
-    hasUnpublishedVersions: boolean;
-    variables: string;
-    publishedAt: string | null;
-    syncError: string | null;
+    subject: string;
+    content: ContentDocument;
   }): Promise<{ id: string }> {
     const id = uuidv7();
     const now = new Date().toISOString();
@@ -158,57 +128,58 @@ export class MessagingRepository {
       id,
       workspaceId: this.context.workspaceId,
       name: input.name,
-      purpose: input.purpose,
-      resendTemplateId: input.resendTemplateId,
-      resendAlias: input.resendAlias,
-      subject: input.subject,
-      remoteStatus: input.remoteStatus,
-      remoteCurrentVersionId: input.remoteCurrentVersionId,
-      hasUnpublishedVersions: input.hasUnpublishedVersions,
-      variables: input.variables,
-      publishedAt: input.publishedAt,
-      lastSyncedAt: now,
-      syncError: input.syncError,
+      purpose: "transactional",
+      draftSubject: input.subject,
+      draftContent: JSON.stringify(input.content),
       createdAt: now,
       updatedAt: now,
     });
     return { id };
   }
 
-  /** Overwrites the mirrored remote state after a successful Resend sync. */
-  public async updateEmailTemplateFromRemote(
+  public async updateEmailTemplate(
     id: string,
-    input: {
-      name: string;
-      resendAlias: string | null;
-      subject: string | null;
-      remoteStatus: "draft" | "published";
-      remoteCurrentVersionId: string;
-      hasUnpublishedVersions: boolean;
-      variables: string;
-      publishedAt: string | null;
-      syncError: string | null;
-    },
-  ): Promise<void> {
+    input: { name: string; subject: string; content: ContentDocument },
+  ): Promise<boolean> {
     const now = new Date().toISOString();
-    await this.database.orm
+    const result = await this.database.orm
       .update(emailTemplates)
       .set({
         name: input.name,
-        resendAlias: input.resendAlias,
-        subject: input.subject,
-        remoteStatus: input.remoteStatus,
-        remoteCurrentVersionId: input.remoteCurrentVersionId,
-        hasUnpublishedVersions: input.hasUnpublishedVersions,
-        variables: input.variables,
-        publishedAt: input.publishedAt,
-        lastSyncedAt: now,
-        syncError: input.syncError,
+        draftSubject: input.subject,
+        draftContent: JSON.stringify(input.content),
+        draftRevision: sql`${emailTemplates.draftRevision} + 1`,
         updatedAt: now,
       })
       .where(
-        and(eq(emailTemplates.workspaceId, this.context.workspaceId), eq(emailTemplates.id, id)),
+        and(
+          eq(emailTemplates.workspaceId, this.context.workspaceId),
+          eq(emailTemplates.id, id),
+          isNull(emailTemplates.archivedAt),
+        ),
       );
+    return result.meta.changes === 1;
+  }
+
+  public async publishEmailTemplate(id: string): Promise<boolean> {
+    const now = new Date().toISOString();
+    const result = await this.database.orm
+      .update(emailTemplates)
+      .set({
+        publishedSubject: emailTemplates.draftSubject,
+        publishedContent: emailTemplates.draftContent,
+        publishedRevision: emailTemplates.draftRevision,
+        publishedAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(emailTemplates.workspaceId, this.context.workspaceId),
+          eq(emailTemplates.id, id),
+          isNull(emailTemplates.archivedAt),
+        ),
+      );
+    return result.meta.changes === 1;
   }
 
   public async archiveEmailTemplate(id: string): Promise<boolean> {
@@ -328,20 +299,16 @@ export class MessagingWorkerRepository {
     templateId: string,
   ): Promise<{
     id: string;
-    purpose: "marketing" | "transactional";
-    resendTemplateId: string;
-    remoteStatus: "draft" | "published";
-    variables: string;
-    syncError: string | null;
+    purpose: "transactional";
+    subject: string;
+    content: string;
   } | null> {
     const row = await this.database.orm
       .select({
         id: emailTemplates.id,
         purpose: emailTemplates.purpose,
-        resendTemplateId: emailTemplates.resendTemplateId,
-        remoteStatus: emailTemplates.remoteStatus,
-        variables: emailTemplates.variables,
-        syncError: emailTemplates.syncError,
+        subject: emailTemplates.publishedSubject,
+        content: emailTemplates.publishedContent,
       })
       .from(emailTemplates)
       .where(
@@ -349,16 +316,13 @@ export class MessagingWorkerRepository {
           eq(emailTemplates.workspaceId, workspaceId),
           eq(emailTemplates.id, templateId),
           isNull(emailTemplates.archivedAt),
+          eq(emailTemplates.purpose, "transactional"),
+          isNotNull(emailTemplates.publishedRevision),
         ),
       )
       .get();
-    if (!row) return null;
-    // Check constraints restrict both columns to these unions.
-    return {
-      ...row,
-      purpose: row.purpose as "marketing" | "transactional",
-      remoteStatus: row.remoteStatus as "draft" | "published",
-    };
+    if (!row?.subject || !row.content) return null;
+    return { id: row.id, purpose: "transactional", subject: row.subject, content: row.content };
   }
 
   /** Live message variables as a key → value map, for template resolution. */
@@ -371,6 +335,17 @@ export class MessagingWorkerRepository {
       )
       .orderBy(asc(messageVariables.key));
     return Object.fromEntries(rows.map((variable) => [variable.key, variable.value]));
+  }
+
+  public async readWorkspaceTemplateContext(
+    workspaceId: string,
+  ): Promise<{ id: string; name: string }> {
+    const row = await this.database.orm
+      .select({ id: organization.id, name: organization.name })
+      .from(organization)
+      .where(eq(organization.id, workspaceId))
+      .get();
+    return row ?? { id: workspaceId, name: "" };
   }
 
   public async findEnabledWebhookEndpoint(
@@ -420,7 +395,7 @@ export class MessagingWorkerRepository {
     enrollmentId: string | null;
     channel: "email" | "webhook";
     purpose: "marketing" | "transactional";
-    provider: "resend" | "webhook";
+    provider: "cloudflare" | "webhook";
     recipient: string;
     topicId?: string | null;
     templateId?: string | null;
@@ -476,7 +451,7 @@ export class MessagingWorkerRepository {
       ...row,
       channel: row.channel as "email" | "webhook",
       purpose: row.purpose as "transactional" | "marketing",
-      provider: row.provider as "resend" | "webhook",
+      provider: row.provider as "cloudflare" | "webhook",
     };
   }
 
@@ -498,6 +473,34 @@ export class MessagingWorkerRepository {
       .update(deliveries)
       .set({ status: "suppressed", lastError: reason, updatedAt: new Date().toISOString() })
       .where(eq(deliveries.id, deliveryId));
+  }
+
+  public async markDeliveryProviderSuppressed(deliveryId: string): Promise<void> {
+    const now = new Date().toISOString();
+    const orm = this.database.orm;
+    await orm.batch([
+      orm
+        .update(deliveries)
+        .set({ status: "suppressed", lastError: "provider_suppressed", updatedAt: now })
+        .where(eq(deliveries.id, deliveryId)),
+      orm
+        .insert(suppressions)
+        .select(
+          orm
+            .select({
+              id: sql<string>`${uuidv7()}`.as("id"),
+              workspaceId: deliveries.workspaceId,
+              contactId: deliveries.contactId,
+              email: deliveries.recipient,
+              reason: sql<string>`'provider'`.as("reason"),
+              provider: sql<string>`'cloudflare'`.as("provider"),
+              createdAt: sql<string>`${now}`.as("created_at"),
+            })
+            .from(deliveries)
+            .where(eq(deliveries.id, deliveryId)),
+        )
+        .onConflictDoNothing(),
+    ]);
   }
 
   /**
@@ -661,58 +664,48 @@ export class MessagingWorkerRepository {
     ]);
   }
 
-  /**
-   * Applies one normalized Resend webhook event in a single atomic D1 batch:
-   * records the event (deduplicated on workspace + provider + event id, and
-   * silently dropped when the delivery does not exist), optionally moves the
-   * delivery status, and optionally writes the suppression that a bounce,
-   * complaint or unsubscribe implies. The suppression insert lives here rather
-   * than in the consent repository so it stays in the same atomic batch.
-   * Returns whether the event row was actually inserted.
-   */
-  public async applyResendDeliveryEvent(input: {
-    workspaceId: string;
-    deliveryId: string;
+  public async applyCloudflareDeliveryEvent(input: {
     providerEventId: string;
-    providerMessageId: string | null;
+    providerMessageId: string;
     type: string;
     occurredAt: string;
     metadata: string;
     status: "delivered" | "failed" | null;
-    suppressionReason: "bounce" | "complaint" | "global_unsubscribe" | null;
+    suppressionReason: "bounce" | "complaint" | "provider" | null;
   }): Promise<boolean> {
+    const delivery = await this.database.orm
+      .select({
+        id: deliveries.id,
+        workspaceId: deliveries.workspaceId,
+        contactId: deliveries.contactId,
+        recipient: deliveries.recipient,
+      })
+      .from(deliveries)
+      .where(
+        and(
+          eq(deliveries.provider, "cloudflare"),
+          eq(deliveries.providerMessageId, input.providerMessageId),
+        ),
+      )
+      .get();
+    if (!delivery) return false;
     const now = new Date().toISOString();
     const orm = this.database.orm;
-    const deliveryScope = and(
-      eq(deliveries.workspaceId, input.workspaceId),
-      eq(deliveries.id, input.deliveryId),
-    );
-    // insert-from-select: drizzle emits the full column list in declaration
-    // order, so each SELECT below lists every target column in exactly that
-    // order.
     const statements: [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]] = [
       orm
         .insert(deliveryEvents)
-        .select(
-          orm
-            .select({
-              id: sql<string>`${uuidv7()}`.as("id"),
-              workspaceId: sql<string>`${input.workspaceId}`.as("workspace_id"),
-              deliveryId: deliveries.id,
-              provider: sql<string>`'resend'`.as("provider"),
-              providerEventId: sql<string>`${input.providerEventId}`.as("provider_event_id"),
-              providerMessageId: sql<string | null>`${input.providerMessageId}`.as(
-                "provider_message_id",
-              ),
-              type: sql<string>`${input.type}`.as("type"),
-              occurredAt: sql<string>`${input.occurredAt}`.as("occurred_at"),
-              metadata: sql<string>`${input.metadata}`.as("metadata"),
-              archivedAt: sql<string | null>`null`.as("archived_at"),
-              createdAt: sql<string>`${now}`.as("created_at"),
-            })
-            .from(deliveries)
-            .where(deliveryScope),
-        )
+        .values({
+          id: uuidv7(),
+          workspaceId: delivery.workspaceId,
+          deliveryId: delivery.id,
+          provider: "cloudflare",
+          providerEventId: input.providerEventId,
+          providerMessageId: input.providerMessageId,
+          type: input.type,
+          occurredAt: input.occurredAt,
+          metadata: input.metadata,
+          createdAt: now,
+        })
         .onConflictDoNothing(),
     ];
     if (input.status) {
@@ -720,27 +713,22 @@ export class MessagingWorkerRepository {
         orm
           .update(deliveries)
           .set({ status: input.status, updatedAt: new Date().toISOString() })
-          .where(deliveryScope),
+          .where(eq(deliveries.id, delivery.id)),
       );
     }
-    if (input.suppressionReason) {
+    if (input.suppressionReason && (delivery.contactId || delivery.recipient)) {
       statements.push(
         orm
           .insert(suppressions)
-          .select(
-            orm
-              .select({
-                id: sql<string>`${uuidv7()}`.as("id"),
-                workspaceId: deliveries.workspaceId,
-                contactId: deliveries.contactId,
-                email: deliveries.recipient,
-                reason: sql<string>`${input.suppressionReason}`.as("reason"),
-                provider: sql<string>`'resend'`.as("provider"),
-                createdAt: sql<string>`${input.occurredAt}`.as("created_at"),
-              })
-              .from(deliveries)
-              .where(deliveryScope),
-          )
+          .values({
+            id: uuidv7(),
+            workspaceId: delivery.workspaceId,
+            contactId: delivery.contactId,
+            email: delivery.recipient,
+            reason: input.suppressionReason,
+            provider: "cloudflare",
+            createdAt: input.occurredAt,
+          })
           .onConflictDoNothing(),
       );
     }

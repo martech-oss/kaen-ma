@@ -3,13 +3,12 @@ import type {
   EmailCampaign,
   EmailTemplate,
   MessageVariable,
-  ResendTemplateVariable,
   SubscriptionTopicOption,
 } from "@openengage/orpc";
 
 import { orpcQuery } from "@/lib/orpc";
 
-export type { EmailCampaign, EmailTemplate, MessageVariable, ResendTemplateVariable };
+export type { EmailCampaign, EmailTemplate, MessageVariable };
 
 /** Retained aliases so the table and form components read the same. */
 export type EmailCampaignRow = EmailCampaign;

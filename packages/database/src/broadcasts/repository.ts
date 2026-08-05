@@ -57,8 +57,8 @@ export interface BroadcastSendRecord {
   startedAt: string;
   segmentKind: "static" | "dynamic";
   filterAst: string | null;
-  resendTemplateId: string;
-  variables: string;
+  subject: string;
+  content: string;
 }
 
 /** The contact fields resolved into broadcast template variables. */
@@ -108,31 +108,13 @@ export class BroadcastRepository {
 
   /**
    * A broadcast may only reference a segment of its workspace and a live,
-   * published marketing template without sync errors.
+   * published marketing template. Marketing is currently disabled, so this
+   * guard intentionally never succeeds.
    */
   public async hasValidBroadcastResources(segmentId: string, templateId: string): Promise<boolean> {
-    const row = await this.database.orm
-      .select({ id: segments.id })
-      .from(segments)
-      .innerJoin(
-        emailTemplates,
-        and(
-          eq(emailTemplates.id, templateId),
-          eq(emailTemplates.workspaceId, segments.workspaceId),
-        ),
-      )
-      .where(
-        and(
-          eq(segments.workspaceId, this.context.workspaceId),
-          eq(segments.id, segmentId),
-          eq(emailTemplates.purpose, "marketing"),
-          isNull(emailTemplates.archivedAt),
-          eq(emailTemplates.remoteStatus, "published"),
-          isNull(emailTemplates.syncError),
-        ),
-      )
-      .get();
-    return row !== undefined;
+    void segmentId;
+    void templateId;
+    return false;
   }
 
   public async listBroadcasts(archived: boolean): Promise<BroadcastCampaignRecord[]> {
@@ -276,7 +258,7 @@ export class BroadcastRepository {
         segmentName: segments.name,
         memberCount: segments.memberCount,
         templateName: emailTemplates.name,
-        subject: emailTemplates.subject,
+        subject: emailTemplates.publishedSubject,
         recipientCount: sql<number>`(SELECT COUNT(*) FROM ${broadcastRecipients}
           WHERE ${broadcastRecipients.workspaceId} = ${broadcasts.workspaceId}
             AND ${broadcastRecipients.broadcastId} = ${broadcasts.id})`
@@ -338,8 +320,8 @@ export class BroadcastWorkerRepository {
         startedAt: broadcasts.startedAt,
         segmentKind: segments.kind,
         filterAst: segments.filterAst,
-        resendTemplateId: emailTemplates.resendTemplateId,
-        variables: emailTemplates.variables,
+        subject: emailTemplates.publishedSubject,
+        content: emailTemplates.publishedContent,
       })
       .from(broadcasts)
       .innerJoin(
@@ -361,19 +343,20 @@ export class BroadcastWorkerRepository {
           eq(broadcasts.id, broadcastId),
           eq(broadcasts.status, "sending"),
           eq(emailTemplates.purpose, "marketing"),
-          eq(emailTemplates.remoteStatus, "published"),
-          isNull(emailTemplates.syncError),
+          isNotNull(emailTemplates.publishedRevision),
           isNull(emailTemplates.archivedAt),
         ),
       )
       .get();
-    if (!row) return null;
+    if (!row?.subject || !row.content) return null;
     return {
       ...row,
       // Both start paths coalesce started_at, so a sending broadcast has one;
       // the check constraint restricts segment kinds to this union.
       startedAt: row.startedAt as string,
       segmentKind: row.segmentKind as "static" | "dynamic",
+      subject: row.subject,
+      content: row.content,
     };
   }
 
@@ -530,7 +513,7 @@ export class BroadcastWorkerRepository {
             broadcastId,
             channel: "email",
             purpose: "marketing",
-            provider: "resend",
+            provider: "cloudflare",
             recipient: outcome.delivery.recipient,
             topicId: outcome.delivery.topicId,
             templateId: outcome.delivery.templateId,

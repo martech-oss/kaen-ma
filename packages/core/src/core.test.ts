@@ -40,9 +40,9 @@ describe("automation validation", () => {
     expect(validateAutomation(definition).map((issue) => issue.code)).toContain("cycle");
   });
 
-  it("accepts a hosted email template action", () => {
+  it("accepts a published email template action", () => {
     const definition: AutomationDefinition = {
-      name: "resend campaign",
+      name: "transactional welcome flow",
       description: "",
       timezone: "UTC",
       nodes: [

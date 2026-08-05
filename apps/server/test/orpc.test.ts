@@ -90,15 +90,14 @@ describe("oRPC API", () => {
       client.contactResources.createTag({ name: tagName, color: "#0f766e" }),
     ).resolves.toMatchObject({ name: tagName, color: "#0f766e" });
 
-    // /providers/resend has no procedure; call REST directly to keep asserting
-    // that a removed endpoint never persists credentials.
+    // Email Service is configured only through Worker bindings. Provider
+    // credentials must never be accepted or persisted through the API.
     const removedProviderConfig = await exports.default.fetch(
-      new Request("http://localhost:8787/api/v1/providers/resend", {
+      new Request("http://localhost:8787/api/v1/providers/cloudflare", {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify({
-          apiKey: "re_must_not_be_saved",
-          webhookSecret: "whsec_must_not_be_saved",
+          apiToken: "must_not_be_saved",
         }),
       }),
     );

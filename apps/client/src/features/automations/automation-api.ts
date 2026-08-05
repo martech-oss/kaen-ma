@@ -8,7 +8,7 @@ export function automationDraftQueryOptions(id: string) {
   return orpcQuery.automations.getDraft.queryOptions({ input: { id } });
 }
 
-/** Only marketing templates synced and ready to send are offered as a node's email action. */
+/** The editor filters this list to published Transactional templates. */
 export function emailTemplateOptionsQueryOptions() {
   return orpcQuery.emails.listTemplates.queryOptions({ input: { archived: false } });
 }

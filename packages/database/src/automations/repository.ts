@@ -863,7 +863,7 @@ export class AutomationRepository {
     return row ?? null;
   }
 
-  /** Of the given templates, those synced to Resend and ready to send. */
+  /** Of the given templates, those published locally and ready to send. */
   public async listPublishedTemplateIds(templateIds: string[]): Promise<string[]> {
     const rows = await this.database.orm
       .select({ id: emailTemplates.id })
@@ -872,8 +872,8 @@ export class AutomationRepository {
         and(
           eq(emailTemplates.workspaceId, this.context.workspaceId),
           isNull(emailTemplates.archivedAt),
-          eq(emailTemplates.remoteStatus, "published"),
-          isNull(emailTemplates.syncError),
+          eq(emailTemplates.purpose, "transactional"),
+          isNotNull(emailTemplates.publishedRevision),
           inArray(emailTemplates.id, templateIds),
         ),
       );

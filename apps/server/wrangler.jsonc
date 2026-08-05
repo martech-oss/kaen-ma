@@ -25,6 +25,12 @@
       "bucket_name": "openengage-assets",
     },
   ],
+  "send_email": [
+    {
+      "name": "EMAIL",
+      "allowed_sender_addresses": ["notifications@example.com"],
+    },
+  ],
   "queues": {
     "producers": [
       { "binding": "CAMPAIGN_QUEUE", "queue": "openengage-campaign" },
@@ -50,6 +56,13 @@
         "max_batch_size": 50,
         "max_batch_timeout": 10,
       },
+      {
+        "queue": "openengage-email-events",
+        "max_batch_size": 50,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "openengage-dead-letter",
+      },
     ],
   },
   "triggers": {
@@ -61,11 +74,6 @@
     "ENVIRONMENT": "development",
     "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com",
     "TRANSACTIONAL_FROM_NAME": "OpenEngage",
-    "MARKETING_FROM_EMAIL": "news@example.com",
-    "MARKETING_FROM_NAME": "OpenEngage",
-    "RESEND_TEMPLATE_PASSWORD_RESET": "openengage-password-reset",
-    "RESEND_TEMPLATE_EMAIL_VERIFICATION": "openengage-email-verification",
-    "RESEND_TEMPLATE_ORGANIZATION_INVITATION": "openengage-organization-invitation",
     "REPLY_DOMAIN": "reply.example.com",
     "RAW_EVENT_RETENTION_DAYS": "90",
   },

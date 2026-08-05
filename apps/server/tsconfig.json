@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "jsx": "react-jsx",
     "types": ["./worker-configuration.d.ts"],
     "noEmit": true
   },

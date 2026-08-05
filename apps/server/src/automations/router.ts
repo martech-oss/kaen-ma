@@ -83,7 +83,7 @@ export const publishAutomationProcedure = authed.automations.publish.handler(
       const unavailableIds = templateIds.filter((templateId) => !availableIds.has(templateId));
       if (unavailableIds.length > 0) {
         throw errors.INVALID_GRAPH({
-          message: "公開済みのResend Templateへ同期されていないメールノードがあります",
+          message: "公開済みのTransactionalテンプレートを参照していないメールノードがあります",
           data: { templateIds: unavailableIds },
         });
       }
