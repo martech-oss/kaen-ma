@@ -1,3 +1,6 @@
+import { oc } from "@orpc/contract";
+import * as z from "zod";
+
 import {
   contactCreateSchema,
   contactListInputSchema,
@@ -6,8 +9,6 @@ import {
   contactTimelineEventSchema,
   contactUpdateSchema,
 } from "@openengage/core/contacts";
-import { oc } from "@orpc/contract";
-import * as z from "zod";
 
 import { workspaceErrors } from "../shared/errors";
 

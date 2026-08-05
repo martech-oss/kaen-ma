@@ -1,7 +1,8 @@
-import { contract } from "@openengage/orpc";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
+
+import { contract } from "@openengage/orpc";
 
 /**
  * The SDK is generated from the same oRPC contract that serves /api/rpc and

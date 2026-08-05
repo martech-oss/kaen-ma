@@ -1,15 +1,9 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
     "jsx": "react-jsx",
-    "lib": ["ESNext", "DOM"],
     "types": ["node"],
     "allowImportingTsExtensions": true,
-    "verbatimModuleSyntax": true,
-    "strict": true,
-    "skipLibCheck": true,
     "noEmit": true
   },
   "include": ["src", "worker-configuration.d.ts", "../server/worker-configuration.d.ts"]

@@ -1,8 +1,9 @@
+import { createMiddleware } from "hono/factory";
+
 import { timingSafeEqual } from "@openengage/channels";
 import { ApiKeyRepository, createDatabase, resolveMemberContext } from "@openengage/database";
 import type { OpenEngageDatabase } from "@openengage/database";
 import type { WorkspaceContext } from "@openengage/orpc";
-import { createMiddleware } from "hono/factory";
 
 import type { AppEnvironment, SessionValue } from "../env";
 import { sha256Hex } from "../platform/crypto";

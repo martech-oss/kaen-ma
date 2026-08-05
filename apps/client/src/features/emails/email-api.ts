@@ -1,11 +1,10 @@
+import { orpcQuery } from "@/lib/orpc";
 import type {
   EmailSegmentOption,
   EmailTemplate,
   MessageVariable,
   SubscriptionTopicOption,
 } from "@openengage/core/messaging";
-
-import { orpcQuery } from "@/lib/orpc";
 
 export type { EmailTemplate, MessageVariable };
 

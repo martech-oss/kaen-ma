@@ -1,3 +1,6 @@
+import { oc } from "@orpc/contract";
+import * as z from "zod";
+
 import {
   emailTemplatePreviewSchema,
   emailSegmentOptionSchema,
@@ -7,8 +10,6 @@ import {
   messageVariableWriteSchema,
   subscriptionTopicOptionSchema,
 } from "@openengage/core/messaging";
-import { oc } from "@orpc/contract";
-import * as z from "zod";
 
 import { workspaceErrors } from "../shared/errors";
 

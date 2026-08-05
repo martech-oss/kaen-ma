@@ -1,3 +1,5 @@
+import { and, asc, count, desc, eq, isNull, like, min, ne, or, sql, type SQL } from "drizzle-orm";
+
 import {
   dealSummarySchema,
   dealTaskSchema,
@@ -9,7 +11,6 @@ import {
   type DealTaskType,
 } from "@openengage/core/deals";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { and, asc, count, desc, eq, isNull, like, min, ne, or, sql, type SQL } from "drizzle-orm";
 
 import { member, user } from "../auth/schema";
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";

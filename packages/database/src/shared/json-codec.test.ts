@@ -1,5 +1,6 @@
-import { jsonRecordSchema, stringArraySchema } from "@openengage/core/shared";
 import { describe, expect, it } from "vitest";
+
+import { jsonRecordSchema, stringArraySchema } from "@openengage/core/shared";
 
 import { DatabaseDecodeError, decodeJson, decodeNullableJson, encodeJson } from "./json-codec";
 

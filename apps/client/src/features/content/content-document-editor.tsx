@@ -1,4 +1,3 @@
-import type { ContentDocument, EmailBlock } from "@openengage/orpc";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -6,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import type { ContentDocument, EmailBlock } from "@openengage/orpc";
 
 export function ContentDocumentEditor({
   value,

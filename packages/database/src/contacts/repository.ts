@@ -1,11 +1,4 @@
 import {
-  contactSchema,
-  type Contact,
-  type ContactCreate,
-  type ContactUpdate,
-} from "@openengage/core/contacts";
-import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
-import {
   and,
   asc,
   count,
@@ -22,6 +15,14 @@ import {
   type SQL,
   type SQLWrapper,
 } from "drizzle-orm";
+
+import {
+  contactSchema,
+  type Contact,
+  type ContactCreate,
+  type ContactUpdate,
+} from "@openengage/core/contacts";
+import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { deliveries } from "../messaging/schema";

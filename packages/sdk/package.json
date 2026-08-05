@@ -17,7 +17,7 @@
     "@orpc/openapi-client": "1.14.13"
   },
   "devDependencies": {
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

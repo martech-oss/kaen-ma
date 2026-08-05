@@ -1,10 +1,11 @@
+import { describe, expect, it, vi } from "vitest";
+
 import {
   PermanentChannelError,
   RecipientSuppressedChannelError,
   TransientChannelError,
   type ChannelMessage,
 } from "@openengage/channels";
-import { describe, expect, it, vi } from "vitest";
 
 import { CloudflareEmailAdapter } from "./cloudflare-email";
 

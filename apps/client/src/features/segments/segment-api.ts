@@ -1,6 +1,5 @@
-import type { SegmentFilter } from "@openengage/core/segments";
-
 import { orpc, orpcQuery } from "@/lib/orpc";
+import type { SegmentFilter } from "@openengage/core/segments";
 
 export function segmentsQueryOptions() {
   return orpcQuery.segments.list.queryOptions();

@@ -1,4 +1,3 @@
-import type { Dashboard as DashboardData } from "@openengage/core/reports";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Activity, Gauge, Send, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
@@ -20,6 +19,7 @@ import {
   toDeliveryHealthTrend,
 } from "@/features/dashboard/dashboard-api";
 import { formatDateTime, formatShortDate } from "@/lib/format";
+import type { Dashboard as DashboardData } from "@openengage/core/reports";
 
 export type { DashboardData };
 

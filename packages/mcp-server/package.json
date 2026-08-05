@@ -13,11 +13,11 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "openengage": "workspace:*",
-    "zod": "^4.4.3"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

@@ -1,5 +1,6 @@
-import type { AutomationDefinition } from "@openengage/core/automations";
 import { describe, expect, it } from "vitest";
+
+import type { AutomationDefinition } from "@openengage/core/automations";
 
 import { automationBuilderReducer } from "./use-automation-builder";
 

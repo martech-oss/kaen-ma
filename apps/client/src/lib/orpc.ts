@@ -1,10 +1,11 @@
-import { contract } from "@openengage/orpc";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
 import { createTanstackQueryUtils } from "@orpc/tanstack-query";
 import { createIsomorphicFn } from "@tanstack/react-start";
 import { getRequestHeaders, getRequestUrl } from "@tanstack/react-start/server";
+
+import { contract } from "@openengage/orpc";
 
 const getRpcUrl = createIsomorphicFn()
   .client(() => new URL("/api/rpc", window.location.origin))

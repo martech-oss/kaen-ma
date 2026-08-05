@@ -1,4 +1,3 @@
-import type { WorkspaceRole } from "@openengage/core/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ArchiveRestore, Pencil, Replace, Search, Upload, X } from "lucide-react";
@@ -41,6 +40,7 @@ import {
 import { CopyButton } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
+import type { WorkspaceRole } from "@openengage/core/shared";
 
 const WRITE_ROLES = new Set<WorkspaceRole>(["marketer", "admin", "owner"]);
 const DELETE_ROLES = new Set<WorkspaceRole>(["admin", "owner"]);

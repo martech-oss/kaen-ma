@@ -2,7 +2,7 @@
   "name": "create-openengage",
   "version": "0.1.0",
   "bin": {
-    "create-openengage": "./dist/index.js"
+    "create-openengage": "./dist/bin.js"
   },
   "type": "module",
   "scripts": {
@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

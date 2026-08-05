@@ -1,3 +1,6 @@
+import { keepPreviousData, queryOptions } from "@tanstack/react-query";
+
+import { orpc, orpcQuery } from "@/lib/orpc";
 import type {
   CompanyOption,
   ContactBulkAction,
@@ -9,9 +12,6 @@ import type {
   SegmentOption,
   Tag as TagOption,
 } from "@openengage/core/contacts";
-import { keepPreviousData, queryOptions } from "@tanstack/react-query";
-
-import { orpc, orpcQuery } from "@/lib/orpc";
 
 export type { CompanyOption, ContactOptions, SegmentOption, TagOption };
 

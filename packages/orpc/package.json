@@ -13,10 +13,10 @@
   "dependencies": {
     "@openengage/core": "workspace:*",
     "@orpc/contract": "^1.14.13",
-    "zod": "^4.4.3"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

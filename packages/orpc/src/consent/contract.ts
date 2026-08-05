@@ -1,6 +1,7 @@
-import { subscriptionTopicRowSchema } from "@openengage/core/consent";
 import { oc } from "@orpc/contract";
 import * as z from "zod";
+
+import { subscriptionTopicRowSchema } from "@openengage/core/consent";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
 

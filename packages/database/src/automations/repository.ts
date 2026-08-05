@@ -1,9 +1,3 @@
-import { assertJobTransition, type JobStatus } from "@openengage/core";
-import {
-  automationDefinitionSchema,
-  type AutomationDefinition,
-} from "@openengage/core/automations";
-import { jsonRecordSchema, type JsonRecord, type WorkspaceContext } from "@openengage/core/shared";
 import {
   and,
   asc,
@@ -20,6 +14,13 @@ import {
   or,
   sql,
 } from "drizzle-orm";
+
+import { assertJobTransition, type JobStatus } from "@openengage/core";
+import {
+  automationDefinitionSchema,
+  type AutomationDefinition,
+} from "@openengage/core/automations";
+import { jsonRecordSchema, type JsonRecord, type WorkspaceContext } from "@openengage/core/shared";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";

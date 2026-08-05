@@ -1,6 +1,7 @@
-import { ContactRepository, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+
+import { ContactRepository, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
 
 import type { RuntimeEnv } from "../src/env";
 import { processCloudflareEmailEvent } from "../src/messaging/cloudflare-events";

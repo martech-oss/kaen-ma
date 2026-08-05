@@ -8,7 +8,7 @@
   },
   "ignorePatterns": [
     "apps/client/src/routeTree.gen.ts",
-    "apps/server/worker-configuration.d.ts",
+    "**/worker-configuration.d.ts",
     "packages/database/migrations/meta/**",
     "**/coverage/**",
     "**/dist/**"
@@ -51,7 +51,7 @@
       }
     },
     {
-      "files": ["packages/create-kaenma/**/*.ts", "packages/mcp-server/**/*.ts"],
+      "files": ["packages/create-openengage/**/*.ts", "packages/mcp-server/**/*.ts"],
       "env": {
         "node": true
       }

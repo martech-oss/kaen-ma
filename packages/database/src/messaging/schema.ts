@@ -1,11 +1,12 @@
+import { sql } from "drizzle-orm";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+
 import {
   CHANNELS,
   DELIVERY_EVENT_TYPES,
   MESSAGE_PURPOSES,
   PROVIDERS,
 } from "@openengage/core/shared";
-import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import { organization } from "../auth/schema";
 import { automationEnrollments } from "../automations/schema";

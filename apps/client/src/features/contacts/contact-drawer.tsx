@@ -1,4 +1,3 @@
-import { type ContactProfile } from "@openengage/core/contacts";
 import {
   Archive,
   Building2,
@@ -44,6 +43,7 @@ import { useFormSubmission } from "@/hooks/use-form-submission";
 import { nullableString } from "@/lib/form-data";
 import { formatLongDateTime } from "@/lib/format";
 import { cn, getFormString } from "@/lib/utils";
+import { type ContactProfile } from "@openengage/core/contacts";
 
 export type { ContactProfile };
 

@@ -1,3 +1,7 @@
+import { env, exports } from "cloudflare:workers";
+import { and, eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+
 import {
   companies,
   companyContacts,
@@ -11,9 +15,6 @@ import {
   tags,
   uuidv7,
 } from "@openengage/database";
-import { env, exports } from "cloudflare:workers";
-import { and, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
 
 import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";

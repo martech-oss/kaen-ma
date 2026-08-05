@@ -1,6 +1,7 @@
+import { and, asc, desc, eq, like, ne, or, sql } from "drizzle-orm";
+
 import type { Company, CompanyCreate, CompanyUpdate } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
-import { and, asc, desc, eq, like, ne, or, sql } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { escapeLike } from "../shared/database-utils";

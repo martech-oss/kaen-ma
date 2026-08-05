@@ -1,3 +1,9 @@
+import { createORPCClient } from "@orpc/client";
+import { RPCLink } from "@orpc/client/fetch";
+import type { ContractRouterClient } from "@orpc/contract";
+import { makeSignature } from "better-auth/crypto";
+import { exports } from "cloudflare:workers";
+
 import {
   apiKeys,
   createDatabase,
@@ -8,11 +14,6 @@ import {
   uuidv7,
 } from "@openengage/database";
 import { contract, type WorkspaceRole } from "@openengage/orpc";
-import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
-import type { ContractRouterClient } from "@orpc/contract";
-import { makeSignature } from "better-auth/crypto";
-import { exports } from "cloudflare:workers";
 
 import { randomIdentifier, sha256Hex } from "../src/platform/crypto";
 

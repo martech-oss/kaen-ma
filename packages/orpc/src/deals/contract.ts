@@ -1,3 +1,6 @@
+import { oc } from "@orpc/contract";
+import * as z from "zod";
+
 import {
   dealCreateSchema,
   dealDetailDataSchema,
@@ -9,8 +12,6 @@ import {
   dealTaskUpdateSchema,
   dealUpdateSchema,
 } from "@openengage/core/deals";
-import { oc } from "@orpc/contract";
-import * as z from "zod";
 
 import { workspaceErrors } from "../shared/errors";
 

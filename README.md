@@ -402,8 +402,10 @@ GET /api/openapi.json
 GET    /api/v1/contacts
 POST   /api/v1/contacts
 GET    /api/v1/contacts/:id/timeline
-POST   /api/v1/contacts/import
-POST   /api/v1/contacts/export
+POST   /api/v1/contacts/:id/archive
+POST   /api/v1/contacts/:id/restore
+POST   /api/v1/contacts/imports
+POST   /api/v1/contacts/exports
 
 GET    /api/v1/segments
 POST   /api/v1/segments
@@ -424,14 +426,18 @@ PATCH  /api/v1/deals/:dealId/tasks/:taskId
 
 GET    /api/v1/reports/:category
 
-GET    /api/v1/email-templates
-POST   /api/v1/email-templates
-POST   /api/v1/email-templates/:id/sync
-POST   /api/v1/email-templates/:id/archive
-GET    /api/v1/forms
-POST   /api/v1/forms
-GET    /api/v1/pages
-POST   /api/v1/pages
+GET    /api/v1/emails/templates
+POST   /api/v1/emails/templates
+POST   /api/v1/emails/templates/:id/publish
+POST   /api/v1/emails/templates/:id/archive
+GET    /api/v1/website/forms
+POST   /api/v1/website/forms
+GET    /api/v1/website/pages
+POST   /api/v1/website/pages
+
+POST   /api/v1/workspace/api-keys
+GET    /api/v1/workspace/webhooks
+GET    /api/v1/platform/dead-letters
 
 GET    /api/v1/assets
 POST   /api/v1/assets

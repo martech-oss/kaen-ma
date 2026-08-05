@@ -1,6 +1,5 @@
-import type { CompanyContactDto, CompanyDetail, CompanySummary } from "@openengage/core/contacts";
-
 import { orpc, orpcQuery } from "@/lib/orpc";
+import type { CompanyContactDto, CompanyDetail, CompanySummary } from "@openengage/core/contacts";
 
 export type { CompanyContactDto, CompanyDetail, CompanySummary };
 

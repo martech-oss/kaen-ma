@@ -1,5 +1,6 @@
-import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
 import PostalMime from "postal-mime";
+
+import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
 
 import { enrollAutomationsForEvent } from "../automations/enrollment";
 import type { RuntimeEnv } from "../env";

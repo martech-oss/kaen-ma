@@ -1,4 +1,3 @@
-import type { AutomationRow } from "@openengage/core/automations";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Background, Controls, MiniMap, Panel, ReactFlow } from "@xyflow/react";
@@ -43,6 +42,7 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
+import type { AutomationRow } from "@openengage/core/automations";
 
 import { automationNodeTypes, StepButton } from "./automation-flow-node";
 import { triggerLabel } from "./automation-labels";

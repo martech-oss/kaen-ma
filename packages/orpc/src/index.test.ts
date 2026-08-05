@@ -1,6 +1,7 @@
+import { describe, expect, it } from "vitest";
+
 import { contactListInputSchema, contactListResultSchema } from "@openengage/core/contacts";
 import { workspaceSchema } from "@openengage/core/workspaces";
-import { describe, expect, it } from "vitest";
 
 import { contract } from "./contract";
 

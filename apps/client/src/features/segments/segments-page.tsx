@@ -1,10 +1,3 @@
-import {
-  getSegmentFieldDefinition,
-  type SegmentField,
-  type SegmentFilter,
-  type SegmentOperator,
-  type SegmentRow,
-} from "@openengage/orpc";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Plus, Shapes } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
@@ -32,6 +25,13 @@ import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
+import {
+  getSegmentFieldDefinition,
+  type SegmentField,
+  type SegmentFilter,
+  type SegmentOperator,
+  type SegmentRow,
+} from "@openengage/orpc";
 
 export type { SegmentRow };
 

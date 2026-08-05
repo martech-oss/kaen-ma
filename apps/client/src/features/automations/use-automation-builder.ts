@@ -1,8 +1,3 @@
-import type {
-  AutomationDefinition,
-  AutomationEdge,
-  AutomationNode,
-} from "@openengage/core/automations";
 import {
   applyEdgeChanges,
   applyNodeChanges,
@@ -13,6 +8,12 @@ import {
   type NodeChange,
 } from "@xyflow/react";
 import { useCallback, useMemo, useReducer } from "react";
+
+import type {
+  AutomationDefinition,
+  AutomationEdge,
+  AutomationNode,
+} from "@openengage/core/automations";
 
 import { nodeHandles } from "./automation-flow-node";
 import {

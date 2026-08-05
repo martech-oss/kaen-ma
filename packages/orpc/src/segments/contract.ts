@@ -1,7 +1,8 @@
-import { contactSchema } from "@openengage/core/contacts";
-import { segmentFilterSchema, segmentRowSchema } from "@openengage/core/segments";
 import { oc } from "@orpc/contract";
 import * as z from "zod";
+
+import { contactSchema } from "@openengage/core/contacts";
+import { segmentFilterSchema, segmentRowSchema } from "@openengage/core/segments";
 
 import { workspaceErrors } from "../shared/errors";
 

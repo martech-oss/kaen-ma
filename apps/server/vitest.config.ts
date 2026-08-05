@@ -4,6 +4,7 @@ import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-worker
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  logLevel: "error",
   plugins: [
     cloudflareTest(async () => ({
       wrangler: { configPath: "./wrangler.test.jsonc" },
@@ -24,7 +25,7 @@ export default defineConfig({
         },
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations(
-            resolve(__dirname, "../../packages/database/migrations"),
+            resolve(import.meta.dirname, "../../packages/database/migrations"),
           ),
           BETTER_AUTH_SECRET: "test-better-auth-secret-at-least-32-characters",
           CREDENTIAL_ENCRYPTION_KEY: "test-encryption-key-at-least-32-characters",

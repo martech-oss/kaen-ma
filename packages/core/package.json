@@ -24,10 +24,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "zod": "^4.4.3"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

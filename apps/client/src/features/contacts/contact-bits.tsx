@@ -1,4 +1,3 @@
-import { type Contact } from "@openengage/orpc";
 import { UserRound } from "lucide-react";
 import { type ReactNode } from "react";
 
@@ -15,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { type Contact } from "@openengage/orpc";
 
 export type BulkAction =
   | "add_tag"

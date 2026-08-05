@@ -1,6 +1,7 @@
+import { and, asc, count, desc, eq, exists, inArray, ne, sql, type SQL } from "drizzle-orm";
+
 import { segmentFilterSchema, type SegmentFilter } from "@openengage/core/segments";
 import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
-import { and, asc, count, desc, eq, exists, inArray, ne, sql, type SQL } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { deliveries } from "../messaging/schema";

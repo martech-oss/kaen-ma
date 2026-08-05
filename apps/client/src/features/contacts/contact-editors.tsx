@@ -9,9 +9,9 @@ import { assignCompanyContact, removeCompanyContact } from "@/features/companies
 import { type CompanyOption, type SegmentOption } from "@/features/contacts/contact-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { orpcQuery } from "@/lib/orpc";
+import type { ContactProfile } from "@openengage/core/contacts";
 
 import { ControlledSelect, Section } from "./contact-bits";
-import { type ContactProfile } from "./contact-drawer";
 
 export function RelationEditor({
   title,
