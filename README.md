@@ -27,12 +27,12 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 
 OpenEngageはメールの用途を型と実行時検証の両方で分離します。
 
-| 用途            | プロバイダー             | 使用例                                              |
-| --------------- | ------------------------ | --------------------------------------------------- |
-| `transactional` | Cloudflare Email Service | メール確認、招待、パスワード再設定、Automation通知  |
-| `marketing`     | 無効                     | Campaign、予約送信、Broadcastは`MARKETING_DISABLED` |
+| 用途            | プロバイダー             | 使用例                                             |
+| --------------- | ------------------------ | -------------------------------------------------- |
+| `transactional` | Cloudflare Email Service | メール確認、招待、パスワード再設定、Automation通知 |
+| `marketing`     | 未実装                   | v0.1では提供しません                               |
 
-Cloudflare Email ServiceはTransactional専用として扱います。Marketingの画面導線は非表示で、作成・更新・予約・開始API、Cron、Queue consumerの全経路に送信ガードがあります。
+Cloudflare Email ServiceはTransactional専用として扱います。Marketing Campaign/BroadcastのAPI・DB・Queue実装はv0.1に含みません。
 
 認証メールはReact Email、WorkspaceのAutomationメールは`ContentDocument`からOpenEngage内でHTMLとplain textを生成します。Automationは公開済みsnapshotだけを使用し、生成済みの件名・HTML・textをDeliveryへ保存してからQueueへ投入します。送信後の`delivered`、`deferred`、`bounced`、`failed`、`rejected`、`complained`はCloudflare QueuesのEmail Sending event subscriptionで取り込みます。`opened`と`clicked`は現時点では計測しません。
 
@@ -67,9 +67,9 @@ apps/
   server/                内部API Worker、Hono、Cron、Queue、Email Routing
   agent/                 非公開Flue Agent Worker、Durable Objects
 packages/
-  orpc/                  ドメイン別のoRPC contractとDTO Zod schema(APIの単一の正本)
+  orpc/                  ドメイン別のoRPC contractと通信固有DTO
   channels/              Channel型、Webhook adapter
-  core/                  Segment、Automation、Consent、Scheduleの純粋ロジック
+  core/                  業務型・Zod schema・純粋ロジックの正本
   create-openengage/     Setup、doctor、backup、update CLI
   database/              Drizzle schema/client、D1 migration、repository
   content-renderer/      Landing Page等の安全なHTML/Text renderer
@@ -79,12 +79,12 @@ packages/
 ```
 
 `apps/server/src`と`packages/database/src`は同じ12ドメインで一致します:
-auth / automations / broadcasts / consent / contacts / deals / messaging /
+auth / automations / consent / contacts / deals / messaging /
 platform / reports / segments / web / workspaces
 (+ `apps/server/src`だけが持つserver専用の`runtime`, `public`, `orpc`)。
 
 `packages/orpc/src`はほぼ同じですが、`auth`(Better Authが直接APIを提供するためcontract化していない)、
-`broadcasts`(`messaging`contractに統合)、`platform`(`operations`contractに統合)を持たず、
+`platform`(`operations`contractに統合)を持たず、
 代わりに`assets`、`operations`、`projects`、横断的な`shared`があります。
 `companies`はcontacts配下の`company-contract.ts`/`company-schema.ts`として存在し、独立ドメインではありません。
 
@@ -193,8 +193,7 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 - `AGENT_APP`: 非公開の`openengage-agent`を呼び出すFetch Service Binding
 - `DB`: D1
 - `ASSETS_BUCKET`: R2
-- `CAMPAIGN_QUEUE`: オートメーション、Broadcast、Import/Export
-  (Binding名・Queue名(`openengage-campaign`)は歴史的名残りで、内容はAutomationにリネーム済みです。稼働中のCloudflare Queueリソースの改名は本リポジトリのリネーム範囲外としています)
+- `JOBS_QUEUE`: Automation Job、Contact Import/Export (`openengage-jobs`)
 - `DELIVERY_QUEUE`: Email、Webhook delivery
 - `EMAIL`: Transactional送信用のEmail Sending binding。`allowed_sender_addresses`で送信元を限定
 - `openengage-email-events`: Email Sendingの6種類の配送イベントを受け取るQueue consumer
@@ -288,10 +287,6 @@ Better AuthのOrganizationをOpenEngageのWorkspaceとして扱います。
 - Sourceから到達不能なNodeがない
 
 公開バージョンは不変です。公開後は同じグラフから新しいdraftが作られ、進行中Contactは参加時のバージョンを完走します。
-
-## Marketing Campaign
-
-Marketing Campaignは将来再開できるようprovider非依存のread/archiveモデルだけを残しています。現在はナビゲーションと画面から非表示で、作成・更新・予約・開始、scheduled promotion、Broadcast Queue処理をすべて`503 MARKETING_DISABLED`または恒久失敗として停止します。Cloudflare Email ServiceへMarketingメールが流れる経路はありません。
 
 ## Deals CRM
 
@@ -428,10 +423,6 @@ POST   /api/v1/deals/:id/tasks
 PATCH  /api/v1/deals/:dealId/tasks/:taskId
 
 GET    /api/v1/reports/:category
-
-GET    /api/v1/broadcasts
-POST   /api/v1/broadcasts
-POST   /api/v1/broadcasts/:id/start
 
 GET    /api/v1/email-templates
 POST   /api/v1/email-templates

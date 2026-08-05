@@ -277,7 +277,6 @@ export function NoReportData(): ReactNode {
 }
 
 export function sourceTypeLabel(type: string): string {
-  if (type === "broadcast") return "一斉配信";
   if (type === "automation") return "オートメーション";
   return "Transactional";
 }

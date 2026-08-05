@@ -21,7 +21,7 @@
   "send_email": [{ "name": "EMAIL" }],
   "queues": {
     "producers": [
-      { "binding": "CAMPAIGN_QUEUE", "queue": "openengage-campaign" },
+      { "binding": "JOBS_QUEUE", "queue": "openengage-jobs" },
       { "binding": "DELIVERY_QUEUE", "queue": "openengage-delivery" },
     ],
   },

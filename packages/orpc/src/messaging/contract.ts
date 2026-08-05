@@ -1,8 +1,6 @@
 import {
-  broadcastSegmentOptionSchema,
-  broadcastWriteSchema,
-  emailCampaignSchema,
   emailTemplatePreviewSchema,
+  emailSegmentOptionSchema,
   emailTemplateSchema,
   emailTemplateWriteSchema,
   messageVariableSchema,
@@ -21,70 +19,7 @@ const base = { ...workspaceErrors, ...forbidden } as const;
 const archivedInput = z.object({ archived: z.boolean().default(false) });
 const idInput = z.object({ id: z.string().min(1) });
 
-const invalidResources = {
-  INVALID_BROADCAST_RESOURCES: {
-    status: 422,
-    message: "SegmentまたはMarketingテンプレートが見つかりません",
-  },
-} as const;
-
 export const emailsContract = {
-  listCampaigns: oc
-    .route({ method: "GET", path: "/broadcasts" })
-    .errors(workspaceErrors)
-    .input(archivedInput)
-    .output(z.array(emailCampaignSchema)),
-  getCampaign: oc
-    .route({ method: "GET", path: "/broadcasts/{id}" })
-    .errors({
-      ...workspaceErrors,
-      BROADCAST_NOT_FOUND: { status: 404, message: "メールキャンペーンが見つかりません" },
-    })
-    .input(idInput)
-    .output(emailCampaignSchema),
-  createCampaign: oc
-    .route({ method: "POST", path: "/broadcasts", successStatus: 201 })
-    .errors({
-      ...base,
-      ...invalidResources,
-      MARKETING_DISABLED: { status: 503, message: "Marketingメールは現在利用できません" },
-    })
-    .input(broadcastWriteSchema)
-    .output(z.object({ id: z.string() })),
-  updateCampaign: oc
-    .route({ method: "PATCH", path: "/broadcasts/{id}" })
-    .errors({
-      ...base,
-      ...invalidResources,
-      MARKETING_DISABLED: { status: 503, message: "Marketingメールは現在利用できません" },
-      NOT_EDITABLE: {
-        status: 409,
-        message: "送信済みまたはアーカイブ済みのメールキャンペーンは編集できません",
-      },
-    })
-    .input(broadcastWriteSchema.extend({ id: z.string().min(1) }))
-    .output(z.object({ updated: z.literal(true) })),
-  startCampaign: oc
-    .route({ method: "POST", path: "/broadcasts/{id}/start", successStatus: 202 })
-    .errors({
-      ...base,
-      MARKETING_DISABLED: {
-        status: 503,
-        message: "Marketingメールは現在利用できません",
-      },
-      NOT_STARTABLE: { status: 409, message: "Broadcastは既に開始済みか存在しません" },
-    })
-    .input(idInput)
-    .output(z.object({ started: z.literal(true) })),
-  archiveCampaign: oc
-    .route({ method: "POST", path: "/broadcasts/{id}/archive" })
-    .errors({
-      ...base,
-      NOT_ARCHIVABLE: { status: 409, message: "送信中のメールキャンペーンはアーカイブできません" },
-    })
-    .input(idInput)
-    .output(z.object({ archived: z.literal(true) })),
-
   listTemplates: oc
     .route({ method: "GET", path: "/email-templates" })
     .errors(workspaceErrors)
@@ -147,7 +82,7 @@ export const emailsContract = {
   listSegmentOptions: oc
     .route({ method: "GET", path: "/email-options/segments" })
     .errors(workspaceErrors)
-    .output(z.array(broadcastSegmentOptionSchema)),
+    .output(z.array(emailSegmentOptionSchema)),
   listTopicOptions: oc
     .route({ method: "GET", path: "/email-options/topics" })
     .errors(workspaceErrors)

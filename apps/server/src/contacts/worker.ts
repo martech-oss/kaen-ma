@@ -63,7 +63,7 @@ export async function processContactImport(
     failed,
   });
   if (!finished) {
-    await env.CAMPAIGN_QUEUE.send({
+    await env.JOBS_QUEUE.send({
       kind: "contact_import",
       importJobId: jobId,
       part: part + 1,
@@ -118,7 +118,7 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
     });
   }
   if (contacts.length === batchSize) {
-    await env.CAMPAIGN_QUEUE.send({ kind: "contact_export", exportJobId: jobId });
+    await env.JOBS_QUEUE.send({ kind: "contact_export", exportJobId: jobId });
     return;
   }
   const chunks: ArrayBuffer[] = [];

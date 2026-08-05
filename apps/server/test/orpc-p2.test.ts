@@ -219,8 +219,5 @@ describe("oRPC contract completion (P2)", () => {
       enrollments: [],
       deliveries: [],
     });
-    await expect(client.emails.getCampaign({ id: uuidv7() })).rejects.toMatchObject({
-      code: "BROADCAST_NOT_FOUND",
-    });
   });
 });

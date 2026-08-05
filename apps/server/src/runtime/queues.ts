@@ -1,32 +1,17 @@
 import * as z from "zod";
 
-export const campaignQueueMessageSchema = z.object({
-  kind: z.literal("campaign_job"),
+export const automationJobQueueMessageSchema = z.object({
+  kind: z.literal("automation_job"),
   jobId: z.string(),
   leaseId: z.string(),
 });
-export type CampaignQueueMessage = z.infer<typeof campaignQueueMessageSchema>;
+export type AutomationJobQueueMessage = z.infer<typeof automationJobQueueMessageSchema>;
 
 export const deliveryQueueMessageSchema = z.object({
   kind: z.literal("delivery"),
   deliveryId: z.string(),
 });
 export type DeliveryQueueMessage = z.infer<typeof deliveryQueueMessageSchema>;
-
-export const archiveQueueMessageSchema = z.object({
-  kind: z.literal("archive"),
-  before: z.string(),
-  cursor: z.string().optional(),
-});
-export type ArchiveQueueMessage = z.infer<typeof archiveQueueMessageSchema>;
-
-export const broadcastQueueMessageSchema = z.object({
-  kind: z.literal("broadcast_batch"),
-  broadcastId: z.string(),
-  phase: z.enum(["snapshot", "delivery"]).default("snapshot"),
-  cursor: z.string().optional(),
-});
-export type BroadcastQueueMessage = z.infer<typeof broadcastQueueMessageSchema>;
 
 export const contactImportQueueMessageSchema = z.object({
   kind: z.literal("contact_import"),
@@ -42,19 +27,16 @@ export const contactExportQueueMessageSchema = z.object({
 });
 export type ContactExportQueueMessage = z.infer<typeof contactExportQueueMessageSchema>;
 
-/** Everything the campaign queue carries, dispatched on the kind discriminator. */
-export const campaignQueueBatchMessageSchema = z.discriminatedUnion("kind", [
-  campaignQueueMessageSchema,
-  broadcastQueueMessageSchema,
+/** Everything the jobs queue carries, dispatched on the kind discriminator. */
+export const jobsQueueMessageSchema = z.discriminatedUnion("kind", [
+  automationJobQueueMessageSchema,
   contactImportQueueMessageSchema,
   contactExportQueueMessageSchema,
 ]);
-export type CampaignQueueBatchMessage = z.infer<typeof campaignQueueBatchMessageSchema>;
+export type JobsQueueMessage = z.infer<typeof jobsQueueMessageSchema>;
 
 export type QueueMessage =
-  | CampaignQueueMessage
+  | AutomationJobQueueMessage
   | DeliveryQueueMessage
-  | ArchiveQueueMessage
-  | BroadcastQueueMessage
   | ContactImportQueueMessage
   | ContactExportQueueMessage;

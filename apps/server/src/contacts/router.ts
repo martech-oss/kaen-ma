@@ -104,7 +104,7 @@ export const importContactsProcedure = authed.operations.importContacts.handler(
     const csvText = await input.file.text();
     const outcome = await startContactImport(
       context.database,
-      { bucket: context.env.ASSETS_BUCKET, queue: context.env.CAMPAIGN_QUEUE },
+      { bucket: context.env.ASSETS_BUCKET, queue: context.env.JOBS_QUEUE },
       context.workspace,
       csvText,
     );
@@ -116,7 +116,7 @@ export const importContactsProcedure = authed.operations.importContacts.handler(
 export const exportContactsProcedure = authed.operations.exportContacts.handler(
   async ({ context, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
-    return startContactExport(context.database, context.env.CAMPAIGN_QUEUE, context.workspace);
+    return startContactExport(context.database, context.env.JOBS_QUEUE, context.workspace);
   },
 );
 

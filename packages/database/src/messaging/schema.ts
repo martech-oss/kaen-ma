@@ -9,7 +9,6 @@ import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-o
 
 import { organization } from "../auth/schema";
 import { automationEnrollments } from "../automations/schema";
-import { broadcasts } from "../broadcasts/schema";
 import { subscriptionTopics } from "../consent/schema";
 import { contacts } from "../contacts/schema";
 import { checkEnum } from "../shared/enum-check";
@@ -80,7 +79,6 @@ export const deliveries = sqliteTable(
     enrollmentId: text("enrollment_id").references(() => automationEnrollments.id, {
       onDelete: "set null",
     }),
-    broadcastId: text("broadcast_id").references(() => broadcasts.id, { onDelete: "set null" }),
     channel: text().notNull(),
     purpose: text().notNull(),
     provider: text().notNull(),

@@ -13,7 +13,7 @@ export const replayDeadLetterProcedure = authed.operations.replayDeadLetter.hand
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     const outcome = await replayDeadLetter(
       context.database,
-      { campaign: context.env.CAMPAIGN_QUEUE, delivery: context.env.DELIVERY_QUEUE },
+      { jobs: context.env.JOBS_QUEUE, delivery: context.env.DELIVERY_QUEUE },
       context.workspace.workspaceId,
       input.id,
     );

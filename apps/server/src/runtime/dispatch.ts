@@ -16,8 +16,8 @@ import { processDelivery } from "../messaging/delivery-worker";
 import { logError } from "../observability";
 import { persistDeadLetter, runDailyMaintenance } from "../platform/maintenance-worker";
 import {
-  campaignQueueBatchMessageSchema,
   deliveryQueueMessageSchema,
+  jobsQueueMessageSchema,
   type QueueMessage as OpenEngageQueueMessage,
 } from "./queues";
 
@@ -41,11 +41,11 @@ export async function scheduled(
     const jobs = await claimDueJobs(database, now, leaseUntil, 20, workspace.workspaceId);
     for (const job of jobs) {
       messages.push({
-        body: { kind: "campaign_job", jobId: job.id, leaseId: job.leaseId },
+        body: { kind: "automation_job", jobId: job.id, leaseId: job.leaseId },
       });
     }
   }
-  if (messages.length > 0) await env.CAMPAIGN_QUEUE.sendBatch(messages);
+  if (messages.length > 0) await env.JOBS_QUEUE.sendBatch(messages);
 
   const dueDeliveries = await new MessagingWorkerRepository(database).scanDueDeliveries(now);
   if (dueDeliveries.length > 0) {
@@ -65,15 +65,13 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
       continue;
     }
     try {
-      if (isQueue(batch.queue, "campaign")) {
-        const parsed = campaignQueueBatchMessageSchema.safeParse(message.body);
-        if (!parsed.success) throw new PermanentChannelError("Invalid campaign queue message");
+      if (isQueue(batch.queue, "jobs")) {
+        const parsed = jobsQueueMessageSchema.safeParse(message.body);
+        if (!parsed.success) throw new PermanentChannelError("Invalid jobs queue message");
         switch (parsed.data.kind) {
-          case "campaign_job":
+          case "automation_job":
             await processAutomationJob(parsed.data.jobId, parsed.data.leaseId, env);
             break;
-          case "broadcast_batch":
-            throw new PermanentChannelError("Marketing email is disabled");
           case "contact_import":
             await processContactImport(
               parsed.data.importJobId,

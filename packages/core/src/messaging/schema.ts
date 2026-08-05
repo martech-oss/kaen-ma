@@ -2,39 +2,6 @@ import * as z from "zod";
 
 import { contentDocumentSchema } from "../web/content";
 
-export const broadcastStatusSchema = z.enum([
-  "draft",
-  "scheduled",
-  "sending",
-  "completed",
-  "cancelled",
-]);
-export type BroadcastStatus = z.infer<typeof broadcastStatusSchema>;
-
-/** A broadcast joined with its segment and template, plus delivery counters. */
-export const emailCampaignSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  segmentId: z.string(),
-  templateId: z.string(),
-  topicId: z.string().nullable(),
-  status: broadcastStatusSchema,
-  scheduledAt: z.string().nullable(),
-  startedAt: z.string().nullable(),
-  completedAt: z.string().nullable(),
-  archivedAt: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  segmentName: z.string(),
-  memberCount: z.number().int().nonnegative(),
-  templateName: z.string(),
-  subject: z.string().nullable(),
-  recipientCount: z.number().int().nonnegative(),
-  sentCount: z.number().int().nonnegative(),
-  deliveredCount: z.number().int().nonnegative(),
-});
-export type EmailCampaign = z.infer<typeof emailCampaignSchema>;
-
 export const emailTemplateSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -77,12 +44,12 @@ export const messageVariableSchema = z.object({
 });
 export type MessageVariable = z.infer<typeof messageVariableSchema>;
 
-export const broadcastSegmentOptionSchema = z.object({
+export const emailSegmentOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   memberCount: z.number().int().nonnegative(),
 });
-export type BroadcastSegmentOption = z.infer<typeof broadcastSegmentOptionSchema>;
+export type EmailSegmentOption = z.infer<typeof emailSegmentOptionSchema>;
 
 export const subscriptionTopicOptionSchema = z.object({
   id: z.string(),
@@ -90,15 +57,6 @@ export const subscriptionTopicOptionSchema = z.object({
   isDefault: z.boolean(),
 });
 export type SubscriptionTopicOption = z.infer<typeof subscriptionTopicOptionSchema>;
-
-export const broadcastWriteSchema = z.object({
-  name: z.string().trim().min(1).max(191),
-  segmentId: z.string().min(1),
-  templateId: z.string().min(1),
-  topicId: z.string().min(1).nullable().optional(),
-  scheduledAt: z.iso.datetime().nullable().optional(),
-});
-export type BroadcastWrite = z.infer<typeof broadcastWriteSchema>;
 
 export const messageVariableWriteSchema = z.object({
   key: z

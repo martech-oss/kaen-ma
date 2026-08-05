@@ -12,7 +12,7 @@ export type DeadLetterReplayOutcome = { kind: "not_found" } | { kind: "replayed"
 
 export async function replayDeadLetter(
   database: OpenEngageDatabase,
-  queues: { campaign: Queue; delivery: Queue },
+  queues: { jobs: Queue; delivery: Queue },
   workspaceId: string,
   deadLetterId: string,
 ): Promise<DeadLetterReplayOutcome> {
@@ -20,8 +20,8 @@ export async function replayDeadLetter(
   const row = await repository.findPendingForReplay(workspaceId, deadLetterId);
   if (!row) return { kind: "not_found" };
   const body: unknown = JSON.parse(row.messageBody);
-  if (row.sourceQueue === "openengage-campaign") {
-    await queues.campaign.send(body);
+  if (row.sourceQueue === "openengage-jobs" || row.sourceQueue.endsWith("-jobs")) {
+    await queues.jobs.send(body);
   } else {
     await queues.delivery.send(body);
   }

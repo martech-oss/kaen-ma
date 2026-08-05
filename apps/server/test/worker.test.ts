@@ -357,32 +357,6 @@ describe("OpenEngage Worker", () => {
       publishedRevision: 1,
     });
 
-    await expect(
-      client.emails.createCampaign({
-        name: "Disabled marketing campaign",
-        segmentId: segment.id,
-        templateId,
-        topicId: null,
-        scheduledAt: null,
-      }),
-    ).rejects.toMatchObject({
-      code: "MARKETING_DISABLED",
-      status: 503,
-    });
-    await expect(
-      client.emails.updateCampaign({
-        id: "disabled-campaign",
-        name: "Disabled marketing campaign",
-        segmentId: segment.id,
-        templateId,
-        topicId: null,
-        scheduledAt: null,
-      }),
-    ).rejects.toMatchObject({ code: "MARKETING_DISABLED", status: 503 });
-    await expect(client.emails.startCampaign({ id: "disabled-campaign" })).rejects.toMatchObject({
-      code: "MARKETING_DISABLED",
-      status: 503,
-    });
     await expect(client.emails.archiveTemplate({ id: templateId })).resolves.toEqual({
       archived: true,
     });

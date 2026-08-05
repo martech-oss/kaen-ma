@@ -57,23 +57,17 @@ import {
   updateDealTaskProcedure,
 } from "../deals/router";
 import {
-  archiveEmailCampaignProcedure,
   archiveTemplateProcedure,
   archiveVariableProcedure,
   createTemplateProcedure,
-  createEmailCampaignProcedure,
   createVariableProcedure,
-  getEmailCampaignProcedure,
-  listEmailCampaignsProcedure,
   listSegmentOptionsProcedure,
   listTemplatesProcedure,
   listTopicOptionsProcedure,
   listVariablesProcedure,
   previewTemplateProcedure,
   publishTemplateProcedure,
-  startEmailCampaignProcedure,
   updateTemplateProcedure,
-  updateEmailCampaignProcedure,
   updateVariableProcedure,
 } from "../messaging/router";
 import { listDeadLettersProcedure, replayDeadLetterProcedure } from "../platform/router";
@@ -183,12 +177,6 @@ export const orpcRouter = os.router({
     deleteTask: deleteDealTaskProcedure,
   },
   emails: {
-    listCampaigns: listEmailCampaignsProcedure,
-    getCampaign: getEmailCampaignProcedure,
-    createCampaign: createEmailCampaignProcedure,
-    updateCampaign: updateEmailCampaignProcedure,
-    startCampaign: startEmailCampaignProcedure,
-    archiveCampaign: archiveEmailCampaignProcedure,
     listTemplates: listTemplatesProcedure,
     createTemplate: createTemplateProcedure,
     updateTemplate: updateTemplateProcedure,

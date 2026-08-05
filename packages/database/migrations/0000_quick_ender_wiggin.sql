@@ -552,7 +552,6 @@ CREATE TABLE `deliveries` (
 	`workspace_id` text NOT NULL,
 	`contact_id` text,
 	`enrollment_id` text,
-	`broadcast_id` text,
 	`channel` text NOT NULL,
 	`purpose` text NOT NULL,
 	`provider` text NOT NULL,
@@ -571,7 +570,6 @@ CREATE TABLE `deliveries` (
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`enrollment_id`) REFERENCES `automation_enrollments`(`id`) ON UPDATE no action ON DELETE set null,
-	FOREIGN KEY (`broadcast_id`) REFERENCES `broadcasts`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`topic_id`) REFERENCES `subscription_topics`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`template_id`) REFERENCES `email_templates`(`id`) ON UPDATE no action ON DELETE set null,
 	CONSTRAINT "deliveries_channel_check" CHECK("deliveries"."channel" IN ('email', 'webhook')),
@@ -659,42 +657,6 @@ CREATE TABLE `message_variables` (
 --> statement-breakpoint
 CREATE INDEX `message_variables_workspace_archived_updated_idx` ON `message_variables` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `message_variables_workspace_key_unique` ON `message_variables` (`workspace_id`,`key`);--> statement-breakpoint
-CREATE TABLE `broadcast_recipients` (
-	`workspace_id` text NOT NULL,
-	`broadcast_id` text NOT NULL,
-	`contact_id` text NOT NULL,
-	`snapshot_at` text NOT NULL,
-	`processed_at` text,
-	PRIMARY KEY(`workspace_id`, `broadcast_id`, `contact_id`),
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`broadcast_id`) REFERENCES `broadcasts`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`contact_id`) REFERENCES `contacts`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `broadcast_recipients_pending_idx` ON `broadcast_recipients` (`workspace_id`,`broadcast_id`,`processed_at`);--> statement-breakpoint
-CREATE TABLE `broadcasts` (
-	`id` text PRIMARY KEY NOT NULL,
-	`workspace_id` text NOT NULL,
-	`name` text NOT NULL,
-	`segment_id` text NOT NULL,
-	`template_id` text NOT NULL,
-	`topic_id` text,
-	`status` text DEFAULT 'draft' NOT NULL,
-	`scheduled_at` text,
-	`started_at` text,
-	`completed_at` text,
-	`created_at` text NOT NULL,
-	`updated_at` text NOT NULL,
-	`archived_at` text,
-	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`segment_id`) REFERENCES `segments`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`template_id`) REFERENCES `email_templates`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`topic_id`) REFERENCES `subscription_topics`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "broadcasts_status_check" CHECK("broadcasts"."status" IN ('draft', 'scheduled', 'sending', 'completed', 'cancelled'))
-);
---> statement-breakpoint
-CREATE INDEX `broadcasts_workspace_archived_updated_idx` ON `broadcasts` (`workspace_id`,`archived_at`,`updated_at`);--> statement-breakpoint
-CREATE INDEX `broadcasts_workspace_status_idx` ON `broadcasts` (`workspace_id`,`status`,`scheduled_at`);--> statement-breakpoint
 CREATE TABLE `assets` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,

@@ -72,6 +72,9 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.3.0
         version: 5.3.0
+      '@openengage/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@openengage/orpc':
         specifier: workspace:*
         version: link:../../packages/orpc
