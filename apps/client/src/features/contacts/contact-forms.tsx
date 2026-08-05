@@ -1,4 +1,4 @@
-import { type SegmentFilter } from "@openengage/orpc";
+import { type SegmentFilter } from "@openengage/core/segments";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode } from "react";
 
@@ -8,11 +8,14 @@ import {
   FormNativeSelect as SelectInput,
 } from "@/components/app-ui";
 import { NativeSelectOption } from "@/components/ui/native-select";
-import { type ContactOptions } from "@/features/contacts/contact-api";
+import {
+  assignInitialContactRelations,
+  type ContactOptions,
+} from "@/features/contacts/contact-api";
+import { createDynamicSegment } from "@/features/segments/segment-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { optionalString } from "@/lib/form-data";
 import { orpcQuery } from "@/lib/orpc";
-import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
 
 import { slugify } from "./contact-bits";
@@ -47,21 +50,12 @@ export function ContactCreateForm({
       const tagId = optionalString(form.get("tagId"));
       const segmentId = optionalString(form.get("segmentId"));
       const companyId = optionalString(form.get("companyId"));
-      await Promise.all([
-        tagId
-          ? orpc.contacts.assignTag({ contactId: contact.id, resourceId: tagId })
-          : Promise.resolve(),
-        segmentId
-          ? orpc.contacts.addToSegment({ contactId: contact.id, resourceId: segmentId })
-          : Promise.resolve(),
-        companyId
-          ? orpc.companies.assignContact({
-              id: companyId,
-              contactId: contact.id,
-              isPrimary: true,
-            })
-          : Promise.resolve(),
-      ]);
+      await assignInitialContactRelations({
+        contactId: contact.id,
+        ...(tagId ? { tagId } : {}),
+        ...(segmentId ? { segmentId } : {}),
+        ...(companyId ? { companyId } : {}),
+      });
       if (companyId) {
         await queryClient.invalidateQueries({
           queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
@@ -148,10 +142,9 @@ export function SegmentSaveForm({
     if (!filter) return;
     const name = getFormString(new FormData(event.currentTarget), "name");
     await run(async () => {
-      await orpc.segments.create({
+      await createDynamicSegment({
         name,
         slug: slugify(name),
-        kind: "dynamic",
         filter,
       });
       await queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });

@@ -1,4 +1,4 @@
-import { type ContactProfile } from "@openengage/orpc";
+import { type ContactProfile } from "@openengage/core/contacts";
 import {
   Archive,
   Building2,
@@ -28,11 +28,21 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { type ContactOptions } from "@/features/contacts/contact-api";
+import {
+  addContactToSegment,
+  adjustContactScore,
+  archiveContact,
+  assignContactTag,
+  loadContactProfile,
+  removeContactFromSegment,
+  removeContactTag,
+  restoreContact,
+  type ContactOptions,
+  updateContact,
+} from "@/features/contacts/contact-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { nullableString } from "@/lib/form-data";
 import { formatLongDateTime } from "@/lib/format";
-import { orpc } from "@/lib/orpc";
 import { cn, getFormString } from "@/lib/utils";
 
 export type { ContactProfile };
@@ -59,7 +69,7 @@ export function ContactDrawer({
   const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
-      setProfile(await orpc.contacts.profile({ contactId }));
+      setProfile(await loadContactProfile(contactId));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "プロフィールを読み込めませんでした");
     } finally {
@@ -130,7 +140,7 @@ export function ContactDrawer({
                   <Button
                     variant="outline"
                     className="ml-auto"
-                    onClick={() => void mutate(() => orpc.contacts.restore({ id: contactId }))}
+                    onClick={() => void mutate(() => restoreContact(contactId))}
                   >
                     <RotateCcw data-icon="inline-start" />
                     復元
@@ -147,7 +157,7 @@ export function ContactDrawer({
                         アーカイブ
                       </>
                     }
-                    onConfirm={() => mutate(() => orpc.contacts.archive({ id: contactId }))}
+                    onConfirm={() => mutate(() => archiveContact(contactId))}
                   />
                 )}
               </div>
@@ -174,10 +184,8 @@ export function ContactDrawer({
                 items={profile.tags}
                 options={options.tags}
                 disabled={profile.contact.status === "archived"}
-                onAdd={(id) => mutate(() => orpc.contacts.assignTag({ contactId, resourceId: id }))}
-                onRemove={(id) =>
-                  mutate(() => orpc.contacts.removeTag({ contactId, resourceId: id }))
-                }
+                onAdd={(id) => mutate(() => assignContactTag(contactId, id))}
+                onRemove={(id) => mutate(() => removeContactTag(contactId, id))}
               />
 
               <CompanyEditor
@@ -192,12 +200,8 @@ export function ContactDrawer({
                 profile={profile}
                 options={options.segments}
                 disabled={profile.contact.status === "archived"}
-                onAdd={(id) =>
-                  mutate(() => orpc.contacts.addToSegment({ contactId, resourceId: id }))
-                }
-                onRemove={(id) =>
-                  mutate(() => orpc.contacts.removeFromSegment({ contactId, resourceId: id }))
-                }
+                onAdd={(id) => mutate(() => addContactToSegment(contactId, id))}
+                onRemove={(id) => mutate(() => removeContactFromSegment(contactId, id))}
               />
 
               <ScoreForm
@@ -236,8 +240,7 @@ function ProfileEditForm({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await run(async () => {
-      await orpc.contacts.update({
-        id: contact.id,
+      await updateContact(contact.id, {
         firstName: nullableString(form.get("firstName")),
         lastName: nullableString(form.get("lastName")),
         email: nullableString(form.get("email")),
@@ -321,8 +324,7 @@ function ScoreForm({
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     await run(async () => {
-      await orpc.contacts.adjustScore({
-        contactId,
+      await adjustContactScore(contactId, {
         delta: Number(form.get("delta")),
         reason: getFormString(form, "reason"),
       });

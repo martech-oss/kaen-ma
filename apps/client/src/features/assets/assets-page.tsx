@@ -1,4 +1,4 @@
-import type { WorkspaceRole } from "@openengage/orpc";
+import type { WorkspaceRole } from "@openengage/core/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ArchiveRestore, Pencil, Replace, Search, Upload, X } from "lucide-react";
@@ -29,6 +29,7 @@ import {
   type AssetVisibility,
   assetsQueryOptions,
   formatBytes,
+  loadAsset,
 } from "@/features/assets/asset-api";
 import { AssetKindBadge, AssetThumbnail, AssetVisibilityBadge } from "@/features/assets/asset-bits";
 import {
@@ -39,7 +40,7 @@ import {
 } from "@/features/assets/asset-forms";
 import { CopyButton } from "@/features/website/website-shared";
 import { formatDateTime } from "@/lib/format";
-import { orpc, orpcQuery } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
 
 const WRITE_ROLES = new Set<WorkspaceRole>(["marketer", "admin", "owner"]);
 const DELETE_ROLES = new Set<WorkspaceRole>(["admin", "owner"]);
@@ -480,7 +481,7 @@ function AssetGallery({
  */
 async function openEditor(asset: AssetSummary, set: (value: Asset | null) => void): Promise<void> {
   try {
-    set(await orpc.assets.get({ id: asset.id }));
+    set(await loadAsset(asset.id));
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "アセットを読み込めませんでした");
   }

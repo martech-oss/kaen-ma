@@ -1,6 +1,6 @@
-import type { CompanyContactDto, CompanyDetail, CompanySummary } from "@openengage/orpc";
+import type { CompanyContactDto, CompanyDetail, CompanySummary } from "@openengage/core/contacts";
 
-import { orpcQuery } from "@/lib/orpc";
+import { orpc, orpcQuery } from "@/lib/orpc";
 
 export type { CompanyContactDto, CompanyDetail, CompanySummary };
 
@@ -33,4 +33,20 @@ export function companyContactOptionsQueryOptions() {
   return orpcQuery.contacts.list.queryOptions({
     input: { limit: 100, status: "active", sort: "name", direction: "asc" },
   });
+}
+
+export function assignCompanyContact(input: {
+  companyId: string;
+  contactId: string;
+  isPrimary: boolean;
+}) {
+  return orpc.companies.assignContact({
+    id: input.companyId,
+    contactId: input.contactId,
+    isPrimary: input.isPrimary,
+  });
+}
+
+export function removeCompanyContact(companyId: string, contactId: string) {
+  return orpc.companies.removeContact({ id: companyId, contactId });
 }

@@ -1,4 +1,4 @@
-import type { ContactSummary } from "@openengage/orpc";
+import type { ContactSummary } from "@openengage/core/contacts";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Building2, ChevronDown, Filter, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
@@ -19,6 +19,7 @@ import {
 import { NativeSelectOption } from "@/components/ui/native-select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
+  bulkUpdateContacts,
   contactOptionsQueryKey,
   contactOptionsQueryOptions,
   type ContactSearch,
@@ -26,10 +27,10 @@ import {
   contactsQueryOptions,
   type ContactStatus,
 } from "@/features/contacts/contact-api";
+import { refreshSegment as refreshSegmentResource } from "@/features/segments/segment-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatLongDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
-import { orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
 
 import {
@@ -149,7 +150,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
       return;
     }
     await run(async () => {
-      await orpc.contacts.bulkUpdate({
+      await bulkUpdateContacts({
         contactIds: [...selected],
         action: bulkAction,
         ...(needsResource ? { resourceId: bulkResourceId } : {}),
@@ -161,7 +162,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   async function refreshSegment() {
     if (!segmentId) return;
     await run(async () => {
-      await orpc.segments.refresh({ id: segmentId });
+      await refreshSegmentResource(segmentId);
       await refreshContactData();
     });
   }

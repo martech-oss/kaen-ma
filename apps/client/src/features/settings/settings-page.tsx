@@ -5,7 +5,7 @@ import { authClient } from "@/auth-client";
 import { FormInput, PageLayout, SuccessAlert } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { orpc } from "@/lib/orpc";
+import { createWorkspaceApiKey } from "@/features/settings/settings-api";
 import { getFormString } from "@/lib/utils";
 import type { Workspace } from "@/lib/workspace";
 
@@ -13,10 +13,7 @@ export function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode
   const [apiKey, setApiKey] = useState("");
 
   async function createKey(): Promise<void> {
-    const created = await orpc.workspace.createApiKey({
-      name: "Admin generated key",
-      role: "marketer",
-    });
+    const created = await createWorkspaceApiKey();
     setApiKey(created.token);
   }
 
