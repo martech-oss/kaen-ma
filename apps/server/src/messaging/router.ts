@@ -113,3 +113,18 @@ export const listSegmentOptionsProcedure = authed.emails.listSegmentOptions.hand
 export const listTopicOptionsProcedure = authed.emails.listTopicOptions.handler(({ context }) =>
   listSubscriptionTopicOptions(context.database, context.workspace),
 );
+
+export const messagingProcedures = {
+  listTemplates: listTemplatesProcedure,
+  createTemplate: createTemplateProcedure,
+  updateTemplate: updateTemplateProcedure,
+  previewTemplate: previewTemplateProcedure,
+  publishTemplate: publishTemplateProcedure,
+  archiveTemplate: archiveTemplateProcedure,
+  listVariables: listVariablesProcedure,
+  createVariable: createVariableProcedure,
+  updateVariable: updateVariableProcedure,
+  archiveVariable: archiveVariableProcedure,
+  listSegmentOptions: listSegmentOptionsProcedure,
+  listTopicOptions: listTopicOptionsProcedure,
+};

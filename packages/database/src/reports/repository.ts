@@ -546,7 +546,7 @@ export class ReportsRepository {
     };
   }
 
-  /** Feeds the `operations.dashboard` procedure - 4 independent queries run concurrently. */
+  /** Feeds the `dashboard.get` procedure - 4 independent queries run concurrently. */
   public async dashboardSummary(workspaceId: string): Promise<DashboardSummaryData> {
     const [contactRows, automationRows, deliveryRows, eventRows] = await this.runBatch(
       sql`

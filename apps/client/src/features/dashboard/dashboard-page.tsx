@@ -1,4 +1,4 @@
-import type { Dashboard as DashboardData } from "@openengage/orpc";
+import type { Dashboard as DashboardData } from "@openengage/core/reports";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Activity, Gauge, Send, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";

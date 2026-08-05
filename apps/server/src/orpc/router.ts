@@ -1,266 +1,36 @@
-import {
-  automationAnalyticsProcedure,
-  createAutomationProcedure,
-  enrollAutomationProcedure,
-  getAutomationDraftProcedure,
-  listAutomationsProcedure,
-  publishAutomationProcedure,
-  saveAutomationDraftProcedure,
-  setAutomationStatusProcedure,
-} from "../automations/router";
-import { createTopicProcedure, listTopicsProcedure } from "../consent/router";
-import {
-  assignCompanyContactProcedure,
-  createCompanyProcedure,
-  getCompanyProcedure,
-  listCompaniesProcedure,
-  removeCompanyContactProcedure,
-  updateCompanyProcedure,
-} from "../contacts/company-router";
-import {
-  addSegmentProcedure,
-  addTagProcedure,
-  adjustScoreProcedure,
-  bulkActionProcedure,
-  contactOptionsProcedure,
-  contactProfileProcedure,
-  createTagProcedure,
-  removeSegmentProcedure,
-  removeTagProcedure,
-  restoreContactProcedure,
-} from "../contacts/resource-router";
-import {
-  archiveContactProcedure,
-  contactTimelineProcedure,
-  createContactProcedure,
-  getContactProcedure,
-  listContactsProcedure,
-  recordContactEventProcedure,
-  updateContactProcedure,
-} from "../contacts/router";
-import {
-  downloadContactExportProcedure,
-  exportContactsProcedure,
-  getDataJobProcedure,
-  importContactsProcedure,
-} from "../contacts/router";
-import {
-  archiveDealProcedure,
-  createDealProcedure,
-  createDealTaskProcedure,
-  dealOptionsProcedure,
-  deleteDealTaskProcedure,
-  getDealProcedure,
-  listDealsProcedure,
-  moveDealProcedure,
-  updateDealProcedure,
-  updateDealTaskProcedure,
-} from "../deals/router";
-import {
-  archiveTemplateProcedure,
-  archiveVariableProcedure,
-  createTemplateProcedure,
-  createVariableProcedure,
-  listSegmentOptionsProcedure,
-  listTemplatesProcedure,
-  listTopicOptionsProcedure,
-  listVariablesProcedure,
-  previewTemplateProcedure,
-  publishTemplateProcedure,
-  updateTemplateProcedure,
-  updateVariableProcedure,
-} from "../messaging/router";
-import { listDeadLettersProcedure, replayDeadLetterProcedure } from "../platform/router";
-import {
-  automationsReportProcedure,
-  contactsReportProcedure,
-  dashboardProcedure,
-  dealsReportProcedure,
-  emailsReportProcedure,
-  siteReportProcedure,
-} from "../reports/router";
-import {
-  createSegmentProcedure,
-  listSegmentsProcedure,
-  previewSegmentProcedure,
-  refreshSegmentProcedure,
-} from "../segments/router";
-import {
-  archiveAssetProcedure,
-  deleteAssetProcedure,
-  downloadAssetProcedure,
-  getAssetProcedure,
-  listAssetsProcedure,
-  restoreAssetProcedure,
-  updateAssetProcedure,
-  uploadAssetProcedure,
-} from "../web/asset-router";
-import {
-  addProjectItemProcedure,
-  createProjectProcedure,
-  listProjectsProcedure,
-} from "../web/project-router";
-import {
-  archiveFormProcedure,
-  archiveMessageProcedure,
-  archivePageProcedure,
-  createFormProcedure,
-  createMessageProcedure,
-  createPageProcedure,
-  getTrackingProcedure,
-  listFormsProcedure,
-  listMessagesProcedure,
-  listPagesProcedure,
-  updateFormProcedure,
-  updateMessageProcedure,
-  updatePageProcedure,
-  updateTrackingProcedure,
-} from "../web/router";
-import {
-  createApiKeyProcedure,
-  createWebhookEndpointProcedure,
-  getWorkspaceProcedure,
-  listWebhookEndpointsProcedure,
-} from "../workspaces/router";
+import { agentProcedures } from "../agents/router";
+import { automationProcedures } from "../automations/router";
+import { consentProcedures } from "../consent/router";
+import { companyProcedures } from "../contacts/company-router";
+import { contactResourceProcedures } from "../contacts/resource-router";
+import { contactProcedures } from "../contacts/router";
+import { dealProcedures } from "../deals/router";
+import { messagingProcedures } from "../messaging/router";
+import { platformProcedures } from "../platform/router";
+import { dashboardProcedures, reportProcedures } from "../reports/router";
+import { segmentProcedures } from "../segments/router";
+import { assetProcedures } from "../web/asset-router";
+import { projectProcedures } from "../web/project-router";
+import { websiteProcedures } from "../web/router";
+import { workspaceProcedures } from "../workspaces/router";
 import { os } from "./base";
 
 export type { OrpcContext, OrpcInitialContext } from "./context";
 
 export const orpcRouter = os.router({
-  agentConversations: {
-    create: createAgentConversationProcedure,
-    list: listAgentConversationsProcedure,
-  },
-  workspace: {
-    get: getWorkspaceProcedure,
-    listWebhookEndpoints: listWebhookEndpointsProcedure,
-    createWebhookEndpoint: createWebhookEndpointProcedure,
-  },
-  assets: {
-    list: listAssetsProcedure,
-    get: getAssetProcedure,
-    upload: uploadAssetProcedure,
-    download: downloadAssetProcedure,
-    update: updateAssetProcedure,
-    archive: archiveAssetProcedure,
-    restore: restoreAssetProcedure,
-    delete: deleteAssetProcedure,
-  },
-  consent: {
-    listTopics: listTopicsProcedure,
-    createTopic: createTopicProcedure,
-  },
-  projects: {
-    list: listProjectsProcedure,
-    create: createProjectProcedure,
-    addItem: addProjectItemProcedure,
-  },
-  contacts: {
-    list: listContactsProcedure,
-    get: getContactProcedure,
-    timeline: contactTimelineProcedure,
-    recordEvent: recordContactEventProcedure,
-    create: createContactProcedure,
-    update: updateContactProcedure,
-    archive: archiveContactProcedure,
-  },
-  deals: {
-    options: dealOptionsProcedure,
-    list: listDealsProcedure,
-    get: getDealProcedure,
-    create: createDealProcedure,
-    update: updateDealProcedure,
-    move: moveDealProcedure,
-    archive: archiveDealProcedure,
-    createTask: createDealTaskProcedure,
-    updateTask: updateDealTaskProcedure,
-    deleteTask: deleteDealTaskProcedure,
-  },
-  emails: {
-    listTemplates: listTemplatesProcedure,
-    createTemplate: createTemplateProcedure,
-    updateTemplate: updateTemplateProcedure,
-    previewTemplate: previewTemplateProcedure,
-    publishTemplate: publishTemplateProcedure,
-    archiveTemplate: archiveTemplateProcedure,
-    listVariables: listVariablesProcedure,
-    createVariable: createVariableProcedure,
-    updateVariable: updateVariableProcedure,
-    archiveVariable: archiveVariableProcedure,
-    listSegmentOptions: listSegmentOptionsProcedure,
-    listTopicOptions: listTopicOptionsProcedure,
-  },
-  reports: {
-    contacts: contactsReportProcedure,
-    automations: automationsReportProcedure,
-    emails: emailsReportProcedure,
-    deals: dealsReportProcedure,
-    site: siteReportProcedure,
-  },
-  operations: {
-    dashboard: dashboardProcedure,
-    createApiKey: createApiKeyProcedure,
-    importContacts: importContactsProcedure,
-    exportContacts: exportContactsProcedure,
-    getDataJob: getDataJobProcedure,
-    downloadContactExport: downloadContactExportProcedure,
-    listDeadLetters: listDeadLettersProcedure,
-    replayDeadLetter: replayDeadLetterProcedure,
-  },
-  segments: {
-    list: listSegmentsProcedure,
-    create: createSegmentProcedure,
-    refresh: refreshSegmentProcedure,
-    preview: previewSegmentProcedure,
-  },
-  automations: {
-    list: listAutomationsProcedure,
-    create: createAutomationProcedure,
-    getDraft: getAutomationDraftProcedure,
-    saveDraft: saveAutomationDraftProcedure,
-    publish: publishAutomationProcedure,
-    setStatus: setAutomationStatusProcedure,
-    enroll: enrollAutomationProcedure,
-    analytics: automationAnalyticsProcedure,
-  },
-  contactResources: {
-    options: contactOptionsProcedure,
-    profile: contactProfileProcedure,
-    createTag: createTagProcedure,
-    addTag: addTagProcedure,
-    removeTag: removeTagProcedure,
-    addSegment: addSegmentProcedure,
-    removeSegment: removeSegmentProcedure,
-    adjustScore: adjustScoreProcedure,
-    restore: restoreContactProcedure,
-    bulkAction: bulkActionProcedure,
-  },
-  website: {
-    listForms: listFormsProcedure,
-    createForm: createFormProcedure,
-    updateForm: updateFormProcedure,
-    archiveForm: archiveFormProcedure,
-    listPages: listPagesProcedure,
-    createPage: createPageProcedure,
-    updatePage: updatePageProcedure,
-    archivePage: archivePageProcedure,
-    listMessages: listMessagesProcedure,
-    createMessage: createMessageProcedure,
-    updateMessage: updateMessageProcedure,
-    archiveMessage: archiveMessageProcedure,
-    getTracking: getTrackingProcedure,
-    updateTracking: updateTrackingProcedure,
-  },
-  companies: {
-    list: listCompaniesProcedure,
-    get: getCompanyProcedure,
-    create: createCompanyProcedure,
-    update: updateCompanyProcedure,
-    assignContact: assignCompanyContactProcedure,
-    removeContact: removeCompanyContactProcedure,
-  },
+  agents: agentProcedures,
+  assets: assetProcedures,
+  automations: automationProcedures,
+  companies: companyProcedures,
+  consent: consentProcedures,
+  contacts: { ...contactProcedures, ...contactResourceProcedures },
+  dashboard: dashboardProcedures,
+  deals: dealProcedures,
+  emails: messagingProcedures,
+  platform: platformProcedures,
+  projects: projectProcedures,
+  reports: reportProcedures,
+  segments: segmentProcedures,
+  website: websiteProcedures,
+  workspace: workspaceProcedures,
 });
-import {
-  createAgentConversationProcedure,
-  listAgentConversationsProcedure,
-} from "../agents/router";

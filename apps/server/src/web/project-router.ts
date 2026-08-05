@@ -24,3 +24,9 @@ export const addProjectItemProcedure = authed.projects.addItem.handler(
     return { added: outcome.added };
   },
 );
+
+export const projectProcedures = {
+  list: listProjectsProcedure,
+  create: createProjectProcedure,
+  addItem: addProjectItemProcedure,
+};

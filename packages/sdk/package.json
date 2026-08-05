@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@openengage/core": "workspace:*",
     "@openengage/orpc": "workspace:*",
     "@orpc/client": "1.14.13",
     "@orpc/contract": "1.14.13",

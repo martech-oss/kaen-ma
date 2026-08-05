@@ -133,7 +133,7 @@ describe("oRPC contract completion (P2)", () => {
 
   it("creates an API key whose token authenticates with its prefix", async () => {
     const { client } = await createWorkspaceClient();
-    const created = await client.operations.createApiKey({ name: "CI key", role: "analyst" });
+    const created = await client.workspace.createApiKey({ name: "CI key", role: "analyst" });
     expect(created.token.startsWith(`openengage_${created.prefix}_`)).toBe(true);
     const analystClient: Client = createFixtureClient({ token: created.token });
     await expect(analystClient.workspace.get()).resolves.toMatchObject({ role: "analyst" });
@@ -150,10 +150,10 @@ describe("oRPC contract completion (P2)", () => {
 
   it("starts a contact export and reports its data job", async () => {
     const { client } = await createWorkspaceClient();
-    const { jobId } = await client.operations.exportContacts();
-    const job = await client.operations.getDataJob({ id: jobId });
+    const { jobId } = await client.contacts.startExport();
+    const job = await client.contacts.getDataJob({ id: jobId });
     expect(job).toMatchObject({ id: jobId, kind: "contact_export", status: "pending" });
-    await expect(client.operations.downloadContactExport({ id: jobId })).rejects.toMatchObject({
+    await expect(client.contacts.downloadExport({ id: jobId })).rejects.toMatchObject({
       code: "EXPORT_NOT_READY",
     });
   });
@@ -161,12 +161,12 @@ describe("oRPC contract completion (P2)", () => {
   it("accepts a CSV import file and rejects one without identifiers", async () => {
     const { client } = await createWorkspaceClient();
     const csv = "email,first_name\nimport-a@example.com,Ay\nimport-b@example.com,Bee\n";
-    const started = await client.operations.importContacts({
+    const started = await client.contacts.startImport({
       file: new File([csv], "contacts.csv", { type: "text/csv" }),
     });
     expect(started).toMatchObject({ rows: 2, parts: 1 });
     await expect(
-      client.operations.importContacts({
+      client.contacts.startImport({
         file: new File(["first_name\nNoId\n"], "broken.csv", { type: "text/csv" }),
       }),
     ).rejects.toMatchObject({ code: "CSV_IDENTIFIER_MISSING" });
@@ -204,8 +204,8 @@ describe("oRPC contract completion (P2)", () => {
 
   it("lists dead letters and rejects replaying unknown entries", async () => {
     const { client } = await createWorkspaceClient();
-    await expect(client.operations.listDeadLetters()).resolves.toEqual([]);
-    await expect(client.operations.replayDeadLetter({ id: uuidv7() })).rejects.toMatchObject({
+    await expect(client.platform.listDeadLetters()).resolves.toEqual([]);
+    await expect(client.platform.replayDeadLetter({ id: uuidv7() })).rejects.toMatchObject({
       code: "DEAD_LETTER_NOT_FOUND",
     });
   });

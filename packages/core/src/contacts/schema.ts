@@ -1,5 +1,28 @@
 import * as z from "zod";
 
+export const contactDataJobSchema = z.object({
+  id: z.string(),
+  kind: z.enum(["contact_import", "contact_export", "event_archive"]),
+  status: z.string(),
+  processed: z.number().int().nonnegative(),
+  succeeded: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
+  errorManifestKey: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ContactDataJob = z.infer<typeof contactDataJobSchema>;
+
+export const contactTimelineEventSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  resourceType: z.string().nullable(),
+  resourceId: z.string().nullable(),
+  properties: z.record(z.string(), z.unknown()),
+  occurredAt: z.string(),
+});
+export type ContactTimelineEvent = z.infer<typeof contactTimelineEventSchema>;
+
 import { contactSchema } from "./contact-schema";
 
 /**

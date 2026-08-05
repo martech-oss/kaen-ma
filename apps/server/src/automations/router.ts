@@ -144,5 +144,16 @@ export const automationAnalyticsProcedure = authed.automations.analytics.handler
     getAutomationAnalytics(context.database, context.workspace.workspaceId, input.id),
 );
 
+export const automationProcedures = {
+  list: listAutomationsProcedure,
+  create: createAutomationProcedure,
+  getDraft: getAutomationDraftProcedure,
+  saveDraft: saveAutomationDraftProcedure,
+  publish: publishAutomationProcedure,
+  setStatus: setAutomationStatusProcedure,
+  enroll: enrollAutomationProcedure,
+  analytics: automationAnalyticsProcedure,
+};
+
 // isRecord is re-exported for the client-side error shape check in tests.
 export { isRecord };

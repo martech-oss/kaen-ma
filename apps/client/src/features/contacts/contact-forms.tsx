@@ -49,10 +49,10 @@ export function ContactCreateForm({
       const companyId = optionalString(form.get("companyId"));
       await Promise.all([
         tagId
-          ? orpc.contactResources.addTag({ contactId: contact.id, resourceId: tagId })
+          ? orpc.contacts.assignTag({ contactId: contact.id, resourceId: tagId })
           : Promise.resolve(),
         segmentId
-          ? orpc.contactResources.addSegment({ contactId: contact.id, resourceId: segmentId })
+          ? orpc.contacts.addToSegment({ contactId: contact.id, resourceId: segmentId })
           : Promise.resolve(),
         companyId
           ? orpc.companies.assignContact({

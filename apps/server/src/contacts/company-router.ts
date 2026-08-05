@@ -73,3 +73,12 @@ export const removeCompanyContactProcedure = authed.companies.removeContact.hand
     return { removed: true as const };
   },
 );
+
+export const companyProcedures = {
+  list: listCompaniesProcedure,
+  get: getCompanyProcedure,
+  create: createCompanyProcedure,
+  update: updateCompanyProcedure,
+  assignContact: assignCompanyContactProcedure,
+  removeContact: removeCompanyContactProcedure,
+};

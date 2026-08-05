@@ -57,6 +57,16 @@ export const siteReportProcedure = authed.reports.site.handler(({ context, input
   );
 });
 
-export const dashboardProcedure = authed.operations.dashboard.handler(async ({ context }) => {
+export const dashboardProcedure = authed.dashboard.get.handler(async ({ context }) => {
   return getDashboard(context.database, context.workspace.workspaceId);
 });
+
+export const reportProcedures = {
+  contacts: contactsReportProcedure,
+  automations: automationsReportProcedure,
+  emails: emailsReportProcedure,
+  deals: dealsReportProcedure,
+  site: siteReportProcedure,
+};
+
+export const dashboardProcedures = { get: dashboardProcedure };

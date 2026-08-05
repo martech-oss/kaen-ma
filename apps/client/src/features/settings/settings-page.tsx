@@ -13,7 +13,7 @@ export function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode
   const [apiKey, setApiKey] = useState("");
 
   async function createKey(): Promise<void> {
-    const created = await orpc.operations.createApiKey({
+    const created = await orpc.workspace.createApiKey({
       name: "Admin generated key",
       role: "marketer",
     });

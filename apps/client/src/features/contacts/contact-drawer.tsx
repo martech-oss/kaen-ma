@@ -59,7 +59,7 @@ export function ContactDrawer({
   const loadProfile = useCallback(async () => {
     setLoading(true);
     try {
-      setProfile(await orpc.contactResources.profile({ contactId }));
+      setProfile(await orpc.contacts.profile({ contactId }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "プロフィールを読み込めませんでした");
     } finally {
@@ -130,7 +130,7 @@ export function ContactDrawer({
                   <Button
                     variant="outline"
                     className="ml-auto"
-                    onClick={() => void mutate(() => orpc.contactResources.restore({ contactId }))}
+                    onClick={() => void mutate(() => orpc.contacts.restore({ id: contactId }))}
                   >
                     <RotateCcw data-icon="inline-start" />
                     復元
@@ -174,11 +174,9 @@ export function ContactDrawer({
                 items={profile.tags}
                 options={options.tags}
                 disabled={profile.contact.status === "archived"}
-                onAdd={(id) =>
-                  mutate(() => orpc.contactResources.addTag({ contactId, resourceId: id }))
-                }
+                onAdd={(id) => mutate(() => orpc.contacts.assignTag({ contactId, resourceId: id }))}
                 onRemove={(id) =>
-                  mutate(() => orpc.contactResources.removeTag({ contactId, resourceId: id }))
+                  mutate(() => orpc.contacts.removeTag({ contactId, resourceId: id }))
                 }
               />
 
@@ -195,10 +193,10 @@ export function ContactDrawer({
                 options={options.segments}
                 disabled={profile.contact.status === "archived"}
                 onAdd={(id) =>
-                  mutate(() => orpc.contactResources.addSegment({ contactId, resourceId: id }))
+                  mutate(() => orpc.contacts.addToSegment({ contactId, resourceId: id }))
                 }
                 onRemove={(id) =>
-                  mutate(() => orpc.contactResources.removeSegment({ contactId, resourceId: id }))
+                  mutate(() => orpc.contacts.removeFromSegment({ contactId, resourceId: id }))
                 }
               />
 
@@ -323,7 +321,7 @@ function ScoreForm({
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     await run(async () => {
-      await orpc.contactResources.adjustScore({
+      await orpc.contacts.adjustScore({
         contactId,
         delta: Number(form.get("delta")),
         reason: getFormString(form, "reason"),

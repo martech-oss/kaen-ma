@@ -385,6 +385,9 @@ importers:
 
   packages/sdk:
     dependencies:
+      '@openengage/core':
+        specifier: workspace:*
+        version: link:../core
       '@openengage/orpc':
         specifier: workspace:*
         version: link:../orpc

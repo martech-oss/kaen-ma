@@ -1,5 +1,24 @@
 import * as z from "zod";
 
+export const dashboardSchema = z.object({
+  contacts: z.object({ count: z.number().int().nonnegative() }),
+  automations: z.object({ count: z.number().int().nonnegative() }),
+  deliveries: z.object({
+    sent: z.number().int().nonnegative(),
+    delivered: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+  }),
+  recentEvents: z.array(
+    z.object({
+      type: z.string(),
+      occurredAt: z.string(),
+      contactId: z.string().nullable(),
+      properties: z.record(z.string(), z.unknown()),
+    }),
+  ),
+});
+export type Dashboard = z.infer<typeof dashboardSchema>;
+
 export const reportCategorySchema = z.enum(["contacts", "automations", "emails", "deals", "site"]);
 export type ReportCategory = z.infer<typeof reportCategorySchema>;
 

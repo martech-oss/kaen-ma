@@ -33,7 +33,7 @@ const base = { ...workspaceErrors, ...forbidden } as const;
 
 export const dealsContract = {
   options: oc
-    .route({ method: "GET", path: "/deal-options" })
+    .route({ method: "GET", path: "/deals/options" })
     .errors(workspaceErrors)
     .output(dealOptionsSchema),
   list: oc

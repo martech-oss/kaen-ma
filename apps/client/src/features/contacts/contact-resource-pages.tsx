@@ -172,7 +172,7 @@ function CreateTagForm({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await run(async () => {
-      await orpc.contactResources.createTag({
+      await orpc.contacts.createTag({
         name: getFormString(form, "name"),
         color: getFormString(form, "color"),
       });

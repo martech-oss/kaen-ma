@@ -1,5 +1,5 @@
+import type { Dashboard } from "@openengage/core/reports";
 import { ReportsRepository, type OpenEngageDatabase } from "@openengage/database";
-import type { Dashboard } from "@openengage/orpc";
 
 import { numericValue, parseJsonRecord, primitiveString } from "../platform/values";
 

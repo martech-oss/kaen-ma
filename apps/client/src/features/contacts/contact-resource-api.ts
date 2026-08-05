@@ -9,7 +9,7 @@ export interface ContactResources {
 }
 
 export async function loadContactResources(signal?: AbortSignal): Promise<ContactResources> {
-  const options: ContactOptions = await orpc.contactResources.options(
+  const options: ContactOptions = await orpc.contacts.options(
     undefined,
     signal ? { signal } : undefined,
   );

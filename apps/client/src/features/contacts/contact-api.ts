@@ -111,7 +111,7 @@ export function contactOptionsQueryOptions() {
 }
 
 export async function loadContactOptions(signal?: AbortSignal): Promise<ContactOptions> {
-  return orpc.contactResources.options(undefined, signal ? { signal } : undefined);
+  return orpc.contacts.options(undefined, signal ? { signal } : undefined);
 }
 
 function optionalNumber(value: string): number | undefined {

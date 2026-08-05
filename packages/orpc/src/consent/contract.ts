@@ -1,18 +1,8 @@
+import { subscriptionTopicRowSchema } from "@openengage/core/consent";
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
-
-export const subscriptionTopicRowSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  slug: z.string(),
-  description: z.string(),
-  isDefault: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type SubscriptionTopicRow = z.infer<typeof subscriptionTopicRowSchema>;
 
 export const consentContract = {
   listTopics: oc

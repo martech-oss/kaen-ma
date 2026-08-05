@@ -28,9 +28,16 @@ export const createWebhookEndpointProcedure = authed.workspace.createWebhookEndp
   },
 );
 
-export const createApiKeyProcedure = authed.operations.createApiKey.handler(
+export const createApiKeyProcedure = authed.workspace.createApiKey.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     return createApiKey(context.database, context.workspace, input);
   },
 );
+
+export const workspaceProcedures = {
+  get: getWorkspaceProcedure,
+  createApiKey: createApiKeyProcedure,
+  listWebhookEndpoints: listWebhookEndpointsProcedure,
+  createWebhookEndpoint: createWebhookEndpointProcedure,
+};

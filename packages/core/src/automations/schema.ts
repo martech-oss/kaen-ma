@@ -1,5 +1,20 @@
 import * as z from "zod";
 
+export const automationStatusSchema = z.enum(["draft", "active", "paused", "archived"]);
+
+export const automationRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  description: z.string(),
+  status: automationStatusSchema,
+  triggerSource: z.string().nullable(),
+  enrollmentCount: z.number().int().nonnegative(),
+  activeCount: z.number().int().nonnegative(),
+  completedCount: z.number().int().nonnegative(),
+  updatedAt: z.string(),
+});
+export type AutomationRow = z.infer<typeof automationRowSchema>;
+
 import { segmentOperatorSchema, segmentValueSchema } from "../segments/schema";
 
 export const sourceNodeSchema = z.object({
@@ -136,3 +151,9 @@ export const automationDefinitionSchema = z.object({
   edges: z.array(automationEdgeSchema).max(1_000),
 });
 export type AutomationDefinition = z.infer<typeof automationDefinitionSchema>;
+
+export const automationDraftSchema = z.object({
+  graph: automationDefinitionSchema,
+  status: automationStatusSchema,
+});
+export type AutomationDraft = z.infer<typeof automationDraftSchema>;

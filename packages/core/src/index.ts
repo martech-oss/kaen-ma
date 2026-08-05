@@ -4,6 +4,7 @@ export * from "./assets/dto.js";
 export * from "./assets/schema.js";
 export * from "./automations/schema.js";
 export * from "./consent.js";
+export * from "./consent/schema.js";
 export * from "./contacts/company-dto.js";
 export * from "./contacts/company-schema.js";
 export * from "./contacts/contact-schema.js";

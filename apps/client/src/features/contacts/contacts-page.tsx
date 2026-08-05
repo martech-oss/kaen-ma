@@ -149,7 +149,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
       return;
     }
     await run(async () => {
-      await orpc.contactResources.bulkAction({
+      await orpc.contacts.bulkUpdate({
         contactIds: [...selected],
         action: bulkAction,
         ...(needsResource ? { resourceId: bulkResourceId } : {}),

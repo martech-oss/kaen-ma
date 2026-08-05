@@ -199,7 +199,7 @@ describe("OpenEngage Worker", () => {
   it("manages the full contact profile through authenticated API routes", async () => {
     const { client } = await seedWorkspaceClient(env.DB);
 
-    const tag = await client.contactResources.createTag({ name: "VIP", color: "#6366f1" });
+    const tag = await client.contacts.createTag({ name: "VIP", color: "#6366f1" });
     expect(tag.id).toBeTruthy();
     const group = await client.segments.create({
       name: "Customers",
@@ -217,10 +217,10 @@ describe("OpenEngage Worker", () => {
       customFields: {},
     });
     await expect(
-      client.contactResources.addTag({ contactId: contact.id, resourceId: tag.id }),
+      client.contacts.assignTag({ contactId: contact.id, resourceId: tag.id }),
     ).resolves.toEqual({ assigned: true });
     await expect(
-      client.contactResources.addSegment({ contactId: contact.id, resourceId: group.id }),
+      client.contacts.addToSegment({ contactId: contact.id, resourceId: group.id }),
     ).resolves.toEqual({ assigned: true });
     await expect(
       client.companies.assignContact({
@@ -230,7 +230,7 @@ describe("OpenEngage Worker", () => {
         isPrimary: true,
       }),
     ).resolves.toEqual({ assigned: true });
-    const scored = await client.contactResources.adjustScore({
+    const scored = await client.contacts.adjustScore({
       contactId: contact.id,
       delta: 75,
       reason: "Qualified lead",
@@ -377,7 +377,7 @@ describe("OpenEngage Worker", () => {
       companies: [expect.objectContaining({ id: account.id })],
     });
 
-    const profile = await client.contactResources.profile({ contactId: contact.id });
+    const profile = await client.contacts.profile({ contactId: contact.id });
     expect(profile.contact.score).toBe(75);
     expect(profile.tags).toHaveLength(1);
     // Both the manually-added static group and the auto-refreshed dynamic
@@ -403,13 +403,13 @@ describe("OpenEngage Worker", () => {
       client.contacts.update({ id: contact.id, firstName: "Blocked" }),
     ).rejects.toMatchObject({ code: "CONTACT_ARCHIVED", status: 409 });
     await expect(
-      client.contactResources.removeTag({ contactId: contact.id, resourceId: tag.id }),
+      client.contacts.removeTag({ contactId: contact.id, resourceId: tag.id }),
     ).rejects.toMatchObject({ code: "RELATION_REJECTED", status: 409 });
-    await expect(client.contactResources.restore({ contactId: contact.id })).resolves.toEqual({
+    await expect(client.contacts.restore({ id: contact.id })).resolves.toEqual({
       restored: true,
     });
     await expect(
-      client.contactResources.removeTag({ contactId: contact.id, resourceId: tag.id }),
+      client.contacts.removeTag({ contactId: contact.id, resourceId: tag.id }),
     ).resolves.toEqual({ removed: true });
   });
 

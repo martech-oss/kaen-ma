@@ -1,14 +1,14 @@
 import { authed, requireRole } from "../orpc/base";
 import { listDeadLetters, replayDeadLetter } from "./dead-letter-service";
 
-export const listDeadLettersProcedure = authed.operations.listDeadLetters.handler(
+export const listDeadLettersProcedure = authed.platform.listDeadLetters.handler(
   async ({ context, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     return listDeadLetters(context.database, context.workspace.workspaceId);
   },
 );
 
-export const replayDeadLetterProcedure = authed.operations.replayDeadLetter.handler(
+export const replayDeadLetterProcedure = authed.platform.replayDeadLetter.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     const outcome = await replayDeadLetter(
@@ -21,3 +21,8 @@ export const replayDeadLetterProcedure = authed.operations.replayDeadLetter.hand
     return { replayed: true as const };
   },
 );
+
+export const platformProcedures = {
+  listDeadLetters: listDeadLettersProcedure,
+  replayDeadLetter: replayDeadLetterProcedure,
+};
