@@ -1,5 +1,5 @@
-import type { DealRow, DealStageRow, DealTaskRow } from "@kaenma/database";
-import type { DealSummary, DealTask } from "@kaenma/orpc";
+import type { DealRow, DealStageRow, DealTaskRow } from "@openengage/database";
+import type { DealSummary, DealTask } from "@openengage/orpc";
 
 export function serializeStage(
   stage: Pick<DealStageRow, "id" | "name" | "color" | "position" | "probability">,

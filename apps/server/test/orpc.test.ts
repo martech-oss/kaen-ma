@@ -1,10 +1,9 @@
+import { contract } from "@openengage/orpc";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-
-import { contract } from "@kaenma/orpc";
 
 import { seedWorkspace } from "./factory";
 

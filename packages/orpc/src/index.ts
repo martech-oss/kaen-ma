@@ -1,4 +1,5 @@
 export * from "./contract";
+export * from "./agents/schema";
 export * from "./shared/errors";
 export * from "./shared/schema";
 export * from "./assets/contract";

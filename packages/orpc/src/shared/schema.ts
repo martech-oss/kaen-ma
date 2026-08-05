@@ -2,7 +2,7 @@ import * as z from "zod";
 
 /**
  * The raw arrays behind each schema below are exported too, so
- * `@kaenma/database`'s schema files can build their matching CHECK
+ * `@openengage/database`'s schema files can build their matching CHECK
  * constraint from the exact same source (via `checkEnum`) instead of
  * hand-duplicating the value list - the "role" enum alone used to be
  * hand-written in four different places.

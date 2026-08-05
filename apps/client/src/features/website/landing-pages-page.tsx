@@ -1,3 +1,4 @@
+import type { ContentDocument } from "@openengage/orpc";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { ExternalLink, FileStack, Globe2, Image as ImageIcon, Pencil, Plus } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
@@ -23,7 +24,6 @@ import { useFormSubmission } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString, slugify } from "@/lib/utils";
-import type { ContentDocument } from "@kaenma/orpc";
 
 export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
   const queryClient = useQueryClient();

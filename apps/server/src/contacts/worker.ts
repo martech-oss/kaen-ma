@@ -1,5 +1,5 @@
-import { PermanentChannelError } from "@kaenma/channels";
-import { DataJobWorkerRepository, type ContactImportRow } from "@kaenma/database";
+import { PermanentChannelError } from "@openengage/channels";
+import { DataJobWorkerRepository, type ContactImportRow } from "@openengage/database";
 
 import { type RuntimeEnv } from "../env";
 import { parseJsonRecord, stringValue } from "../platform/values";
@@ -130,7 +130,7 @@ export async function processContactExport(jobId: string, env: RuntimeEnv): Prom
   await env.ASSETS_BUCKET.put(job.r2Key, new Blob(chunks), {
     httpMetadata: {
       contentType: "text/csv; charset=utf-8",
-      contentDisposition: `attachment; filename="kaenma-contacts-${jobId}.csv"`,
+      contentDisposition: `attachment; filename="openengage-contacts-${jobId}.csv"`,
     },
   });
   await repository.markCompleted(jobId);

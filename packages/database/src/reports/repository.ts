@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { user } from "../auth/schema";
 import { automationEnrollments, automations } from "../automations/schema";
 import { broadcasts } from "../broadcasts/schema";
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";
 import { dealStages, dealTasks, deals } from "../deals/schema";
 import { deliveries, deliveryEvents, emailTemplates } from "../messaging/schema";
@@ -44,7 +44,7 @@ import { formSubmissions, forms, siteMessages } from "../web/schema";
  * and simpler than reproducing per-query aliases.
  *
  * Every query below executes as a standalone `database.orm.all(sql\`...\`)` -
- * never through `KaenmaDatabase.prepare()`/`.batch()`/`nativeStatement()` -
+ * never through `OpenEngageDatabase.prepare()`/`.batch()`/`nativeStatement()` -
  * because those exist only to run hand-typed `?`-placeholder SQL strings and
  * are being retired once nothing depends on them (see
  * apps/server/test/no-raw-sql.test.ts). `runBatch()` below fires several such
@@ -125,7 +125,7 @@ export interface DashboardSummaryData {
 
 /** Cross-domain read-only aggregation queries backing `/reports/*` and `/dashboard`. */
 export class ReportsRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(database: DatabaseSource) {
     this.database = createDatabase(database);

@@ -1,11 +1,10 @@
+import { type OpenEngageDatabase, organization, siteTrackingSettings } from "@openengage/database";
 import { and, eq } from "drizzle-orm";
-
-import { type KaenmaDatabase, organization, siteTrackingSettings } from "@kaenma/database";
 
 import { sha256Hex } from "../platform/crypto";
 
 export async function loadPublicTrackingWorkspace(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceSlug: string,
 ): Promise<{ id: string; allowedDomains: string[] } | null> {
   const [row] = await database.orm

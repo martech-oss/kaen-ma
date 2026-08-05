@@ -2,14 +2,14 @@ import {
   PermanentChannelError,
   TransientChannelError,
   type ResendHostedTemplate,
-} from "@kaenma/channels";
+} from "@openengage/channels";
 import {
   MessagingRepository,
   type EmailTemplateRecord,
-  type KaenmaDatabase,
-} from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
-import type { EmailTemplate, ResendTemplateVariable } from "@kaenma/orpc";
+  type OpenEngageDatabase,
+} from "@openengage/database";
+import type { WorkspaceContext } from "@openengage/orpc";
+import type { EmailTemplate, ResendTemplateVariable } from "@openengage/orpc";
 
 import type { RuntimeEnv } from "../env";
 import { createResendTemplateAdapter, templateCompatibilityError } from "../messaging/resend";
@@ -31,7 +31,7 @@ export class TemplateAlreadyRegisteredError extends Error {
 }
 
 export async function listEmailTemplates(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   archived: boolean,
 ): Promise<EmailTemplate[]> {
@@ -40,7 +40,7 @@ export async function listEmailTemplates(
 }
 
 export async function importEmailTemplate(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   input: { resendTemplateId: string; purpose: "marketing" | "transactional" },
@@ -65,7 +65,7 @@ export async function importEmailTemplate(
 }
 
 export async function syncEmailTemplate(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   id: string,
@@ -90,7 +90,7 @@ export async function syncEmailTemplate(
 }
 
 export function archiveEmailTemplate(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
 ): Promise<boolean> {

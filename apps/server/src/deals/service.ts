@@ -1,4 +1,4 @@
-import { DealRepository, writeAuditLog, type KaenmaDatabase } from "@kaenma/database";
+import { DealRepository, writeAuditLog, type OpenEngageDatabase } from "@openengage/database";
 import type {
   DealCreate,
   DealDetailData,
@@ -10,7 +10,7 @@ import type {
   DealTaskUpdate,
   DealUpdate,
   WorkspaceContext,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
 
 import { serializeDeal, serializeStage, serializeTask } from "./records";
 
@@ -34,7 +34,7 @@ interface Background {
 }
 
 export async function getDealOptions(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<DealOptions> {
   const repository = new DealRepository(database, workspace);
@@ -62,7 +62,7 @@ export async function getDealOptions(
 }
 
 export async function listDeals(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: {
     pipelineId?: string | undefined;
@@ -99,7 +99,7 @@ export async function listDeals(
 }
 
 export async function getDealDetail(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
 ): Promise<DealDetailData | null> {
@@ -111,7 +111,7 @@ export async function getDealDetail(
 }
 
 export async function createDeal(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: DealCreate,
   background: Background,
@@ -133,7 +133,7 @@ export async function createDeal(
 
 /** Patch semantics: unset fields keep the stored value, so the merge happens here. */
 export async function updateDeal(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   input: DealUpdate,
@@ -180,7 +180,7 @@ export async function updateDeal(
 }
 
 export async function moveDeal(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   stageId: string,
@@ -205,7 +205,7 @@ export async function moveDeal(
 }
 
 export async function archiveDeal(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   background: Background,
@@ -223,7 +223,7 @@ export async function archiveDeal(
 }
 
 export async function createDealTask(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   dealId: string,
   input: DealTaskCreate,
@@ -238,7 +238,7 @@ export async function createDealTask(
 }
 
 export async function updateDealTask(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   dealId: string,
   taskId: string,
@@ -271,7 +271,7 @@ export async function updateDealTask(
 }
 
 export async function deleteDealTask(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   dealId: string,
   taskId: string,

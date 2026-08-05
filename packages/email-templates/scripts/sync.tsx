@@ -24,8 +24,8 @@ if (!apiKey) {
 const resend = new Resend(apiKey);
 const templates: SystemTemplate[] = [
   {
-    alias: "kaenma-password-reset",
-    name: "Kaenma Password Reset",
+    alias: "openengage-password-reset",
+    name: "OpenEngage Password Reset",
     subject: "{{{APP_NAME}}}のパスワードを再設定",
     react: <PasswordResetEmail />,
     variables: [
@@ -34,8 +34,8 @@ const templates: SystemTemplate[] = [
     ],
   },
   {
-    alias: "kaenma-email-verification",
-    name: "Kaenma Email Verification",
+    alias: "openengage-email-verification",
+    name: "OpenEngage Email Verification",
     subject: "{{{APP_NAME}}}のメールアドレスを確認",
     react: <EmailVerificationEmail />,
     variables: [
@@ -44,8 +44,8 @@ const templates: SystemTemplate[] = [
     ],
   },
   {
-    alias: "kaenma-organization-invitation",
-    name: "Kaenma Organization Invitation",
+    alias: "openengage-organization-invitation",
+    name: "OpenEngage Organization Invitation",
     subject: "{{{ORGANIZATION_NAME}}}への招待",
     react: <OrganizationInvitationEmail />,
     variables: [

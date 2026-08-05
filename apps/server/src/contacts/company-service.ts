@@ -1,9 +1,9 @@
 import {
   CompanyRepository,
   writeAuditLog,
-  type KaenmaDatabase,
+  type OpenEngageDatabase,
   type CompanySummary as RepositoryAccountSummary,
-} from "@kaenma/database";
+} from "@openengage/database";
 import type {
   Company,
   CompanyContactDto,
@@ -11,7 +11,7 @@ import type {
   CompanyDetail,
   CompanyUpdate,
   WorkspaceContext,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
 
 /** Raised when a write conflicts with the unique domain constraint. */
 export class CompanyConflictError extends Error {
@@ -22,7 +22,7 @@ export class CompanyConflictError extends Error {
 }
 
 export function listCompanies(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { query?: string; limit?: number },
 ): Promise<RepositoryAccountSummary[]> {
@@ -30,7 +30,7 @@ export function listCompanies(
 }
 
 export async function getCompanyDetail(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
 ): Promise<CompanyDetail | null> {
@@ -55,7 +55,7 @@ export async function getCompanyDetail(
 }
 
 export async function createCompany(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: CompanyCreate,
   background: { waitUntil(promise: Promise<unknown>): void },
@@ -77,7 +77,7 @@ export async function createCompany(
 }
 
 export async function updateCompany(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   input: CompanyUpdate,
@@ -95,7 +95,7 @@ export async function updateCompany(
  * so a contact is never primary in two places.
  */
 export async function assignCompanyContact(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { id: string; contactId: string; title?: string | undefined; isPrimary: boolean },
 ): Promise<boolean> {
@@ -111,7 +111,7 @@ export async function assignCompanyContact(
 }
 
 export function removeCompanyContact(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { id: string; contactId: string },
 ): Promise<boolean> {

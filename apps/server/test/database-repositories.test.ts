@@ -1,7 +1,3 @@
-import { env } from "cloudflare:workers";
-import { and, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-
 import {
   CompanyRepository,
   ContactRepository,
@@ -25,8 +21,11 @@ import {
   user,
   uuidv7,
   writeAuditLog,
-} from "@kaenma/database";
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
+} from "@openengage/database";
+import type { WorkspaceContext, WorkspaceRole } from "@openengage/orpc";
+import { env } from "cloudflare:workers";
+import { and, eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 
 const database = () => createDatabase(env.DB);
 

@@ -1,5 +1,5 @@
 {
-  "name": "@kaenma/sdk",
+  "name": "openengage",
   "version": "0.1.0",
   "type": "module",
   "exports": {
@@ -10,7 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@kaenma/orpc": "workspace:*",
+    "@openengage/orpc": "workspace:*",
     "@orpc/client": "1.14.13",
     "@orpc/contract": "1.14.13",
     "@orpc/openapi-client": "1.14.13"

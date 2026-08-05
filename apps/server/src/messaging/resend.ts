@@ -3,7 +3,7 @@ import {
   ResendTemplateAdapter,
   type ResendHostedTemplate,
   type ResendTemplateVariable,
-} from "@kaenma/channels";
+} from "@openengage/channels";
 
 import type { RuntimeEnv } from "../env";
 
@@ -34,15 +34,15 @@ export function templateCompatibilityError(
   if (!template.subject?.trim()) return "Resend Templateに件名が設定されていません";
   if (
     purpose === "marketing" &&
-    !template.variables.some((variable) => variable.key === "KAENMA_UNSUBSCRIBE_URL")
+    !template.variables.some((variable) => variable.key === "OPENENGAGE_UNSUBSCRIBE_URL")
   ) {
-    return "MarketingテンプレートにはKAENMA_UNSUBSCRIBE_URL変数が必要です";
+    return "MarketingテンプレートにはOPENENGAGE_UNSUBSCRIBE_URL変数が必要です";
   }
   const unsupported = template.variables.find(
     (variable) =>
       variable.fallbackValue === null && !isSupportedTemplateVariable(variable.key, purpose),
   );
-  return unsupported ? `必須変数${unsupported.key}をKaenmaのデータから解決できません` : null;
+  return unsupported ? `必須変数${unsupported.key}をOpenEngageのデータから解決できません` : null;
 }
 
 export function resolveTemplateVariables(
@@ -115,7 +115,7 @@ function isSupportedTemplateVariable(key: string, purpose: "marketing" | "transa
   ) {
     return true;
   }
-  if (key === "KAENMA_UNSUBSCRIBE_URL" || key === "KAENMA_PREFERENCE_URL") {
+  if (key === "OPENENGAGE_UNSUBSCRIBE_URL" || key === "OPENENGAGE_PREFERENCE_URL") {
     return purpose === "marketing";
   }
   return key.startsWith("CONTACT_CUSTOM_") || key.startsWith("MESSAGE_");
@@ -133,8 +133,8 @@ function resolveRawVariable(key: string, context: TemplateVariableContext): unkn
     CONTACT_PHONE: context.contact?.["phone"],
     CONTACT_STAGE: context.contact?.["stage"],
     CONTACT_SCORE: context.contact?.["score"],
-    KAENMA_UNSUBSCRIBE_URL: context.unsubscribeUrl,
-    KAENMA_PREFERENCE_URL: context.preferenceUrl,
+    OPENENGAGE_UNSUBSCRIBE_URL: context.unsubscribeUrl,
+    OPENENGAGE_PREFERENCE_URL: context.preferenceUrl,
   };
   if (key in builtIn) return builtIn[key];
   if (key.startsWith("CONTACT_CUSTOM_")) {

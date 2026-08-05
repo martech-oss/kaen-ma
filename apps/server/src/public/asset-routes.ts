@@ -1,6 +1,5 @@
+import { PublicAssetRepository } from "@openengage/database";
 import type { Hono } from "hono";
-
-import { PublicAssetRepository } from "@kaenma/database";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";

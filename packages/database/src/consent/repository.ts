@@ -1,9 +1,8 @@
+import type { WorkspaceContext } from "@openengage/orpc";
 import { and, asc, count, eq, inArray, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
-import type { WorkspaceContext } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contacts } from "../contacts/schema";
 import { deliveries } from "../messaging/schema";
 import { uuidv7 } from "../shared/uuid";
@@ -41,7 +40,7 @@ export interface ConsentGateRows {
  * A full context is assignable wherever this scope is expected.
  */
 export class ConsentRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,

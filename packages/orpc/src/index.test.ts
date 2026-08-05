@@ -27,8 +27,8 @@ describe("oRPC contract schemas", () => {
     expect(
       workspaceSchema.parse({
         id: "workspace-id",
-        name: "Kaenma",
-        slug: "kaenma",
+        name: "OpenEngage",
+        slug: "openengage",
         logo: null,
         timezone: "Asia/Tokyo",
         created_at: Date.now(),

@@ -1,8 +1,8 @@
 {
-  "name": "@kaenma/mcp-server",
+  "name": "openengage-mcp",
   "version": "0.1.0",
   "bin": {
-    "kaenma-mcp": "./dist/index.js"
+    "openengage-mcp": "./dist/index.js"
   },
   "type": "module",
   "scripts": {
@@ -11,8 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@kaenma/sdk": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "openengage": "workspace:*",
     "zod": "^4.4.3"
   },
   "devDependencies": {

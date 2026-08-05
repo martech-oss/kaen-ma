@@ -1,4 +1,4 @@
-import type { WorkspaceRole } from "@kaenma/orpc";
+import type { WorkspaceRole } from "@openengage/orpc";
 
 const roleRank: Record<WorkspaceRole, number> = {
   viewer: 0,

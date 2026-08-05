@@ -1,6 +1,6 @@
-import { DataJobRepository, uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { DataJob } from "@kaenma/orpc";
-import type { WorkspaceContext } from "@kaenma/orpc";
+import { DataJobRepository, uuidv7, type OpenEngageDatabase } from "@openengage/database";
+import type { DataJob } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/orpc";
 
 import { parseCsv } from "./csv";
 
@@ -14,7 +14,7 @@ export type ContactImportOutcome =
   | { kind: "started"; jobId: string; rows: number; parts: number };
 
 export async function startContactImport(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   deps: ImportDeps,
   workspace: WorkspaceContext,
   csvText: string,
@@ -74,7 +74,7 @@ export async function startContactImport(
 }
 
 export async function startContactExport(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   queue: Queue,
   workspace: WorkspaceContext,
 ): Promise<{ jobId: string }> {
@@ -91,7 +91,7 @@ export async function startContactExport(
 }
 
 export async function getDataJob(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   jobId: string,
 ): Promise<DataJob | null> {
@@ -106,7 +106,7 @@ export type ExportDownloadOutcome =
   | { kind: "ready"; file: File };
 
 export async function getContactExportFile(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   bucket: R2Bucket,
   workspaceId: string,
   jobId: string,
@@ -118,6 +118,6 @@ export async function getContactExportFile(
   const bytes = await object.arrayBuffer();
   return {
     kind: "ready",
-    file: new File([bytes], `kaenma-contacts-${jobId}.csv`, { type: "text/csv" }),
+    file: new File([bytes], `openengage-contacts-${jobId}.csv`, { type: "text/csv" }),
   };
 }

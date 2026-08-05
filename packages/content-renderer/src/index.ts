@@ -1,4 +1,4 @@
-import type { ContentDocument, EmailBlock } from "@kaenma/orpc";
+import type { ContentDocument, EmailBlock } from "@openengage/orpc";
 
 export interface RenderContext {
   contact: Record<string, unknown>;

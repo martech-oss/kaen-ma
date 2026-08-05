@@ -1,6 +1,6 @@
-import { WebRepository, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
-import type { LandingPage, LandingPageWrite, SignupForm, SignupFormWrite } from "@kaenma/orpc";
+import { WebRepository, type OpenEngageDatabase } from "@openengage/database";
+import type { WorkspaceContext } from "@openengage/orpc";
+import type { LandingPage, LandingPageWrite, SignupForm, SignupFormWrite } from "@openengage/orpc";
 
 export * from "./message-service";
 export * from "./tracking-service";
@@ -10,7 +10,7 @@ function status(value: unknown): "draft" | "published" {
 }
 
 export async function listSignupForms(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<SignupForm[]> {
   const rows = await new WebRepository(database, workspace).listSignupForms();
@@ -31,7 +31,7 @@ export async function listSignupForms(
 }
 
 export async function createSignupForm(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: SignupFormWrite,
 ): Promise<{ id: string }> {
@@ -39,7 +39,7 @@ export async function createSignupForm(
 }
 
 export async function updateSignupForm(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   input: SignupFormWrite,
@@ -48,7 +48,7 @@ export async function updateSignupForm(
 }
 
 export async function archiveSignupForm(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
 ): Promise<boolean> {
@@ -56,7 +56,7 @@ export async function archiveSignupForm(
 }
 
 export async function listLandingPages(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<LandingPage[]> {
   const rows = await new WebRepository(database, workspace).listLandingPages();
@@ -74,7 +74,7 @@ export async function listLandingPages(
 }
 
 export async function createLandingPage(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: LandingPageWrite,
 ): Promise<{ id: string; versionId: string }> {
@@ -88,7 +88,7 @@ export type UpdatePageOutcome =
 
 /** Each edit appends a new version row and repoints the page at it. */
 export async function updateLandingPage(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   input: LandingPageWrite,
@@ -97,7 +97,7 @@ export async function updateLandingPage(
 }
 
 export async function archiveLandingPage(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
 ): Promise<boolean> {

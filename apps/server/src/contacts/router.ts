@@ -1,6 +1,6 @@
-import { writeAuditLog } from "@kaenma/database";
-import { ContactRepository } from "@kaenma/database";
-import { CSV_MAX_BYTES } from "@kaenma/orpc";
+import { writeAuditLog } from "@openengage/database";
+import { ContactRepository } from "@openengage/database";
+import { CSV_MAX_BYTES } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import {

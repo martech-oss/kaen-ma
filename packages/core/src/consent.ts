@@ -1,4 +1,4 @@
-import type { MessagePurpose } from "@kaenma/orpc";
+import type { MessagePurpose } from "@openengage/orpc";
 
 export interface ConsentSnapshot {
   contactStatus?: "active" | "archived" | "anonymous";

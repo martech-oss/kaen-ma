@@ -1,9 +1,9 @@
 import {
   AutomationEngineRepository,
   AutomationRepository,
-  type KaenmaDatabase,
-} from "@kaenma/database";
-import type { AutomationDefinition } from "@kaenma/orpc";
+  type OpenEngageDatabase,
+} from "@openengage/database";
+import type { AutomationDefinition } from "@openengage/orpc";
 
 export interface ContactEvent {
   id: string;
@@ -26,7 +26,7 @@ export interface EnrollmentResult {
 }
 
 export async function enrollAutomationsForEvent(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   event: ContactEvent,
 ): Promise<EnrollmentResult[]> {
   const repository = new AutomationRepository(database, { workspaceId: event.workspaceId });
@@ -47,7 +47,7 @@ export async function enrollAutomationsForEvent(
 }
 
 export async function enrollInactiveContacts(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   now = new Date(),
   limit = 200,
 ): Promise<number> {
@@ -74,7 +74,7 @@ export type ManualEnrollOutcome =
 
 /** API/SDK-driven enrollment of one contact into the published version. */
 export async function enrollContactManually(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   input: {
     workspaceId: string;
     automationId: string;
@@ -101,7 +101,7 @@ export async function enrollContactManually(
 }
 
 export async function enrollPublishedAutomation(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   input: {
     workspaceId: string;
     automationId: string;

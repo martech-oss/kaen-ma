@@ -136,14 +136,14 @@ export function AppShell({ user }: { user: { name: string; email: string } }): R
               <SidebarMenuButton
                 render={<Link to="/dashboard" />}
                 size="lg"
-                tooltip="Kaenma"
+                tooltip="OpenEngage"
                 className="flex-1 group-data-[collapsible=icon]:hidden"
               >
                 <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                   <Blocks />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Kaenma</span>
+                  <span className="truncate font-semibold">OpenEngage</span>
                 </div>
               </SidebarMenuButton>
               <SidebarTrigger className="shrink-0" aria-label="ナビゲーションを開閉" />

@@ -41,7 +41,7 @@ describe("channel policy", () => {
       deliveryId: "delivery-id",
       purpose: "marketing",
       to: "person@example.com",
-      from: { email: "sender@example.com", name: "Kaenma" },
+      from: { email: "sender@example.com", name: "OpenEngage" },
       replyTo: "reply@example.com",
       template: {
         id: "welcome-email",
@@ -53,7 +53,7 @@ describe("channel policy", () => {
     expect(result.providerMessageId).toBe("resend-message-id");
     expect(calls).toHaveLength(1);
     expect(calls[0]?.[0]).toMatchObject({
-      from: "Kaenma <sender@example.com>",
+      from: "OpenEngage <sender@example.com>",
       to: ["person@example.com"],
       replyTo: "reply@example.com",
       template: {
@@ -65,8 +65,8 @@ describe("channel policy", () => {
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
       tags: [
-        { name: "kaenma_delivery_id", value: "delivery-id" },
-        { name: "kaenma_workspace_id", value: "workspace-id" },
+        { name: "openengage_delivery_id", value: "delivery-id" },
+        { name: "openengage_workspace_id", value: "workspace-id" },
       ],
     });
     expect(calls[0]?.[1]).toEqual({ idempotencyKey: "delivery-key" });
@@ -159,8 +159,8 @@ describe("channel policy", () => {
       data: {
         email_id: "email-id",
         tags: {
-          kaenma_delivery_id: "delivery-id",
-          kaenma_workspace_id: "workspace-id",
+          openengage_delivery_id: "delivery-id",
+          openengage_workspace_id: "workspace-id",
         },
       },
     });
@@ -226,9 +226,9 @@ describe("channel policy", () => {
     const requestBody = requests[0]?.init.body;
     if (typeof requestBody !== "string") throw new Error("Expected a string request body");
     const body = requestBody;
-    const timestamp = headers.get("Kaenma-Timestamp") ?? "";
+    const timestamp = headers.get("OpenEngage-Timestamp") ?? "";
     expect(headers.get("Idempotency-Key")).toBe("delivery-key");
-    expect(headers.get("Kaenma-Signature")).toBe(
+    expect(headers.get("OpenEngage-Signature")).toBe(
       `v1=${await hmacHex("webhook-secret", `${timestamp}.${body}`)}`,
     );
     expect(JSON.parse(body)).toMatchObject({
@@ -257,9 +257,9 @@ describe("channel policy", () => {
     });
     const request = new Request("https://example.com/api/webhooks/custom", {
       headers: {
-        "Kaenma-Event-Id": "event-id",
-        "Kaenma-Timestamp": timestamp,
-        "Kaenma-Signature": `v1=${signature}`,
+        "OpenEngage-Event-Id": "event-id",
+        "OpenEngage-Timestamp": timestamp,
+        "OpenEngage-Signature": `v1=${signature}`,
       },
     });
 

@@ -1,8 +1,7 @@
+import type { Company, CompanyCreate, CompanyUpdate, WorkspaceContext } from "@openengage/orpc";
 import { and, asc, desc, eq, like, ne, or, sql } from "drizzle-orm";
 
-import type { Company, CompanyCreate, CompanyUpdate, WorkspaceContext } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { uuidv7 } from "../shared/uuid";
 import { companies, companyContacts, contacts } from "./schema";
 
@@ -11,7 +10,7 @@ export interface CompanySummary extends Company {
 }
 
 export class CompanyRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,

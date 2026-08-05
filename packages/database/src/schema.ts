@@ -1,3 +1,4 @@
+import * as agentsSchema from "./agents/schema";
 import { authSchema } from "./auth/schema";
 import * as automationsSchema from "./automations/schema";
 import * as broadcastsSchema from "./broadcasts/schema";
@@ -12,6 +13,7 @@ import * as segmentsSchema from "./segments/schema";
 import * as webSchema from "./web/schema";
 import * as workspacesSchema from "./workspaces/schema";
 
+export * from "./agents/schema";
 export * from "./auth/schema";
 export * from "./contacts/schema";
 export * from "./segments/schema";
@@ -31,6 +33,7 @@ export * from "./reports/schema";
  * which `drizzle()` needs in the same object to enable `db.query.*`.
  */
 export const schema = {
+  ...agentsSchema,
   ...authSchema,
   ...contactsSchema,
   ...segmentsSchema,

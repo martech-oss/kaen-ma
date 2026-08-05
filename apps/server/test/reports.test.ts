@@ -1,7 +1,11 @@
+import {
+  contactEvents,
+  contacts as contactsTable,
+  createDatabase,
+  uuidv7,
+} from "@openengage/database";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-
-import { contactEvents, contacts as contactsTable, createDatabase, uuidv7 } from "@kaenma/database";
 
 import { seedMember, seedWorkspaceClient } from "./factory";
 

@@ -1,3 +1,9 @@
+import {
+  type AutomationDefinition,
+  type AutomationEdge,
+  type AutomationNode,
+  type AutomationRow,
+} from "@openengage/orpc";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -55,12 +61,6 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
-import {
-  type AutomationDefinition,
-  type AutomationEdge,
-  type AutomationNode,
-  type AutomationRow,
-} from "@kaenma/orpc";
 
 import { automationNodeTypes, nodeHandles, StepButton } from "./automation-flow-node";
 import {

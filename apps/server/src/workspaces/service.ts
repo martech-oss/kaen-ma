@@ -1,11 +1,10 @@
+import { type OpenEngageDatabase, organization } from "@openengage/database";
+import type { Workspace } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/orpc";
 import { eq } from "drizzle-orm";
 
-import { type KaenmaDatabase, organization } from "@kaenma/database";
-import type { Workspace } from "@kaenma/orpc";
-import type { WorkspaceContext } from "@kaenma/orpc";
-
 export async function getWorkspace(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<Workspace> {
   const row = await database.orm.query.organization.findFirst({

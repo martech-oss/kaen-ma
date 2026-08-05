@@ -1,7 +1,6 @@
+import { ResendEmailAdapter } from "@openengage/channels";
+import { MessagingWorkerRepository } from "@openengage/database";
 import type { Hono } from "hono";
-
-import { ResendEmailAdapter } from "@kaenma/channels";
-import { MessagingWorkerRepository } from "@kaenma/database";
 
 import { apiError } from "../auth/access";
 import { recordContactEvent } from "../contacts/event-service";

@@ -1,3 +1,4 @@
+import type { ContactSummary } from "@openengage/orpc";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Building2, ChevronDown, Filter, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
@@ -30,7 +31,6 @@ import { formatLongDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { orpc } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
-import type { ContactSummary } from "@kaenma/orpc";
 
 import {
   type BulkAction,

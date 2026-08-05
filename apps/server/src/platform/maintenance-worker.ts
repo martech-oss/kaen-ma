@@ -1,4 +1,4 @@
-import { DeadLetterRepository, MaintenanceRepository, uuidv7 } from "@kaenma/database";
+import { DeadLetterRepository, MaintenanceRepository, uuidv7 } from "@openengage/database";
 
 import { type RuntimeEnv } from "../env";
 import { primitiveString } from "./values";

@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "openengage-agent",
+  "compatibility_date": "2026-07-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "services": [
+    {
+      "binding": "SERVER_AGENT_API",
+      "service": "openengage-server",
+      "entrypoint": "AgentBackend",
+    },
+  ],
+  // Workers Traces shows each agent response as a trace with agent-level
+  // spans: https://flueframework.com/docs/guide/observability/#cloudflare
+  "observability": { "traces": { "enabled": true } },
+  // Every agent generates a Durable Object class named after its identity
+  // (Hello -> FlueHelloAgent), and Cloudflare requires a migration entry
+  // for each one. Append a new tag when you add an agent:
+  // https://flueframework.com/docs/guide/cloudflare-target/#managing-migrations
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FlueHelloAgent"] }],
+  "env": {
+    "bootstrap": {
+      "name": "openengage-agent",
+      "services": [],
+    },
+  },
+}

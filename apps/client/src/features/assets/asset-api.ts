@@ -1,13 +1,13 @@
-import { keepPreviousData } from "@tanstack/react-query";
-
-import { orpcQuery } from "@/lib/orpc";
 import {
   type Asset,
   type AssetKind,
   type AssetListInput,
   type AssetSummary,
   type AssetVisibility,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
+import { keepPreviousData } from "@tanstack/react-query";
+
+import { orpcQuery } from "@/lib/orpc";
 
 export type { Asset, AssetKind, AssetSummary, AssetVisibility };
 

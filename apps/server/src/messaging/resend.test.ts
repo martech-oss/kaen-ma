@@ -1,6 +1,5 @@
+import { PermanentChannelError, type ResendHostedTemplate } from "@openengage/channels";
 import { describe, expect, it } from "vitest";
-
-import { PermanentChannelError, type ResendHostedTemplate } from "@kaenma/channels";
 
 import {
   parseTemplateVariables,
@@ -22,9 +21,9 @@ const publishedTemplate: ResendHostedTemplate = {
 };
 
 describe("Resend hosted template compatibility", () => {
-  it("requires Kaenma's unsubscribe URL for marketing templates", () => {
+  it("requires OpenEngage's unsubscribe URL for marketing templates", () => {
     expect(templateCompatibilityError(publishedTemplate, "marketing")).toContain(
-      "KAENMA_UNSUBSCRIBE_URL",
+      "OPENENGAGE_UNSUBSCRIBE_URL",
     );
     expect(templateCompatibilityError(publishedTemplate, "transactional")).toBeNull();
   });
@@ -58,22 +57,22 @@ describe("Resend hosted template variables", () => {
       { key: "CONTACT_CUSTOM_PLAN_NAME", type: "string", fallbackValue: null },
       { key: "MESSAGE_BRAND_NAME", type: "string", fallbackValue: null },
       { key: "CONTACT_SCORE", type: "number", fallbackValue: null },
-      { key: "KAENMA_UNSUBSCRIBE_URL", type: "string", fallbackValue: null },
+      { key: "OPENENGAGE_UNSUBSCRIBE_URL", type: "string", fallbackValue: null },
     ] as const;
 
     expect(
       resolveTemplateVariables([...variables], {
         contact: { email: "person@example.com", score: "12" },
         customFields: { plan_name: "Pro" },
-        message: { brand_name: "Kaenma" },
+        message: { brand_name: "OpenEngage" },
         unsubscribeUrl: "https://example.com/u/token",
       }),
     ).toEqual({
       CONTACT_EMAIL: "person@example.com",
       CONTACT_CUSTOM_PLAN_NAME: "Pro",
-      MESSAGE_BRAND_NAME: "Kaenma",
+      MESSAGE_BRAND_NAME: "OpenEngage",
       CONTACT_SCORE: 12,
-      KAENMA_UNSUBSCRIBE_URL: "https://example.com/u/token",
+      OPENENGAGE_UNSUBSCRIBE_URL: "https://example.com/u/token",
     });
   });
 

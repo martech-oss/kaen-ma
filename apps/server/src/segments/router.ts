@@ -1,4 +1,4 @@
-import { SegmentRepository } from "@kaenma/database";
+import { SegmentRepository } from "@openengage/database";
 
 import { authed, requireRole } from "../orpc/base";
 import { listSegments, previewSegment } from "./list-service";

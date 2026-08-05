@@ -1,5 +1,5 @@
-import type { KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
+import type { OpenEngageDatabase } from "@openengage/database";
+import type { WorkspaceContext } from "@openengage/orpc";
 
 export interface RuntimeSecrets {
   BETTER_AUTH_SECRET: string;
@@ -28,7 +28,7 @@ export interface SessionValue {
 }
 
 export interface AppVariables {
-  database: KaenmaDatabase;
+  database: OpenEngageDatabase;
   requestId: string;
   workspace: WorkspaceContext;
   session: SessionValue | null;

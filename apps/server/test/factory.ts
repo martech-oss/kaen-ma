@@ -1,10 +1,18 @@
+import {
+  apiKeys,
+  createDatabase,
+  member,
+  organization,
+  session,
+  user,
+  uuidv7,
+} from "@openengage/database";
+import { contract, type WorkspaceRole } from "@openengage/orpc";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
+import { makeSignature } from "better-auth/crypto";
 import { exports } from "cloudflare:workers";
-
-import { apiKeys, createDatabase, member, organization, user, uuidv7 } from "@kaenma/database";
-import { contract, type WorkspaceRole } from "@kaenma/orpc";
 
 import { randomIdentifier, sha256Hex } from "../src/platform/crypto";
 
@@ -38,7 +46,7 @@ export async function seedWorkspace(
   const workspaceId = uuidv7();
   const userId = uuidv7();
   const prefix = randomIdentifier(12);
-  const token = `kaenma_${prefix}_abcdefghijklmnopqrstuvwx`;
+  const token = `openengage_${prefix}_abcdefghijklmnopqrstuvwx`;
   const slug = `ws-${workspaceId}`;
   const now = new Date();
   const orm = createDatabase(db).orm;
@@ -98,6 +106,33 @@ export function createFixtureClient(fixture: {
     fetch: (request) => exports.default.fetch(request),
   });
   return createORPCClient(link);
+}
+
+export async function createSessionFixtureClient(
+  db: D1Database,
+  fixture: Pick<WorkspaceFixture, "workspaceId" | "userId">,
+): Promise<{ cookie: string; client: ContractRouterClient<typeof contract> }> {
+  const token = randomIdentifier(48);
+  const now = new Date();
+  await createDatabase(db)
+    .orm.insert(session)
+    .values({
+      id: uuidv7(),
+      token,
+      userId: fixture.userId,
+      activeOrganizationId: fixture.workspaceId,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+    });
+  const signature = await makeSignature(token, "test-better-auth-secret-at-least-32-characters");
+  const cookie = `__Secure-openengage.session_token=${token}.${signature}`;
+  const link = new RPCLink({
+    url: "http://localhost:8787/api/rpc",
+    headers: { cookie },
+    fetch: (request) => exports.default.fetch(request),
+  });
+  return { cookie, client: createORPCClient(link) };
 }
 
 /** Convenience: seed a workspace and return the fixture together with a typed client. */

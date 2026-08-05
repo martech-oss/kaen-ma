@@ -1,5 +1,5 @@
 {
-  "name": "@kaenma/email-templates",
+  "name": "@openengage/email-templates",
   "version": "0.1.0",
   "private": true,
   "type": "module",

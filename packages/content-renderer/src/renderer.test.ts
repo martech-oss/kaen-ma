@@ -39,8 +39,8 @@ describe("email renderer", () => {
       renderSubject("{{ message.brand }}からのお知らせ", {
         contact: {},
         workspace: {},
-        message: { brand: "Kaenma" },
+        message: { brand: "OpenEngage" },
       }),
-    ).toBe("Kaenmaからのお知らせ");
+    ).toBe("OpenEngageからのお知らせ");
   });
 });

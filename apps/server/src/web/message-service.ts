@@ -1,9 +1,9 @@
-import { WebRepository, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
-import type { SiteMessage, SiteMessageWrite } from "@kaenma/orpc";
+import { WebRepository, type OpenEngageDatabase } from "@openengage/database";
+import type { WorkspaceContext } from "@openengage/orpc";
+import type { SiteMessage, SiteMessageWrite } from "@openengage/orpc";
 
 export async function listSiteMessages(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<SiteMessage[]> {
   const rows = await new WebRepository(database, workspace).listSiteMessages();
@@ -26,7 +26,7 @@ export async function listSiteMessages(
 }
 
 export async function createSiteMessage(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: SiteMessageWrite,
 ): Promise<{ id: string }> {
@@ -34,7 +34,7 @@ export async function createSiteMessage(
 }
 
 export async function updateSiteMessage(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   input: SiteMessageWrite,
@@ -43,7 +43,7 @@ export async function updateSiteMessage(
 }
 
 export async function archiveSiteMessage(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
 ): Promise<boolean> {

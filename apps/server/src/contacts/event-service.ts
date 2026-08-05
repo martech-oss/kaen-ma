@@ -1,4 +1,4 @@
-import { contactEvents, type KaenmaDatabase, uuidv7 } from "@kaenma/database";
+import { contactEvents, type OpenEngageDatabase, uuidv7 } from "@openengage/database";
 
 import { enrollAutomationsForEvent } from "../automations/enrollment";
 
@@ -15,7 +15,7 @@ export interface ContactEventInput {
 }
 
 export async function recordContactEvent(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   input: ContactEventInput,
 ): Promise<{ eventId: string; enrollmentCount: number }> {
   const eventId = input.id ?? uuidv7();

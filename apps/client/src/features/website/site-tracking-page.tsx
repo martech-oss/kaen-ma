@@ -140,7 +140,7 @@ export function SiteTrackingPage(): ReactNode {
             <AlertDescription>
               サンプルコードの consent: true
               は、Cookieバナー等で同意を得た後にだけ設定してください。 既知の連絡先は
-              kaenma.identify(email) で識別でき、サイトメッセージの対象になります。
+              openengage.identify(email) で識別でき、サイトメッセージの対象になります。
             </AlertDescription>
           </Alert>
         </TabsContent>
@@ -284,7 +284,7 @@ function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): R
 function buildTrackingCode(workspaceSlug: string): string {
   const scriptUrl = `${window.location.origin}/api/public/site-tracking/${workspaceSlug}/script.js`;
   return `<script>
-  window.kaenmaSettings = {
+  window.openengageSettings = {
     consent: true
   };
 </script>

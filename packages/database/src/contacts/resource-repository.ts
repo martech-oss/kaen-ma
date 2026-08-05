@@ -1,8 +1,7 @@
+import type { SegmentFilter, WorkspaceContext } from "@openengage/orpc";
 import { and, asc, count, desc, eq, exists, inArray, ne, sql, type SQL } from "drizzle-orm";
 
-import type { SegmentFilter, WorkspaceContext } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { deliveries } from "../messaging/schema";
 import { segmentMemberships, segments } from "../segments/schema";
 import { uuidv7 } from "../shared/uuid";
@@ -34,7 +33,7 @@ export interface ContactEventRow {
  * A full context is assignable wherever this scope is expected.
  */
 export class ContactResourceRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,

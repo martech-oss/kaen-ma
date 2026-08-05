@@ -1,4 +1,4 @@
-import { ReportsRepository } from "@kaenma/database";
+import { ReportsRepository } from "@openengage/database";
 
 import { primitiveString } from "../platform/values";
 import { publicRange, type ReportDatabase, type ReportRange, toNumber } from "./shared";

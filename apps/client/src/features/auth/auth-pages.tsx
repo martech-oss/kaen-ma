@@ -71,7 +71,7 @@ export function AuthPage({ redirectTo = "/dashboard" }: { redirectTo?: string })
           <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Blocks />
           </div>
-          <span className="font-heading text-xl font-semibold">Kaenma</span>
+          <span className="font-heading text-xl font-semibold">OpenEngage</span>
         </div>
         <div className="flex flex-col items-start gap-6">
           <Badge variant="outline">Cloudflare-native marketing automation</Badge>
@@ -96,7 +96,7 @@ export function AuthPage({ redirectTo = "/dashboard" }: { redirectTo?: string })
               <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <Blocks />
               </div>
-              <span className="font-heading font-semibold">Kaenma</span>
+              <span className="font-heading font-semibold">OpenEngage</span>
             </div>
             <CardTitle className="text-2xl">
               {mode === "signin" ? "おかえりなさい" : "アカウントを作成"}
@@ -205,7 +205,7 @@ export function WorkspaceSetupPage(): ReactNode {
             <UsersRound />
           </div>
           <CardTitle className="text-2xl">ワークスペースを作成</CardTitle>
-          <CardDescription>OrganizationがKaenmaのWorkspaceになります。</CardDescription>
+          <CardDescription>OrganizationがOpenEngageのWorkspaceになります。</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-5">

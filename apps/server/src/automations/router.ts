@@ -1,6 +1,6 @@
-import { validateAutomation } from "@kaenma/core";
-import { AutomationRepository, uuidv7 } from "@kaenma/database";
-import { automationDefinitionSchema, type AutomationDefinition } from "@kaenma/orpc";
+import { validateAutomation } from "@openengage/core";
+import { AutomationRepository, uuidv7 } from "@openengage/database";
+import { automationDefinitionSchema, type AutomationDefinition } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { isRecord } from "../platform/values";

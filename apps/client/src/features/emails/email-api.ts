@@ -1,4 +1,3 @@
-import { orpcQuery } from "@/lib/orpc";
 import type {
   BroadcastSegmentOption,
   EmailCampaign,
@@ -6,7 +5,9 @@ import type {
   MessageVariable,
   ResendTemplateVariable,
   SubscriptionTopicOption,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
+
+import { orpcQuery } from "@/lib/orpc";
 
 export type { EmailCampaign, EmailTemplate, MessageVariable, ResendTemplateVariable };
 

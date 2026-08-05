@@ -1,6 +1,10 @@
-import { and, count, desc, eq, isNotNull, isNull, like, lt, type SQL } from "drizzle-orm";
-
-import { assets, organization, uuidv7, writeAuditLog, type KaenmaDatabase } from "@kaenma/database";
+import {
+  assets,
+  organization,
+  uuidv7,
+  writeAuditLog,
+  type OpenEngageDatabase,
+} from "@openengage/database";
 import {
   assetKindFromContentType,
   assetPublicPath,
@@ -15,7 +19,8 @@ import {
   type AssetUpdateInput,
   type AssetVisibility,
   type WorkspaceContext,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
+import { and, count, desc, eq, isNotNull, isNull, like, lt, type SQL } from "drizzle-orm";
 
 import { sha256HexFromBytes } from "../platform/crypto";
 import { sanitizeFilename } from "../platform/values";
@@ -77,7 +82,7 @@ export interface AssetOrigin {
 }
 
 export async function loadAssetOrigin(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   appUrl: string,
 ): Promise<AssetOrigin> {
@@ -128,7 +133,7 @@ export function toAsset(row: AssetRow, origin: AssetOrigin): Asset {
 }
 
 export async function listAssets(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   input: AssetListInput,
   origin: AssetOrigin,
@@ -169,7 +174,7 @@ export async function listAssets(
 }
 
 export async function getAsset(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   assetId: string,
   origin: AssetOrigin,
@@ -179,7 +184,7 @@ export async function getAsset(
 }
 
 async function findAssetRow(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   assetId: string,
 ): Promise<AssetRow | undefined> {
@@ -218,7 +223,7 @@ export interface UploadAssetInput {
  * the streaming route cannot do (see `asset-routes.ts`).
  */
 export async function uploadAsset(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   bucket: R2Bucket,
   workspace: WorkspaceContext,
   input: UploadAssetInput,
@@ -292,7 +297,7 @@ export type StreamedUploadOutcome =
  * content fingerprint for cache-busting, not an integrity attestation.
  */
 export async function createStreamedAsset(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   bucket: R2Bucket,
   workspace: WorkspaceContext,
   input: StreamedUploadInput,
@@ -342,7 +347,7 @@ export async function createStreamedAsset(
  * one is deleted only after the row commits.
  */
 export async function replaceAssetContent(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   bucket: R2Bucket,
   workspace: WorkspaceContext,
   assetId: string,
@@ -430,7 +435,7 @@ function toHex(value: ArrayBuffer): string {
 }
 
 export async function findAssetForDelivery(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   assetId: string,
 ): Promise<{ r2Key: string; name: string; kind: string; contentType: string } | null> {
@@ -440,7 +445,7 @@ export async function findAssetForDelivery(
 }
 
 export async function getAssetFile(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   bucket: R2Bucket,
   workspaceId: string,
   assetId: string,
@@ -459,7 +464,7 @@ export type AssetUpdateOutcome =
   | { kind: "ok"; asset: Asset };
 
 export async function updateAsset(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: AssetUpdateInput,
   origin: AssetOrigin,
@@ -499,7 +504,7 @@ export async function updateAsset(
 }
 
 export async function archiveAsset(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   assetId: string,
   background: { waitUntil(promise: Promise<unknown>): void },
@@ -527,7 +532,7 @@ export async function archiveAsset(
 }
 
 export async function restoreAsset(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   assetId: string,
   background: { waitUntil(promise: Promise<unknown>): void },
@@ -555,7 +560,7 @@ export async function restoreAsset(
 
 /** Removes the row first, then the object - a stray R2 object is cheaper than a dangling row. */
 export async function deleteAsset(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   bucket: R2Bucket,
   workspace: WorkspaceContext,
   assetId: string,

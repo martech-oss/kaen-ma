@@ -171,7 +171,7 @@ export function TemplateForm({
       open={open}
       onOpenChange={onOpenChange}
       title="Resend Templateを登録"
-      description="Resendで作成・公開したテンプレートをKaenmaから利用できるようにします。"
+      description="Resendで作成・公開したテンプレートをOpenEngageから利用できるようにします。"
       className="sm:max-w-xl"
       onSubmit={(event) => void submit(event)}
       busy={busy}

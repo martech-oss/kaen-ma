@@ -1,8 +1,8 @@
 {
-  "name": "create-kaenma",
+  "name": "create-openengage",
   "version": "0.1.0",
   "bin": {
-    "create-kaenma": "./dist/index.js"
+    "create-openengage": "./dist/index.js"
   },
   "type": "module",
   "scripts": {

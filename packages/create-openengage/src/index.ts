@@ -17,9 +17,11 @@ import {
 import { execa } from "execa";
 import pc from "picocolors";
 
+import { initialWorkerDeployCommands, rewriteWorkerConfigs } from "./provisioning";
+
 const command = process.argv[2] ?? "create";
 
-intro(pc.bgMagenta(pc.white(" Kaenma ")));
+intro(pc.bgMagenta(pc.white(" OpenEngage ")));
 
 try {
   if (command === "doctor") await doctor();
@@ -35,8 +37,8 @@ try {
 async function create(): Promise<void> {
   const directoryAnswer = await text({
     message: "Project directory",
-    placeholder: "kaenma",
-    defaultValue: process.argv[2] && process.argv[2] !== "create" ? process.argv[2] : "kaenma",
+    placeholder: "openengage",
+    defaultValue: process.argv[2] && process.argv[2] !== "create" ? process.argv[2] : "openengage",
     validate: (value) => (!value.trim() ? "Directory is required" : undefined),
   });
   if (isCancel(directoryAnswer)) return abort();
@@ -61,24 +63,25 @@ async function create(): Promise<void> {
   const progress = spinner();
   progress.start("Preparing source");
   if (!(await exists(resolve(projectDirectory, "apps/server/wrangler.jsonc")))) {
-    const source = process.env["KAENMA_TEMPLATE_DIR"];
+    const source = process.env["OPENENGAGE_TEMPLATE_DIR"];
     if (source) {
       await mkdir(projectDirectory, { recursive: true });
       await cp(resolve(source), projectDirectory, { recursive: true });
     } else {
       const repository =
-        process.env["KAENMA_TEMPLATE_REPOSITORY"] ?? "https://github.com/kaenma/kaenma.git";
+        process.env["OPENENGAGE_TEMPLATE_REPOSITORY"] ??
+        "https://github.com/martech-oss/openengage.git";
       await execa("git", ["clone", "--depth=1", repository, projectDirectory]);
     }
   }
   await execa("pnpm", ["install"], { cwd: projectDirectory });
   progress.stop("Source is ready");
   if (!provisionAnswer) {
-    outro(`Run ${pc.cyan("npx create-kaenma doctor")} from the project when ready.`);
+    outro(`Run ${pc.cyan("npx create-openengage doctor")} from the project when ready.`);
     return;
   }
   await provision(projectDirectory, String(appUrlAnswer));
-  outro(`Kaenma deployed from ${pc.cyan(projectDirectory)}`);
+  outro(`OpenEngage deployed from ${pc.cyan(projectDirectory)}`);
 }
 
 async function provision(projectDirectory: string, appUrl: string): Promise<void> {
@@ -103,24 +106,21 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
     );
   }
   const serverConfigPath = resolve(projectDirectory, "apps/server/wrangler.jsonc");
-  let serverConfig = await readFile(serverConfigPath, "utf8");
-  serverConfig = serverConfig
-    .replaceAll('"name": "kaenma-server"', `"name": "${projectName}-server"`)
-    .replaceAll('"database_name": "kaenma"', `"database_name": "${projectName}-db"`)
-    .replaceAll("00000000-0000-0000-0000-000000000000", databaseId)
-    .replaceAll("kaenma-assets", `${projectName}-assets`)
-    .replaceAll("kaenma-campaign", `${projectName}-campaign`)
-    .replaceAll("kaenma-delivery", `${projectName}-delivery`)
-    .replaceAll("kaenma-dead-letter", `${projectName}-dead-letter`)
-    .replaceAll('"APP_URL": "http://localhost:5173"', `"APP_URL": "${appUrl}"`);
-  await writeFile(serverConfigPath, serverConfig);
-
   const clientConfigPath = resolve(projectDirectory, "apps/client/wrangler.jsonc");
-  let clientConfig = await readFile(clientConfigPath, "utf8");
-  clientConfig = clientConfig
-    .replaceAll('"name": "kaenma"', `"name": "${projectName}"`)
-    .replaceAll('"service": "kaenma-server"', `"service": "${projectName}-server"`);
-  await writeFile(clientConfigPath, clientConfig);
+  const agentConfigPath = resolve(projectDirectory, "apps/agent/wrangler.jsonc");
+  const workerConfigs = rewriteWorkerConfigs({
+    projectName,
+    appUrl,
+    databaseId,
+    server: await readFile(serverConfigPath, "utf8"),
+    agent: await readFile(agentConfigPath, "utf8"),
+    client: await readFile(clientConfigPath, "utf8"),
+  });
+  await Promise.all([
+    writeFile(serverConfigPath, workerConfigs.server),
+    writeFile(agentConfigPath, workerConfigs.agent),
+    writeFile(clientConfigPath, workerConfigs.client),
+  ]);
 
   const betterAuthSecret = randomSecret();
   const encryptionKey = randomSecret();
@@ -156,7 +156,7 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
   const progress = spinner();
   progress.start("Syncing templates, applying migrations, and deploying");
   if (!isCancel(resendManagementApiKey) && resendManagementApiKey) {
-    await execa("pnpm", ["--filter", "@kaenma/email-templates", "resend:sync"], {
+    await execa("pnpm", ["--filter", "@openengage/email-templates", "resend:sync"], {
       cwd: projectDirectory,
       env: { RESEND_MANAGEMENT_API_KEY: String(resendManagementApiKey) },
     });
@@ -165,7 +165,7 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
     "pnpm",
     [
       "--filter",
-      "@kaenma/server",
+      "@openengage/server",
       "exec",
       "wrangler",
       "d1",
@@ -176,7 +176,11 @@ async function provision(projectDirectory: string, appUrl: string): Promise<void
     ],
     { cwd: projectDirectory, input: "y\n" },
   );
-  await execa("pnpm", ["deploy"], { cwd: projectDirectory });
+  // Create the private Agent Worker without its reverse binding first. This
+  // breaks the Agent <-> Server service-binding cycle on a fresh account.
+  for (const args of initialWorkerDeployCommands) {
+    await execa("pnpm", [...args], { cwd: projectDirectory });
+  }
   progress.stop("Infrastructure and Workers are ready");
 }
 
@@ -193,12 +197,12 @@ async function doctor(): Promise<void> {
       "pnpm",
       [
         "--filter",
-        "@kaenma/server",
+        "@openengage/server",
         "exec",
         "wrangler",
         "d1",
         "execute",
-        "kaenma",
+        "openengage-db",
         "--remote",
         "--command",
         "SELECT COUNT(*) FROM d1_migrations",
@@ -216,7 +220,7 @@ async function doctor(): Promise<void> {
     await commandCheck(
       "Secrets",
       "pnpm",
-      ["--filter", "@kaenma/server", "exec", "wrangler", "secret", "list"],
+      ["--filter", "@openengage/server", "exec", "wrangler", "secret", "list"],
       projectDirectory,
     ),
   );
@@ -225,7 +229,7 @@ async function doctor(): Promise<void> {
     name: "D1 database ID",
     ok: !config.includes("00000000-0000-0000-0000-000000000000"),
     detail: config.includes("00000000-0000-0000-0000-000000000000")
-      ? "Replace the placeholder by running create-kaenma provisioning"
+      ? "Replace the placeholder by running create-openengage provisioning"
       : "configured",
   });
   note(
@@ -252,13 +256,13 @@ async function update(): Promise<void> {
     stdio: ["pipe", "inherit", "inherit"],
   });
   await execa("pnpm", ["deploy"], { cwd: process.cwd(), stdio: "inherit" });
-  outro("Kaenma updated");
+  outro("OpenEngage updated");
 }
 
 async function backup(): Promise<void> {
   const outputAnswer = await text({
     message: "Backup file",
-    defaultValue: `backups/kaenma-${new Date().toISOString().slice(0, 10)}.sql`,
+    defaultValue: `backups/openengage-${new Date().toISOString().slice(0, 10)}.sql`,
   });
   if (isCancel(outputAnswer)) return abort();
   const output = resolve(String(outputAnswer));
@@ -267,12 +271,12 @@ async function backup(): Promise<void> {
     "pnpm",
     [
       "--filter",
-      "@kaenma/server",
+      "@openengage/server",
       "exec",
       "wrangler",
       "d1",
       "export",
-      "kaenma",
+      "openengage-db",
       "--remote",
       "--output",
       output,
@@ -304,10 +308,14 @@ async function addDomain(): Promise<void> {
 }
 
 async function putSecret(directory: string, name: string, value: string): Promise<void> {
-  await execa("pnpm", ["--filter", "@kaenma/server", "exec", "wrangler", "secret", "put", name], {
-    cwd: directory,
-    input: value,
-  });
+  await execa(
+    "pnpm",
+    ["--filter", "@openengage/server", "exec", "wrangler", "secret", "put", name],
+    {
+      cwd: directory,
+      input: value,
+    },
+  );
 }
 
 async function runAllowExisting(file: string, args: string[], cwd: string): Promise<void> {
@@ -355,7 +363,7 @@ function slugify(value: string): string {
     value
       .toLowerCase()
       .replaceAll(/[^a-z0-9-]+/g, "-")
-      .replaceAll(/^-|-$/g, "") || "kaenma"
+      .replaceAll(/^-|-$/g, "") || "openengage"
   );
 }
 

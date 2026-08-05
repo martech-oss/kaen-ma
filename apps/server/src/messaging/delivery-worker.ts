@@ -4,15 +4,15 @@ import {
   ResendEmailAdapter,
   TransientChannelError,
   type ChannelMessage,
-} from "@kaenma/channels";
-import { evaluateSendEligibility, retryDelaySeconds } from "@kaenma/core";
+} from "@openengage/channels";
+import { evaluateSendEligibility, retryDelaySeconds } from "@openengage/core";
 import {
   ConsentRepository,
   MessagingWorkerRepository,
   uuidv7,
   type DeliveryClaimRecord,
-} from "@kaenma/database";
-import { type AutomationNode } from "@kaenma/orpc";
+} from "@openengage/database";
+import { type AutomationNode } from "@openengage/orpc";
 
 import { type AutomationJobRow } from "../automations/worker";
 import { type RuntimeEnv } from "../env";

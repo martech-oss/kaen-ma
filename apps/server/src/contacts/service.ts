@@ -1,16 +1,16 @@
 import {
   ContactRepository,
   ContactResourceRepository,
-  type KaenmaDatabase,
-} from "@kaenma/database";
-import type { ContactListInput, ContactListResult, ContactSummary } from "@kaenma/orpc";
-import type { WorkspaceContext } from "@kaenma/orpc";
-import type { Contact, ContactCreate } from "@kaenma/orpc";
+  type OpenEngageDatabase,
+} from "@openengage/database";
+import type { ContactListInput, ContactListResult, ContactSummary } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/orpc";
+import type { Contact, ContactCreate } from "@openengage/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
 
 export async function listContacts(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: ContactListInput,
 ): Promise<ContactListResult> {
@@ -26,7 +26,7 @@ export async function listContacts(
 }
 
 export async function createContact(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: ContactCreate,
 ): Promise<Contact> {
@@ -52,7 +52,7 @@ export interface ContactTimelineEvent {
 }
 
 export async function getContactTimeline(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   contactId: string,
 ): Promise<ContactTimelineEvent[] | null> {
@@ -66,7 +66,7 @@ export type ContactEventOutcome =
   | { kind: "recorded"; eventId: string; enrollmentCount: number };
 
 export async function recordContactApiEvent(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   input: {
     contactId: string;
@@ -93,7 +93,7 @@ export async function recordContactApiEvent(
 }
 
 async function attachContactRelations(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   contacts: Contact[],
 ): Promise<ContactSummary[]> {

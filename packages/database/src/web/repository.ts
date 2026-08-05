@@ -1,3 +1,12 @@
+import type {
+  ContentDocument,
+  LandingPageWrite,
+  SignupFormDefinition,
+  SignupFormWrite,
+  SiteMessageWrite,
+  SiteTrackingWrite,
+  WorkspaceContext,
+} from "@openengage/orpc";
 import {
   and,
   count,
@@ -13,18 +22,8 @@ import {
   sql,
 } from "drizzle-orm";
 
-import type {
-  ContentDocument,
-  LandingPageWrite,
-  SignupFormDefinition,
-  SignupFormWrite,
-  SiteMessageWrite,
-  SiteTrackingWrite,
-  WorkspaceContext,
-} from "@kaenma/orpc";
-
 import { organization } from "../auth/schema";
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contactEvents, contacts } from "../contacts/schema";
 import { uuidv7 } from "../shared/uuid";
 import {
@@ -122,7 +121,7 @@ export interface PublicFormRecord {
  * full context is assignable wherever this scope is expected.
  */
 export class WebRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,
@@ -672,7 +671,7 @@ export class WebRepository {
  * after that.
  */
 export class PublicFormRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(database: DatabaseSource) {
     this.database = createDatabase(database);
@@ -798,13 +797,13 @@ export interface PublicAssetRecord {
 
 /**
  * The single gate in front of publicly readable assets. It lives here rather
- * than in `apps/server` because the `kaenma-assets` bucket also holds contact
+ * than in `apps/server` because the `openengage-assets` bucket also holds contact
  * CSV exports, inbound email attachments and event archives - every one of the
  * three predicates below (workspace slug, public visibility, not archived) is
  * load-bearing, so the query is kept where it can be unit-tested directly.
  */
 export class PublicAssetRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(database: DatabaseSource) {
     this.database = createDatabase(database);

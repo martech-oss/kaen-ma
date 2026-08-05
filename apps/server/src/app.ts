@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 
+import { registerAgentGatewayRoutes } from "./agents/gateway";
 import { apiError, requestContext } from "./auth/access";
 import { createAuth } from "./auth/service";
 import { type AppEnvironment } from "./env";
@@ -56,6 +57,7 @@ app.get("/api/health", async (context) => {
 app.get("/api/openapi.json", async (context) =>
   context.json(await generateOpenApiDocument(context.env.APP_URL)),
 );
+registerAgentGatewayRoutes(app);
 registerAssetRoutes(app);
 registerEmailWebhookRoutes(app);
 registerPublicRoutes(app);

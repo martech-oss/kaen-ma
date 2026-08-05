@@ -1,4 +1,4 @@
-import type { DeliveryEvent } from "@kaenma/orpc";
+import type { DeliveryEvent } from "@openengage/orpc";
 
 import { PermanentChannelError, TransientChannelError } from "./errors";
 import { hmacHex, isStaleTimestamp, timingSafeEqual } from "./signatures";
@@ -49,9 +49,9 @@ export class OutboundWebhookAdapter implements ChannelAdapter {
       redirect: "error",
       headers: {
         "Content-Type": "application/json",
-        "Kaenma-Event-Id": eventId,
-        "Kaenma-Timestamp": timestamp,
-        "Kaenma-Signature": `v1=${signature}`,
+        "OpenEngage-Event-Id": eventId,
+        "OpenEngage-Timestamp": timestamp,
+        "OpenEngage-Signature": `v1=${signature}`,
         "Idempotency-Key": message.idempotencyKey,
       },
       body,
@@ -71,9 +71,9 @@ export class OutboundWebhookAdapter implements ChannelAdapter {
   }
 
   public async verifyWebhook(request: Request, rawBody: string): Promise<WebhookVerification> {
-    const eventId = request.headers.get("kaenma-event-id");
-    const timestamp = request.headers.get("kaenma-timestamp");
-    const signature = request.headers.get("kaenma-signature")?.replace(/^v1=/, "");
+    const eventId = request.headers.get("openengage-event-id");
+    const timestamp = request.headers.get("openengage-timestamp");
+    const signature = request.headers.get("openengage-signature")?.replace(/^v1=/, "");
     if (!eventId || !timestamp || !signature || isStaleTimestamp(timestamp)) {
       return { valid: false };
     }

@@ -1,4 +1,3 @@
-import { orpcQuery } from "@/lib/orpc";
 import type {
   DealCreate,
   DealDetailData,
@@ -12,7 +11,9 @@ import type {
   DealTaskStatus,
   DealTaskType,
   DealTaskUpdate,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
+
+import { orpcQuery } from "@/lib/orpc";
 
 export type {
   DealCreate,

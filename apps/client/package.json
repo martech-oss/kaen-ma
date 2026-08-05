@@ -1,5 +1,5 @@
 {
-  "name": "@kaenma/client",
+  "name": "@openengage/client",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
   "dependencies": {
     "@base-ui/react": "^1.6.0",
     "@fontsource-variable/geist": "^5.3.0",
-    "@kaenma/orpc": "workspace:*",
+    "@openengage/orpc": "workspace:*",
     "@orpc/client": "^1.14.13",
     "@orpc/contract": "^1.14.13",
     "@orpc/tanstack-query": "1.14.13",

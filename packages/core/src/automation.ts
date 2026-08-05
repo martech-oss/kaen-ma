@@ -1,4 +1,4 @@
-import type { AutomationDefinition, AutomationEdge, AutomationNode } from "@kaenma/orpc";
+import type { AutomationDefinition, AutomationEdge, AutomationNode } from "@openengage/orpc";
 
 export interface AutomationValidationIssue {
   code:

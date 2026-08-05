@@ -8,6 +8,20 @@ export default defineConfig({
     cloudflareTest(async () => ({
       wrangler: { configPath: "./wrangler.test.jsonc" },
       miniflare: {
+        serviceBindings: {
+          AGENT_APP: async (request: Request) =>
+            new Response(request.body, {
+              status: request.method === "POST" ? 202 : 200,
+              headers: {
+                "content-type": request.headers.get("accept") ?? "application/octet-stream",
+                "x-agent-authorization": request.headers.get("authorization") ?? "",
+                "x-agent-cookie": request.headers.get("cookie") ?? "",
+                "x-agent-path": new URL(request.url).pathname,
+                "x-agent-workspace": request.headers.get("x-openengage-workspace") ?? "",
+                "x-flue-stream": "preserved",
+              },
+            }),
+        },
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations(
             resolve(__dirname, "../../packages/database/migrations"),

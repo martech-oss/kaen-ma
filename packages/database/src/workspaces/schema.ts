@@ -1,6 +1,5 @@
+import { PROVIDERS, WORKSPACE_ROLES } from "@openengage/orpc";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-
-import { PROVIDERS, WORKSPACE_ROLES } from "@kaenma/orpc";
 
 import { organization, user } from "../auth/schema";
 import { checkEnum } from "../shared/enum-check";

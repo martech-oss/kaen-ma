@@ -1,8 +1,8 @@
-import { DeadLetterRepository, type KaenmaDatabase } from "@kaenma/database";
-import type { DeadLetterRow } from "@kaenma/orpc";
+import { DeadLetterRepository, type OpenEngageDatabase } from "@openengage/database";
+import type { DeadLetterRow } from "@openengage/orpc";
 
 export async function listDeadLetters(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
 ): Promise<DeadLetterRow[]> {
   return new DeadLetterRepository(database).list(workspaceId);
@@ -11,7 +11,7 @@ export async function listDeadLetters(
 export type DeadLetterReplayOutcome = { kind: "not_found" } | { kind: "replayed" };
 
 export async function replayDeadLetter(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   queues: { campaign: Queue; delivery: Queue },
   workspaceId: string,
   deadLetterId: string,
@@ -20,7 +20,7 @@ export async function replayDeadLetter(
   const row = await repository.findPendingForReplay(workspaceId, deadLetterId);
   if (!row) return { kind: "not_found" };
   const body: unknown = JSON.parse(row.messageBody);
-  if (row.sourceQueue === "kaenma-campaign") {
+  if (row.sourceQueue === "openengage-campaign") {
     await queues.campaign.send(body);
   } else {
     await queues.delivery.send(body);

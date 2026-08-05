@@ -14,7 +14,7 @@ const emptyInput = {
 
 const resources = {
   tags: [{ id: "tag-1", slug: "customer" }],
-  companies: [{ id: "company-1", name: "Kaenma" }],
+  companies: [{ id: "company-1", name: "OpenEngage" }],
 };
 
 describe("createSegmentFilter", () => {
@@ -61,7 +61,7 @@ describe("createSegmentFilter", () => {
       children: [
         { kind: "condition", field: "score", operator: "gte", value: 10 },
         { kind: "condition", field: "tag", operator: "eq", value: "customer" },
-        { kind: "condition", field: "company", operator: "eq", value: "Kaenma" },
+        { kind: "condition", field: "company", operator: "eq", value: "OpenEngage" },
       ],
     });
   });

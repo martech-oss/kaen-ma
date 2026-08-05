@@ -1,4 +1,4 @@
-import type { AutomationNode } from "@kaenma/orpc";
+import type { AutomationNode } from "@openengage/orpc";
 
 type DelayNode = Extract<AutomationNode, { type: "delay" }>;
 

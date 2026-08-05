@@ -1,8 +1,7 @@
+import type { WorkspaceContext } from "@openengage/orpc";
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
-import type { WorkspaceContext } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { uuidv7 } from "../shared/uuid";
 import { contacts, importJobs } from "./schema";
 
@@ -27,7 +26,7 @@ export interface ContactImportRow {
  * A full context is assignable wherever this scope is expected.
  */
 export class DataJobRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,
@@ -100,7 +99,7 @@ export class DataJobRepository {
  * intentionally not workspace-scoped.
  */
 export class DataJobWorkerRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(database: DatabaseSource) {
     this.database = createDatabase(database);
@@ -258,7 +257,7 @@ export class DataJobWorkerRepository {
   }
 }
 
-async function completeJob(database: KaenmaDatabase, jobId: string): Promise<void> {
+async function completeJob(database: OpenEngageDatabase, jobId: string): Promise<void> {
   await database.orm
     .update(importJobs)
     .set({ status: "completed", updatedAt: new Date().toISOString() })

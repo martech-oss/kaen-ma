@@ -1,9 +1,8 @@
+import { uuidv7 } from "@openengage/database";
+import { contract } from "@openengage/orpc";
 import type { ContractRouterClient } from "@orpc/contract";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-
-import { uuidv7 } from "@kaenma/database";
-import { contract } from "@kaenma/orpc";
 
 import { createFixtureClient, seedWorkspaceClient } from "./factory";
 
@@ -73,7 +72,7 @@ describe("oRPC contract completion (P2)", () => {
     const { client } = await createWorkspaceClient();
     const created = await client.workspace.createWebhookEndpoint({
       name: "CRM sync",
-      url: "https://hooks.example.com/kaenma",
+      url: "https://hooks.example.com/openengage",
       eventTypes: ["contact.created"],
     });
     expect(created.signingSecret.length).toBeGreaterThanOrEqual(40);
@@ -81,7 +80,7 @@ describe("oRPC contract completion (P2)", () => {
     expect(endpoints).toHaveLength(1);
     expect(endpoints[0]).toMatchObject({
       name: "CRM sync",
-      url: "https://hooks.example.com/kaenma",
+      url: "https://hooks.example.com/openengage",
       eventTypes: ["contact.created"],
       enabled: true,
     });
@@ -135,9 +134,18 @@ describe("oRPC contract completion (P2)", () => {
   it("creates an API key whose token authenticates with its prefix", async () => {
     const { client } = await createWorkspaceClient();
     const created = await client.operations.createApiKey({ name: "CI key", role: "analyst" });
-    expect(created.token.startsWith(`kaenma_${created.prefix}_`)).toBe(true);
+    expect(created.token.startsWith(`openengage_${created.prefix}_`)).toBe(true);
     const analystClient: Client = createFixtureClient({ token: created.token });
     await expect(analystClient.workspace.get()).resolves.toMatchObject({ role: "analyst" });
+
+    const legacyPrefix = ["kae", "nma"].join("");
+    const legacyClient: Client = createFixtureClient({
+      token: created.token.replace(/^openengage_/, `${legacyPrefix}_`),
+    });
+    await expect(legacyClient.workspace.get()).rejects.toMatchObject({
+      code: "INVALID_API_KEY",
+      status: 401,
+    });
   });
 
   it("starts a contact export and reports its data job", async () => {
@@ -168,7 +176,7 @@ describe("oRPC contract completion (P2)", () => {
     const { client } = await createWorkspaceClient();
     const uploaded = await client.assets.upload({
       name: "logo.png",
-      file: new File(["kaenma"], "logo.png", { type: "image/png" }),
+      file: new File(["openengage"], "logo.png", { type: "image/png" }),
     });
     expect(uploaded).toMatchObject({
       name: "logo.png",
@@ -178,7 +186,7 @@ describe("oRPC contract completion (P2)", () => {
       publicUrl: null,
     });
     const file = await client.assets.download({ id: uploaded.id });
-    expect(await file.text()).toBe("kaenma");
+    expect(await file.text()).toBe("openengage");
     await expect(client.assets.download({ id: uuidv7() })).rejects.toMatchObject({
       code: "ASSET_NOT_FOUND",
     });

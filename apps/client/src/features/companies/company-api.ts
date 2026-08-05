@@ -1,5 +1,6 @@
+import type { CompanyContactDto, CompanyDetail, CompanySummary } from "@openengage/orpc";
+
 import { orpcQuery } from "@/lib/orpc";
-import type { CompanyContactDto, CompanyDetail, CompanySummary } from "@kaenma/orpc";
 
 export type { CompanyContactDto, CompanyDetail, CompanySummary };
 

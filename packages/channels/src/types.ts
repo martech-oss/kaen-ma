@@ -1,4 +1,4 @@
-import type { DeliveryEvent, MessagePurpose } from "@kaenma/orpc";
+import type { DeliveryEvent, MessagePurpose } from "@openengage/orpc";
 
 export interface HostedEmailMessage {
   kind: "email";

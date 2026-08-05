@@ -4,9 +4,9 @@ import {
   MessagingRepository,
   SegmentRepository,
   type BroadcastCampaignRecord,
-  type KaenmaDatabase,
-} from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
+  type OpenEngageDatabase,
+} from "@openengage/database";
+import type { WorkspaceContext } from "@openengage/orpc";
 import type {
   BroadcastSegmentOption,
   BroadcastStatus,
@@ -15,12 +15,12 @@ import type {
   MessageVariable,
   MessageVariableWrite,
   SubscriptionTopicOption,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
 
 import type { RuntimeEnv } from "../env";
 
 export function hasValidBroadcastResources(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   segmentId: string,
   templateId: string,
@@ -39,7 +39,7 @@ function toEmailCampaign(row: BroadcastCampaignRecord): EmailCampaign {
 }
 
 export async function listEmailCampaigns(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   archived: boolean,
 ): Promise<EmailCampaign[]> {
@@ -48,7 +48,7 @@ export async function listEmailCampaigns(
 }
 
 export async function getEmailCampaign(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   broadcastId: string,
 ): Promise<EmailCampaign | null> {
@@ -66,7 +66,7 @@ export type BroadcastUpdateOutcome =
   | { kind: "updated" };
 
 export async function createEmailCampaign(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: BroadcastWrite,
 ): Promise<BroadcastCreateOutcome> {
@@ -86,7 +86,7 @@ export async function createEmailCampaign(
 }
 
 export async function updateEmailCampaign(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   input: BroadcastWrite,
@@ -108,7 +108,7 @@ export async function updateEmailCampaign(
 
 /** Flips the broadcast to sending and enqueues the first batch. */
 export async function startEmailCampaign(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   env: RuntimeEnv,
   id: string,
@@ -122,7 +122,7 @@ export async function startEmailCampaign(
 }
 
 export function archiveEmailCampaign(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
 ): Promise<boolean> {
@@ -130,7 +130,7 @@ export function archiveEmailCampaign(
 }
 
 export function listMessageVariables(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   archived: boolean,
 ): Promise<MessageVariable[]> {
@@ -142,7 +142,7 @@ export class VariableConflictError extends Error {
 }
 
 export async function createMessageVariable(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: MessageVariableWrite,
 ): Promise<{ id: string }> {
@@ -154,7 +154,7 @@ export async function createMessageVariable(
 }
 
 export async function updateMessageVariable(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
   input: MessageVariableWrite,
@@ -167,7 +167,7 @@ export async function updateMessageVariable(
 }
 
 export function archiveMessageVariable(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   id: string,
 ): Promise<boolean> {
@@ -175,7 +175,7 @@ export function archiveMessageVariable(
 }
 
 export async function listBroadcastSegmentOptions(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<BroadcastSegmentOption[]> {
   const rows = await new SegmentRepository(database, workspace).listSegments();
@@ -183,7 +183,7 @@ export async function listBroadcastSegmentOptions(
 }
 
 export async function listSubscriptionTopicOptions(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<SubscriptionTopicOption[]> {
   const rows = await new ConsentRepository(database, workspace).listTopics();

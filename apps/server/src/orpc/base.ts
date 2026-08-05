@@ -1,9 +1,12 @@
+import { contract } from "@openengage/orpc";
+import type { WorkspaceRole } from "@openengage/orpc";
 import { implement } from "@orpc/server";
 
-import { contract } from "@kaenma/orpc";
-import type { WorkspaceRole } from "@kaenma/orpc";
-
-import { resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
+import {
+  resolveSessionWorkspaceAccess,
+  resolveWorkspaceAccess,
+  WorkspaceAccessError,
+} from "../auth/access";
 import { hasWorkspaceRole } from "../auth/authorization";
 import type { OrpcInitialContext } from "./context";
 
@@ -35,6 +38,31 @@ const requireWorkspace = os.middleware(async ({ context, next, errors }) => {
 });
 
 export const authed = os.use(requireWorkspace);
+
+const requireSessionWorkspace = os.middleware(async ({ context, next, errors }) => {
+  try {
+    const access = await resolveSessionWorkspaceAccess({
+      database: context.database,
+      env: context.env,
+      headers: context.headers,
+      method: context.method,
+    });
+    return next({ context: access });
+  } catch (error) {
+    if (!(error instanceof WorkspaceAccessError)) throw error;
+    switch (error.code) {
+      case "origin_mismatch":
+        throw errors.ORIGIN_MISMATCH();
+      case "workspace_required":
+        throw errors.WORKSPACE_REQUIRED();
+      case "unauthorized":
+      case "invalid_api_key":
+        throw errors.UNAUTHORIZED();
+    }
+  }
+});
+
+export const sessionAuthed = os.use(requireSessionWorkspace);
 
 /**
  * Shared role guard for oRPC handlers. Every role-gated contract declares a

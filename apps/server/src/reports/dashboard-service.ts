@@ -1,10 +1,10 @@
-import { ReportsRepository, type KaenmaDatabase } from "@kaenma/database";
-import type { Dashboard } from "@kaenma/orpc";
+import { ReportsRepository, type OpenEngageDatabase } from "@openengage/database";
+import type { Dashboard } from "@openengage/orpc";
 
 import { numericValue, parseJsonRecord, primitiveString } from "../platform/values";
 
 export async function getDashboard(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
 ): Promise<Dashboard> {
   const data = await new ReportsRepository(database).dashboardSummary(workspaceId);

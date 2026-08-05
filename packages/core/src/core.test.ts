@@ -1,6 +1,5 @@
+import type { AutomationDefinition } from "@openengage/orpc";
 import { describe, expect, it } from "vitest";
-
-import type { AutomationDefinition } from "@kaenma/orpc";
 
 import {
   canTransitionJob,

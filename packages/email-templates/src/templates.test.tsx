@@ -9,21 +9,21 @@ describe("system email templates", () => {
     [
       "password reset",
       createElement(PasswordResetEmail, {
-        appName: "Kaenma",
+        appName: "OpenEngage",
         actionUrl: "https://example.com/reset",
       }),
     ],
     [
       "email verification",
       createElement(EmailVerificationEmail, {
-        appName: "Kaenma",
+        appName: "OpenEngage",
         actionUrl: "https://example.com/verify",
       }),
     ],
     [
       "organization invitation",
       createElement(OrganizationInvitationEmail, {
-        appName: "Kaenma",
+        appName: "OpenEngage",
         actionUrl: "https://example.com/invite",
         inviterName: "Ada",
         organizationName: "Analytical Engine",

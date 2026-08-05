@@ -1,17 +1,17 @@
-import { PermanentChannelError } from "@kaenma/channels";
-import { computeDueAt, outgoingEdges } from "@kaenma/core";
+import { PermanentChannelError } from "@openengage/channels";
+import { computeDueAt, outgoingEdges } from "@openengage/core";
 import {
   AutomationEngineRepository,
   createDatabase,
   type AutomationContactColumn,
   type AutomationJobRow,
-} from "@kaenma/database";
+} from "@openengage/database";
 import {
   automationDefinitionSchema,
   type AutomationDefinition,
   type AutomationEdge,
   type AutomationNode,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { type RuntimeEnv } from "../env";

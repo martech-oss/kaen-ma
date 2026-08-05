@@ -1,8 +1,8 @@
-import { AutomationRepository, type KaenmaDatabase } from "@kaenma/database";
-import type { AutomationRow } from "@kaenma/orpc";
+import { AutomationRepository, type OpenEngageDatabase } from "@openengage/database";
+import type { AutomationRow } from "@openengage/orpc";
 
 export async function listAutomations(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
 ): Promise<AutomationRow[]> {
   const repository = new AutomationRepository(database, { workspaceId });

@@ -1,9 +1,9 @@
-import { WebRepository, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
-import type { SiteTracking, SiteTrackingWrite } from "@kaenma/orpc";
+import { WebRepository, type OpenEngageDatabase } from "@openengage/database";
+import type { WorkspaceContext } from "@openengage/orpc";
+import type { SiteTracking, SiteTrackingWrite } from "@openengage/orpc";
 
 export async function getSiteTracking(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<SiteTracking> {
   const overview = await new WebRepository(database, workspace).getTrackingOverview();
@@ -33,7 +33,7 @@ export async function getSiteTracking(
 }
 
 export async function saveSiteTracking(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: SiteTrackingWrite,
 ): Promise<void> {

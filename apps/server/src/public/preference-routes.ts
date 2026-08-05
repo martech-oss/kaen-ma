@@ -1,6 +1,5 @@
+import { ConsentRepository } from "@openengage/database";
 import type { Hono } from "hono";
-
-import { ConsentRepository } from "@kaenma/database";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";

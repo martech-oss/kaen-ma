@@ -1,3 +1,4 @@
+import { type AutomationEdge, type AutomationNode } from "@openengage/orpc";
 import { Trash2 } from "lucide-react";
 import { type ReactNode } from "react";
 
@@ -5,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { type AutomationEdge, type AutomationNode } from "@kaenma/orpc";
 
 import { connectionBranches, sourceConfig } from "./automation-graph";
 import { formatDuration, nodeLabel, nodeTypeLabel } from "./automation-labels";

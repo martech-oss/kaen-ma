@@ -1,14 +1,20 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "kaenma-server",
+  "name": "openengage-server",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-28",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
+  "services": [
+    {
+      "binding": "AGENT_APP",
+      "service": "openengage-agent",
+    },
+  ],
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "kaenma",
+      "database_name": "openengage-db",
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "../../packages/database/migrations",
     },
@@ -16,31 +22,31 @@
   "r2_buckets": [
     {
       "binding": "ASSETS_BUCKET",
-      "bucket_name": "kaenma-assets",
+      "bucket_name": "openengage-assets",
     },
   ],
   "queues": {
     "producers": [
-      { "binding": "CAMPAIGN_QUEUE", "queue": "kaenma-campaign" },
-      { "binding": "DELIVERY_QUEUE", "queue": "kaenma-delivery" },
+      { "binding": "CAMPAIGN_QUEUE", "queue": "openengage-campaign" },
+      { "binding": "DELIVERY_QUEUE", "queue": "openengage-delivery" },
     ],
     "consumers": [
       {
-        "queue": "kaenma-campaign",
+        "queue": "openengage-campaign",
         "max_batch_size": 50,
         "max_batch_timeout": 5,
         "max_retries": 5,
-        "dead_letter_queue": "kaenma-dead-letter",
+        "dead_letter_queue": "openengage-dead-letter",
       },
       {
-        "queue": "kaenma-delivery",
+        "queue": "openengage-delivery",
         "max_batch_size": 50,
         "max_batch_timeout": 5,
         "max_retries": 5,
-        "dead_letter_queue": "kaenma-dead-letter",
+        "dead_letter_queue": "openengage-dead-letter",
       },
       {
-        "queue": "kaenma-dead-letter",
+        "queue": "openengage-dead-letter",
         "max_batch_size": 50,
         "max_batch_timeout": 10,
       },
@@ -50,16 +56,16 @@
     "crons": ["* * * * *", "17 3 * * *"],
   },
   "vars": {
-    "APP_NAME": "Kaenma",
+    "APP_NAME": "OpenEngage",
     "APP_URL": "http://localhost:5173",
     "ENVIRONMENT": "development",
     "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com",
-    "TRANSACTIONAL_FROM_NAME": "Kaenma",
+    "TRANSACTIONAL_FROM_NAME": "OpenEngage",
     "MARKETING_FROM_EMAIL": "news@example.com",
-    "MARKETING_FROM_NAME": "Kaenma",
-    "RESEND_TEMPLATE_PASSWORD_RESET": "kaenma-password-reset",
-    "RESEND_TEMPLATE_EMAIL_VERIFICATION": "kaenma-email-verification",
-    "RESEND_TEMPLATE_ORGANIZATION_INVITATION": "kaenma-organization-invitation",
+    "MARKETING_FROM_NAME": "OpenEngage",
+    "RESEND_TEMPLATE_PASSWORD_RESET": "openengage-password-reset",
+    "RESEND_TEMPLATE_EMAIL_VERIFICATION": "openengage-email-verification",
+    "RESEND_TEMPLATE_ORGANIZATION_INVITATION": "openengage-organization-invitation",
     "REPLY_DOMAIN": "reply.example.com",
     "RAW_EVENT_RETENTION_DAYS": "90",
   },

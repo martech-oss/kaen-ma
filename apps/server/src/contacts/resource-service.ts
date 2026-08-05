@@ -2,8 +2,8 @@ import {
   ContactRepository,
   ContactResourceRepository,
   uuidv7,
-  type KaenmaDatabase,
-} from "@kaenma/database";
+  type OpenEngageDatabase,
+} from "@openengage/database";
 import type {
   Contact,
   ContactBulkAction,
@@ -12,7 +12,7 @@ import type {
   ContactScoreAdjust,
   TagCreate,
   WorkspaceContext,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { resourceSlug } from "../platform/values";
@@ -27,7 +27,7 @@ export class ResourceConflictError extends Error {
 }
 
 export async function getContactOptions(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<ContactOptions> {
   const rows = await new ContactResourceRepository(database, workspace).getContactOptionRows();
@@ -48,7 +48,7 @@ export async function getContactOptions(
 }
 
 export async function getContactProfile(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   contactId: string,
 ): Promise<ContactProfile | null> {
@@ -80,7 +80,7 @@ export async function getContactProfile(
 }
 
 export async function createTag(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: TagCreate,
 ): Promise<{ id: string; name: string; slug: string; color: string }> {
@@ -100,7 +100,7 @@ export async function createTag(
 }
 
 export function addContactTag(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
 ): Promise<boolean> {
@@ -111,7 +111,7 @@ export function addContactTag(
 }
 
 export function removeContactTag(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
 ): Promise<boolean> {
@@ -122,7 +122,7 @@ export function removeContactTag(
 }
 
 export async function addContactSegment(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
 ): Promise<boolean> {
@@ -144,7 +144,7 @@ export async function addContactSegment(
 }
 
 export async function removeContactSegment(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { contactId: string; resourceId: string },
 ): Promise<void> {
@@ -158,7 +158,7 @@ export async function removeContactSegment(
 }
 
 export async function adjustContactScore(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   contactId: string,
   input: ContactScoreAdjust,
@@ -172,7 +172,7 @@ export async function adjustContactScore(
 }
 
 export function restoreContact(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   contactId: string,
 ): Promise<boolean> {
@@ -189,7 +189,7 @@ export type BulkActionOutcome =
  * restore need admin, because they are destructive across many records at once.
  */
 export async function applyContactBulkAction(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: ContactBulkAction,
 ): Promise<BulkActionOutcome> {

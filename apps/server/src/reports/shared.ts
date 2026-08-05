@@ -1,6 +1,6 @@
-import type { KaenmaDatabase } from "@kaenma/database";
+import type { OpenEngageDatabase } from "@openengage/database";
 
-export type ReportDatabase = KaenmaDatabase;
+export type ReportDatabase = OpenEngageDatabase;
 
 export interface ReportRange {
   from: string;

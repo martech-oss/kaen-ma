@@ -1,4 +1,4 @@
-import type { Asset, AssetVisibility } from "@kaenma/orpc";
+import type { Asset, AssetVisibility } from "@openengage/orpc";
 
 export interface UploadOptions {
   file: File;

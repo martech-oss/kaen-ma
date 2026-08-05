@@ -1,7 +1,6 @@
+import { uuidv7 } from "@openengage/database";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-
-import { uuidv7 } from "@kaenma/database";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -11,7 +10,7 @@ declare module "cloudflare:workers" {
   }
 }
 
-function pngFile(name: string, body = "kaenma"): File {
+function pngFile(name: string, body = "openengage"): File {
   return new File([body], name, { type: "image/png" });
 }
 
@@ -28,7 +27,7 @@ describe("Asset library", () => {
       publicUrl: null,
       archivedAt: null,
       checksumAlgorithm: "sha256",
-      size: 6,
+      size: 10,
     });
 
     await expect(client.assets.get({ id: uploaded.id })).resolves.toMatchObject({

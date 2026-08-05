@@ -1,3 +1,5 @@
+import { assertJobTransition, type JobStatus } from "@openengage/core";
+import type { WorkspaceContext } from "@openengage/orpc";
 import {
   and,
   asc,
@@ -15,10 +17,7 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { assertJobTransition, type JobStatus } from "@kaenma/core";
-import type { WorkspaceContext } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contactEvents, contacts, contactTags, scoreEvents, tags } from "../contacts/schema";
 import { emailTemplates } from "../messaging/schema";
 import { segmentMemberships } from "../segments/schema";
@@ -43,7 +42,7 @@ export type AutomationJobStatus =
 
 /**
  * automation_jobs speaks an older dialect of the shared job state machine in
- * `@kaenma/core`: `running`/`succeeded` are the machine's
+ * `@openengage/core`: `running`/`succeeded` are the machine's
  * `processing`/`completed`.
  */
 const MACHINE_STATUS = {
@@ -140,7 +139,7 @@ export type AutomationContactColumn = keyof typeof AUTOMATION_CONTACT_COLUMNS;
  * they exist alongside the stricter ContactResourceRepository methods.
  */
 export class AutomationEngineRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(database: DatabaseSource) {
     this.database = createDatabase(database);
@@ -687,7 +686,7 @@ export async function claimDueJobs(
  * {@link WorkspaceContext} is assignable wherever this scope is expected.
  */
 export class AutomationRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,

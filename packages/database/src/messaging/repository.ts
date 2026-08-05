@@ -1,9 +1,8 @@
+import type { WorkspaceContext } from "@openengage/orpc";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
-import type { WorkspaceContext } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { suppressions } from "../consent/schema";
 import { contactEvents } from "../contacts/schema";
 import { uuidv7 } from "../shared/uuid";
@@ -89,7 +88,7 @@ const emailTemplateSelection = {
  * A full context is assignable wherever this scope is expected.
  */
 export class MessagingRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,
@@ -317,7 +316,7 @@ export class MessagingRepository {
  * row itself — so this repository is intentionally not workspace-scoped.
  */
 export class MessagingWorkerRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(database: DatabaseSource) {
     this.database = createDatabase(database);

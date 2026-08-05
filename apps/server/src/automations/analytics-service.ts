@@ -1,6 +1,5 @@
+import { automationEnrollments, deliveries, type OpenEngageDatabase } from "@openengage/database";
 import { and, count, eq } from "drizzle-orm";
-
-import { automationEnrollments, deliveries, type KaenmaDatabase } from "@kaenma/database";
 
 export interface AutomationAnalytics {
   enrollments: Array<{ status: string; count: number }>;
@@ -8,7 +7,7 @@ export interface AutomationAnalytics {
 }
 
 export async function getAutomationAnalytics(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   automationId: string,
 ): Promise<AutomationAnalytics> {

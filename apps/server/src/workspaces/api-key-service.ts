@@ -1,15 +1,15 @@
-import { ApiKeyRepository, uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext, WorkspaceRole } from "@kaenma/orpc";
+import { ApiKeyRepository, uuidv7, type OpenEngageDatabase } from "@openengage/database";
+import type { WorkspaceContext, WorkspaceRole } from "@openengage/orpc";
 
 import { randomIdentifier, randomString, sha256Hex } from "../platform/crypto";
 
 export async function createApiKey(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { name: string; role: WorkspaceRole; expiresAt?: string | undefined },
 ): Promise<{ id: string; token: string; prefix: string }> {
   const prefix = randomIdentifier(12);
-  const token = `kaenma_${prefix}_${randomString(40)}`;
+  const token = `openengage_${prefix}_${randomString(40)}`;
   const id = uuidv7();
   await new ApiKeyRepository(database).create({
     id,

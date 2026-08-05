@@ -16,7 +16,7 @@ export function VariableReference({ variables }: { variables: MessageVariableRow
     ["{{{CONTACT_FIRST_NAME}}}", "連絡先の名"],
     ["{{{CONTACT_LAST_NAME}}}", "連絡先の姓"],
     ["{{{CONTACT_EMAIL}}}", "メールアドレス"],
-    ["{{{KAENMA_UNSUBSCRIBE_URL}}}", "配信停止URL（Marketing必須）"],
+    ["{{{OPENENGAGE_UNSUBSCRIBE_URL}}}", "配信停止URL（Marketing必須）"],
     ["{{{CONTACT_CUSTOM_KEY}}}", "カスタム属性（KEYを置換）"],
     ...variables.map(
       (variable) =>

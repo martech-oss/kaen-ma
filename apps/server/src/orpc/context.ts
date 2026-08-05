@@ -1,10 +1,10 @@
-import type { KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
+import type { OpenEngageDatabase } from "@openengage/database";
+import type { WorkspaceContext } from "@openengage/orpc";
 
 import type { RuntimeEnv, SessionValue } from "../env";
 
 export interface OrpcInitialContext {
-  database: KaenmaDatabase;
+  database: OpenEngageDatabase;
   requestId: string;
   env: RuntimeEnv;
   headers: Headers;

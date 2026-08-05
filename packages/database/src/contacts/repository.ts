@@ -1,3 +1,5 @@
+import type { WorkspaceContext } from "@openengage/orpc";
+import type { Contact, ContactCreate, ContactUpdate } from "@openengage/orpc";
 import {
   and,
   asc,
@@ -16,10 +18,7 @@ import {
   type SQLWrapper,
 } from "drizzle-orm";
 
-import type { WorkspaceContext } from "@kaenma/orpc";
-import type { Contact, ContactCreate, ContactUpdate } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { deliveries } from "../messaging/schema";
 import { segmentMemberships } from "../segments/schema";
 import { uuidv7 } from "../shared/uuid";
@@ -34,7 +33,7 @@ export interface CursorPage<T> {
 type ContactRow = typeof contacts.$inferSelect;
 
 export class ContactRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,

@@ -1,12 +1,11 @@
+import type { SegmentFilter, WorkspaceContext } from "@openengage/orpc";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 
-import type { SegmentFilter, WorkspaceContext } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { uuidv7 } from "../shared/uuid";
 import { segmentMemberships, segments } from "./schema";
 
-/** Compiled segment filter as produced by `compileSegmentFilter` in @kaenma/core. */
+/** Compiled segment filter as produced by `compileSegmentFilter` in @openengage/core. */
 export interface CompiledSegmentFilter {
   sql: string;
   params: Array<string | number | null>;
@@ -15,7 +14,7 @@ export interface CompiledSegmentFilter {
 export type SegmentRecord = typeof segments.$inferSelect;
 
 export class SegmentRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,

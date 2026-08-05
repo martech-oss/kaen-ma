@@ -1,4 +1,3 @@
-import { orpc } from "@/lib/orpc";
 import type {
   AutomationsReport,
   ContactsReport,
@@ -6,7 +5,9 @@ import type {
   EmailsReport,
   ReportCategory,
   SiteReport,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
+
+import { orpc } from "@/lib/orpc";
 
 export type { AutomationsReport, ContactsReport, DealsReport, EmailsReport, SiteReport };
 

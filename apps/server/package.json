@@ -1,5 +1,5 @@
 {
-  "name": "@kaenma/server",
+  "name": "@openengage/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,16 +10,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run && node scripts/check-no-raw-sql.mjs",
     "cf:types": "wrangler types --env-interface ServerBindings",
-    "db:migrate:local": "wrangler d1 migrations apply kaenma --local --persist-to ../client/.wrangler/state",
-    "db:migrate:remote": "wrangler d1 migrations apply kaenma --remote"
+    "db:migrate:local": "wrangler d1 migrations apply openengage-db --local --persist-to ../client/.wrangler/state",
+    "db:migrate:remote": "wrangler d1 migrations apply openengage-db --remote"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.25",
-    "@kaenma/channels": "workspace:*",
-    "@kaenma/content-renderer": "workspace:*",
-    "@kaenma/core": "workspace:*",
-    "@kaenma/database": "workspace:*",
-    "@kaenma/orpc": "workspace:*",
+    "@openengage/channels": "workspace:*",
+    "@openengage/content-renderer": "workspace:*",
+    "@openengage/core": "workspace:*",
+    "@openengage/database": "workspace:*",
+    "@openengage/orpc": "workspace:*",
     "@orpc/openapi": "1.14.13",
     "@orpc/server": "^1.14.13",
     "@orpc/zod": "1.14.13",

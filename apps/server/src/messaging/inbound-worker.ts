@@ -1,6 +1,5 @@
+import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@openengage/database";
 import PostalMime from "postal-mime";
-
-import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@kaenma/database";
 
 import { enrollAutomationsForEvent } from "../automations/enrollment";
 import type { RuntimeEnv } from "../env";
@@ -10,7 +9,7 @@ const maximumInboundSize = 5 * 1024 * 1024;
 
 export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): Promise<void> {
   if (message.rawSize > maximumInboundSize) {
-    message.setReject("Message exceeds Kaenma's 5 MB inbound limit");
+    message.setReject("Message exceeds OpenEngage's 5 MB inbound limit");
     return;
   }
   const localPart = message.to.split("@")[0] ?? "";

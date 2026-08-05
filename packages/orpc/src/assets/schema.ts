@@ -7,7 +7,7 @@ import { assetKindSchema, assetVisibilitySchema, type AssetKind } from "../share
  * memory (128MB limit), so it stays conservative. The streaming route at
  * `POST /api/assets/upload` pipes straight into R2 and is bounded instead by
  * Cloudflare's inbound request-body ceiling - 100MB on Free/Pro, higher on
- * Business/Enterprise. Neither number is a Kaenma preference.
+ * Business/Enterprise. Neither number is a OpenEngage preference.
  */
 export const ASSET_BUFFERED_MAX_BYTES = 25 * 1024 * 1024;
 export const ASSET_STREAM_MAX_BYTES = 100 * 1024 * 1024;

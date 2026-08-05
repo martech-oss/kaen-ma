@@ -210,7 +210,7 @@ describe("workspace API journey", () => {
       method: "POST",
       body: JSON.stringify({
         name: "CRM sync",
-        url: "https://hooks.example.com/kaenma",
+        url: "https://hooks.example.com/openengage",
         eventTypes: ["contact.created"],
       }),
     });

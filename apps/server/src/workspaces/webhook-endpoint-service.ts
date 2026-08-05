@@ -1,15 +1,14 @@
+import { assertSafeWebhookUrl } from "@openengage/channels";
+import { uuidv7, webhookEndpoints, type OpenEngageDatabase } from "@openengage/database";
+import type { WebhookEndpointRow } from "@openengage/orpc";
 import { desc, eq } from "drizzle-orm";
-
-import { assertSafeWebhookUrl } from "@kaenma/channels";
-import { uuidv7, webhookEndpoints, type KaenmaDatabase } from "@kaenma/database";
-import type { WebhookEndpointRow } from "@kaenma/orpc";
 
 import { encryptCredentials } from "../platform/crypto";
 import { randomString } from "../platform/crypto";
 import { parseJsonValue } from "../platform/values";
 
 export async function listWebhookEndpoints(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
 ): Promise<WebhookEndpointRow[]> {
   const rows = await database.orm
@@ -33,7 +32,7 @@ export type WebhookEndpointCreateOutcome =
   | { kind: "created"; id: string; signingSecret: string };
 
 export async function createWebhookEndpoint(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   encryptionKey: string,
   workspaceId: string,
   input: { name: string; url: string; eventTypes: string[] },

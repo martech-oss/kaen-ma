@@ -4,7 +4,7 @@ import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import { schema } from "./schema";
 
 export type Database = DrizzleD1Database<typeof schema>;
-export type DatabaseSource = D1Database | KaenmaDatabase;
+export type DatabaseSource = D1Database | OpenEngageDatabase;
 
 /**
  * Application-wide database entry point.
@@ -16,7 +16,7 @@ export type DatabaseSource = D1Database | KaenmaDatabase;
  * apps/server/src contains zero raw SQL (enforced by
  * apps/server/scripts/check-no-raw-sql.mjs).
  */
-export class KaenmaDatabase {
+export class OpenEngageDatabase {
   public readonly orm: Database;
 
   public constructor(binding: D1Database) {
@@ -41,13 +41,13 @@ export class KaenmaDatabase {
   }
 }
 
-const databases = new WeakMap<D1Database, KaenmaDatabase>();
+const databases = new WeakMap<D1Database, OpenEngageDatabase>();
 
-export function createDatabase(binding: DatabaseSource): KaenmaDatabase {
-  if (binding instanceof KaenmaDatabase) return binding;
+export function createDatabase(binding: DatabaseSource): OpenEngageDatabase {
+  if (binding instanceof OpenEngageDatabase) return binding;
   const existing = databases.get(binding);
   if (existing) return existing;
-  const database = new KaenmaDatabase(binding);
+  const database = new OpenEngageDatabase(binding);
   databases.set(binding, database);
   return database;
 }

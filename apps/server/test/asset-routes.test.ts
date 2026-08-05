@@ -1,8 +1,7 @@
+import { assets, createDatabase, uuidv7 } from "@openengage/database";
+import type { Asset } from "@openengage/orpc";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-
-import { assets, createDatabase, uuidv7 } from "@kaenma/database";
-import type { Asset } from "@kaenma/orpc";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -43,7 +42,7 @@ async function upload(
 describe("Asset streaming and delivery routes", () => {
   it("streams an upload into R2 and serves it back to the workspace", async () => {
     const { token, client } = await seedWorkspaceClient(env.DB);
-    const body = "%PDF-1.7 kaenma slide deck";
+    const body = "%PDF-1.7 openengage slide deck";
 
     const response = await upload(token, body);
     expect(response.status).toBe(201);

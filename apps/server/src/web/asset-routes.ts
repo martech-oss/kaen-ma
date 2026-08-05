@@ -1,5 +1,3 @@
-import type { Context, Hono } from "hono";
-
 import {
   ASSET_STREAM_MAX_BYTES,
   assetDimensionSchema,
@@ -8,7 +6,8 @@ import {
   normalizeAssetContentType,
   type Asset,
   type AssetVisibility,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
+import type { Context, Hono } from "hono";
 
 import { apiError, resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import { hasWorkspaceRole } from "../auth/authorization";

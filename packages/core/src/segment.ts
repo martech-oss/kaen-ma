@@ -1,5 +1,5 @@
-import type { SegmentCondition, SegmentFilter } from "@kaenma/orpc";
-import { isSegmentOperatorAllowed } from "@kaenma/orpc";
+import type { SegmentCondition, SegmentFilter } from "@openengage/orpc";
+import { isSegmentOperatorAllowed } from "@openengage/orpc";
 
 export interface CompiledSegment {
   sql: string;

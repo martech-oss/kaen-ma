@@ -177,6 +177,6 @@ describe("Website center", () => {
     });
     expect(script.status).toBe(200);
     expect(script.headers.get("content-type")).toContain("application/javascript");
-    expect(await script.text()).toContain("window.kaenma");
+    expect(await script.text()).toContain("window.openengage");
   });
 });

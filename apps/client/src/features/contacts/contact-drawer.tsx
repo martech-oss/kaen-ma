@@ -1,3 +1,4 @@
+import { type ContactProfile } from "@openengage/orpc";
 import {
   Archive,
   Building2,
@@ -33,7 +34,6 @@ import { nullableString } from "@/lib/form-data";
 import { formatLongDateTime } from "@/lib/format";
 import { orpc } from "@/lib/orpc";
 import { cn, getFormString } from "@/lib/utils";
-import { type ContactProfile } from "@kaenma/orpc";
 
 export type { ContactProfile };
 

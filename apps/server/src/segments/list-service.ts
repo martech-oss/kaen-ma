@@ -1,7 +1,7 @@
-import { compileSegmentFilter } from "@kaenma/core";
-import { SegmentRepository, type KaenmaDatabase } from "@kaenma/database";
-import type { Contact, SegmentFilter, SegmentRow, WorkspaceContext } from "@kaenma/orpc";
-import { segmentFilterSchema } from "@kaenma/orpc";
+import { compileSegmentFilter } from "@openengage/core";
+import { SegmentRepository, type OpenEngageDatabase } from "@openengage/database";
+import type { Contact, SegmentFilter, SegmentRow, WorkspaceContext } from "@openengage/orpc";
+import { segmentFilterSchema } from "@openengage/orpc";
 
 import {
   nullablePrimitiveString,
@@ -12,7 +12,7 @@ import {
 } from "../platform/values";
 
 export async function listSegments(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<SegmentRow[]> {
   const rows = await new SegmentRepository(database, workspace).listSegments();
@@ -38,7 +38,7 @@ function parseFilter(value: string | null): SegmentRow["filterAst"] {
 const PREVIEW_LIMIT = 100;
 
 export async function previewSegment(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   filter: SegmentFilter,
 ): Promise<{ contacts: Contact[]; capped: boolean }> {

@@ -131,6 +131,10 @@ import { os } from "./base";
 export type { OrpcContext, OrpcInitialContext } from "./context";
 
 export const orpcRouter = os.router({
+  agentConversations: {
+    create: createAgentConversationProcedure,
+    list: listAgentConversationsProcedure,
+  },
   workspace: {
     get: getWorkspaceProcedure,
     listWebhookEndpoints: listWebhookEndpointsProcedure,
@@ -264,3 +268,7 @@ export const orpcRouter = os.router({
     removeContact: removeCompanyContactProcedure,
   },
 });
+import {
+  createAgentConversationProcedure,
+  listAgentConversationsProcedure,
+} from "../agents/router";

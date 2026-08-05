@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
-  "name": "kaenma",
+  "name": "openengage",
   "main": "src/server.ts",
   "compatibility_date": "2026-07-28",
   "compatibility_flags": ["nodejs_compat"],
@@ -8,7 +8,7 @@
   "services": [
     {
       "binding": "SERVER",
-      "service": "kaenma-server",
+      "service": "openengage-server",
     },
   ],
   "observability": {

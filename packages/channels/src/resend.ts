@@ -1,6 +1,5 @@
+import type { DeliveryEvent } from "@openengage/orpc";
 import { Resend, type ErrorResponse } from "resend";
-
-import type { DeliveryEvent } from "@kaenma/orpc";
 
 import { PermanentChannelError, TransientChannelError } from "./errors";
 import { isStaleTimestamp, verifySvixSignature } from "./signatures";
@@ -49,7 +48,7 @@ export class ResendEmailAdapter implements ChannelAdapter {
   private readonly client: Resend;
 
   public constructor(private readonly options: ResendAdapterOptions) {
-    this.client = options.client ?? new Resend(options.apiKey, { userAgent: "kaenma/0.1.0" });
+    this.client = options.client ?? new Resend(options.apiKey, { userAgent: "openengage/0.1.0" });
   }
 
   public async send(message: ChannelMessage): Promise<ChannelSendResult> {
@@ -60,8 +59,8 @@ export class ResendEmailAdapter implements ChannelAdapter {
     const tags =
       message.deliveryId && message.workspaceId
         ? [
-            { name: "kaenma_delivery_id", value: message.deliveryId },
-            { name: "kaenma_workspace_id", value: message.workspaceId },
+            { name: "openengage_delivery_id", value: message.deliveryId },
+            { name: "openengage_workspace_id", value: message.workspaceId },
           ]
         : undefined;
     const result = await this.client.emails.send(
@@ -116,8 +115,8 @@ export class ResendEmailAdapter implements ChannelAdapter {
     if (!isRecord(payload) || !isRecord(payload["data"])) return [];
     const data = payload["data"];
     const tags = isRecord(data["tags"]) ? data["tags"] : {};
-    const deliveryId = tags["kaenma_delivery_id"];
-    const workspaceId = tags["kaenma_workspace_id"];
+    const deliveryId = tags["openengage_delivery_id"];
+    const workspaceId = tags["openengage_workspace_id"];
     const messageId = data["email_id"];
     const eventType = payload["type"];
     if (
@@ -158,7 +157,7 @@ export class ResendTemplateAdapter {
   private readonly client: Resend;
 
   public constructor(options: ResendTemplateAdapterOptions) {
-    this.client = options.client ?? new Resend(options.apiKey, { userAgent: "kaenma/0.1.0" });
+    this.client = options.client ?? new Resend(options.apiKey, { userAgent: "openengage/0.1.0" });
   }
 
   public async get(identifier: string): Promise<ResendHostedTemplate> {

@@ -1,4 +1,4 @@
-# Kaenma
+# OpenEngage
 
 Cloudflare上で完結する、オープンソースのマーケティングオートメーション基盤です。
 
@@ -9,7 +9,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 
 ## 特徴
 
-- TanStack Startの公開Workerと、Service Binding経由でのみ呼び出すAPI Workerを分離
+- TanStack Startの公開Worker、内部API Worker、非公開Flue Agent WorkerをService Bindingで分離
 - D1を業務データとオートメーション状態機械の正本として使用
 - R2によるAsset、CSV、受信添付ファイル、イベントアーカイブの保存
 - 画像・eBook・スライドを管理するAssetライブラリと、Worker経由の公開URL配信
@@ -25,14 +25,14 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 
 ## メール送信ポリシー
 
-Kaenmaはメールの用途を型と実行時検証の両方で分離します。
+OpenEngageはメールの用途を型と実行時検証の両方で分離します。
 
 | 用途            | プロバイダー | 使用例                                       |
 | --------------- | ------------ | -------------------------------------------- |
 | `transactional` | Resend       | メール確認、招待、パスワード再設定、申込確認 |
 | `marketing`     | Resend       | Automation、Segment配信、Broadcast           |
 
-送信元アドレスは用途ごとに分けます。配信停止・購読Topic・同意状態はKaenmaを正本とし、配信と開封・クリック・Bounceなどのイベント取得にはResendを使います。
+送信元アドレスは用途ごとに分けます。配信停止・購読Topic・同意状態はOpenEngageを正本とし、配信と開封・クリック・Bounceなどのイベント取得にはResendを使います。
 
 ## アーキテクチャ
 
@@ -41,6 +41,8 @@ flowchart LR
     A["管理者・マーケター"] --> C["Client Worker<br>TanStack Start"]
     V["訪問者・フォーム・Tracking"] --> C
     C -->|"Service Binding"| S["Server Worker<br>Hono / oRPC / REST"]
+    S -->|"AGENT_APP Fetch Binding"| AG["Agent Worker<br>Flue / Durable Objects"]
+    AG -->|"SERVER_AGENT_API RPC"| S
     CR["Cron Scheduler"] --> S
     S --> D["D1<br>業務データ・実行状態"]
     S --> R["R2<br>Asset・CSV・Archive"]
@@ -59,15 +61,16 @@ flowchart LR
 apps/
   client/                公開Worker、TanStack Start/Query、Vite、Tailwind、React Flow
   server/                内部API Worker、Hono、Cron、Queue、Email Routing
+  agent/                 非公開Flue Agent Worker、Durable Objects
 packages/
   orpc/                  ドメイン別のoRPC contractとDTO Zod schema(APIの単一の正本)
   channels/              Resend、Webhook adapter
   core/                  Segment、Automation、Consent、Scheduleの純粋ロジック
-  create-kaenma/         Setup、doctor、backup、update CLI
+  create-openengage/         Setup、doctor、backup、update CLI
   database/              Drizzle schema/client、D1 migration、repository
   content-renderer/      Landing Page等の安全なHTML/Text renderer
   email-templates/       認証メール用React EmailとResend同期スクリプト
-  mcp-server/            Kaenma MCP server
+  mcp-server/            OpenEngage MCP server
   sdk/                   contract型付きTypeScript SDK
 ```
 
@@ -124,11 +127,11 @@ Resendの資格情報はD1へ保存せず、WorkerのSecret bindingからのみ�
 
 ```bash
 RESEND_MANAGEMENT_API_KEY=re_xxx \
-  pnpm --filter @kaenma/email-templates resend:sync
+  pnpm --filter @openengage/email-templates resend:sync
 ```
 
-このコマンドは`kaenma-password-reset`、`kaenma-email-verification`、
-`kaenma-organization-invitation`を作成または更新し、最新バージョンを公開します。
+このコマンドは`openengage-password-reset`、`openengage-email-verification`、
+`openengage-organization-invitation`を作成または更新し、最新バージョンを公開します。
 
 ### 3. D1 migration
 
@@ -136,7 +139,7 @@ RESEND_MANAGEMENT_API_KEY=re_xxx \
 pnpm db:migrate:local
 ```
 
-アプリケーションからのDBアクセスは`@kaenma/database`のDrizzle clientへ統一しています。
+アプリケーションからのDBアクセスは`@openengage/database`のDrizzle clientへ統一しています。
 テーブル定義は`packages/database/src/<domain>/schema.ts`(ドメイン別)が正本です。
 スキーマ変更時は次のコマンドでDrizzle Kitがmigration SQLを生成します。
 
@@ -149,7 +152,7 @@ Wranglerが適用するSQLは`packages/database/migrations`にDrizzle Kitが直�
 初期migrationを作り直すことがあります。その場合はローカルDBをリセットしてください。
 
 ```bash
-rm -rf apps/client/.wrangler/state apps/server/.wrangler/state
+rm -rf apps/client/.wrangler/state apps/server/.wrangler/state apps/agent/.wrangler/state
 pnpm db:migrate:local
 ```
 
@@ -164,7 +167,8 @@ pnpm dev
 
 `pnpm dev`は未適用のローカルD1 migrationを先に適用してから開発サーバーを起動します。
 
-管理画面とAPIは `http://localhost:5173` で利用できます。
+管理画面とAPIは `http://localhost:5173`、Agent Viteは `http://localhost:5174` で起動します。
+ブラウザはAgentへ直接アクセスせず、常にClient → Server → Agentを通ります。
 
 開発環境では登録時のメール確認を省略し、アカウント作成後にそのままログインします。本番環境ではメール確認が必須です。
 
@@ -190,20 +194,25 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 
 ### Wrangler設定
 
-`apps/client/wrangler.jsonc`は公開Worker `kaenma` と、内部Worker
-`kaenma-server`を呼び出す`SERVER` Service Bindingを定義します。
+`apps/client/wrangler.jsonc`は公開Worker `openengage` と、内部Worker
+`openengage-server`を呼び出す`SERVER` Service Bindingを定義します。
 
 `apps/server/wrangler.jsonc`には以下のBindingsが定義されています。
 
+- `AGENT_APP`: 非公開の`openengage-agent`を呼び出すFetch Service Binding
 - `DB`: D1
 - `ASSETS_BUCKET`: R2
 - `CAMPAIGN_QUEUE`: オートメーション、Broadcast、Import/Export
-  (Binding名・Queue名(`kaenma-campaign`)は歴史的名残りで、内容はAutomationにリネーム済みです。稼働中のCloudflare Queueリソースの改名は本リポジトリのリネーム範囲外としています)
+  (Binding名・Queue名(`openengage-campaign`)は歴史的名残りで、内容はAutomationにリネーム済みです。稼働中のCloudflare Queueリソースの改名は本リポジトリのリネーム範囲外としています)
 - `DELIVERY_QUEUE`: Email、Webhook delivery
 
-ローカル開発ではCloudflare Viteプラグインの`auxiliaryWorkers`により両Workerを
-同時に起動します。`kaenma-server`は`workers_dev: false`のため公開URLを持たず、
-APIリクエストは`kaenma`からService Bindingで転送されます。
+`apps/agent/wrangler.jsonc`は`workers_dev: false`の非公開Worker `openengage-agent`と、
+Serverのnamed entrypoint `AgentBackend`を呼び出す`SERVER_AGENT_API` bindingを定義します。
+Flueは`/api/agents/hello`にmountされます。Better AuthのCookieやAPIキーをAgentへ渡さず、
+Serverがセッション、Workspace membership、会話所有権を検証してから転送します。
+
+ローカル開発ではClient ViteがServerをauxiliary Workerとして起動し、Agent Viteを別プロセスで
+起動します。`openengage-server`と`openengage-agent`は`workers_dev: false`のため公開URLを持ちません。
 
 初期状態のD1 `database_id` はプレースホルダーです。実際のD1 IDへ置き換えてください。
 
@@ -220,7 +229,7 @@ pnpm wrangler secret put RESEND_MANAGEMENT_API_KEY
 pnpm wrangler secret put RESEND_WEBHOOK_SECRET
 ```
 
-Resend Dashboardには`https://<APP_URL>/api/webhooks/resend`をWebhook URLとして登録し、`email.sent`、`email.delivered`、`email.opened`、`email.clicked`、`email.bounced`、`email.complained`、`email.failed`、`email.suppressed`を購読します。発行されたSigning secretは`RESEND_WEBHOOK_SECRET`として登録してください。Kaenmaは送信時に付与したWorkspace・Delivery tagから対象を特定します。
+Resend Dashboardには`https://<APP_URL>/api/webhooks/resend`をWebhook URLとして登録し、`email.sent`、`email.delivered`、`email.opened`、`email.clicked`、`email.bounced`、`email.complained`、`email.failed`、`email.suppressed`を購読します。発行されたSigning secretは`RESEND_WEBHOOK_SECRET`として登録してください。OpenEngageは送信時に付与したWorkspace・Delivery tagから対象を特定します。
 
 ### Migrationとデプロイ
 
@@ -229,8 +238,18 @@ pnpm db:migrate:remote
 pnpm deploy
 ```
 
-`pnpm deploy`はService Bindingの参照先である`kaenma-server`を先にデプロイし、
-続いてTanStack Startとクライアントアセットを含む`kaenma`をデプロイします。
+通常の`pnpm deploy`は`openengage-server` → `openengage-agent` → `openengage`の順でデプロイします。
+
+初回だけServerとAgentの相互Bindingが循環するため、次の順で作成します。
+
+```bash
+pnpm --filter @openengage/agent deploy:bootstrap
+pnpm deploy
+```
+
+bootstrap環境は`SERVER_AGENT_API`なしでAgentを先に作成します。その後Serverを作成し、通常の
+Agent設定でnamed RPC bindingを有効化してからClientをデプロイします。`create-openengage`での
+初回セットアップはこの順序を自動実行します。
 
 ## 初回セットアップ
 
@@ -240,10 +259,10 @@ pnpm deploy
 4. 必要に応じて購読Topicを作成する
 5. WorkerのSecret bindingへResendの送信・Template管理API keyとWebhook signing secretを登録する
 6. ContactまたはCSVを取り込む
-7. ResendでTemplateを公開し、Kaenmaのメールテンプレート画面から登録する
+7. ResendでTemplateを公開し、OpenEngageのメールテンプレート画面から登録する
 8. オートメーションを作成・検証・公開する
 
-Better AuthのOrganizationをKaenmaのWorkspaceとして扱います。
+Better AuthのOrganizationをOpenEngageのWorkspaceとして扱います。
 
 | Role     | 主な権限                           |
 | -------- | ---------------------------------- |
@@ -323,7 +342,7 @@ POST /api/v1/assets                                        バッファ(〜25MB�
 Workerのメモリ(128MB)を消費しません。ただしWebCryptoにストリーミングSHA-256がないため、
 この経路の`checksum`はR2側のMD5です(`checksum_algorithm`列で区別)。checksumはキャッシュバスターと
 重複検出のためのフィンガープリントであり、完全性の証明ではありません。上限100MBはCloudflareの
-受信ボディ制限(Free/Pro)であって、Kaenma側の設定値ではありません。
+受信ボディ制限(Free/Pro)であって、OpenEngage側の設定値ではありません。
 
 配信は3経路です。
 
@@ -458,19 +477,19 @@ SDKはoRPC contractから型付けされ、`/api/v1`(OpenAPI)経由で呼び出�
 サーバーと型がずれることはありません。
 
 ```ts
-import { createKaenmaClient } from "@kaenma/sdk";
+import { createOpenEngageClient } from "openengage";
 
-const kaenma = createKaenmaClient({
+const openengage = createOpenEngageClient({
   baseUrl: "https://ma.example.com",
-  apiKey: process.env.KAENMA_API_KEY!,
+  apiKey: process.env.OPENENGAGE_API_KEY!,
 });
 
-const contacts = await kaenma.contacts.list({
+const contacts = await openengage.contacts.list({
   query: "example.com",
   limit: 25,
 });
 
-await kaenma.contacts.create({
+await openengage.contacts.create({
   email: "person@example.com",
   firstName: "Kaen",
   customFields: {
@@ -479,7 +498,7 @@ await kaenma.contacts.create({
 });
 
 // contractに宣言されたエラーは型付きで判別できます
-import { isDefinedError } from "@kaenma/sdk";
+import { isDefinedError } from "openengage";
 ```
 
 APIキーはWorkspace限定で、D1にはSHA-256ハッシュだけを保存します。平文キーは作成時に一度だけ表示されます。
@@ -489,14 +508,14 @@ APIキーはWorkspace限定で、D1にはSHA-256ハッシュだけを保存し�
 ビルド:
 
 ```bash
-pnpm --filter @kaenma/mcp-server build
+pnpm --filter openengage-mcp build
 ```
 
 環境変数:
 
 ```bash
-export KAENMA_URL=https://ma.example.com
-export KAENMA_API_KEY=kaenma_xxxxxxxxxxxx_xxxxxxxxxxxxxxxxxxxx
+export OPENENGAGE_URL=https://ma.example.com
+export OPENENGAGE_API_KEY=openengage_xxxxxxxxxxxx_xxxxxxxxxxxxxxxxxxxx
 node packages/mcp-server/dist/index.js
 ```
 
@@ -515,28 +534,29 @@ node packages/mcp-server/dist/index.js
 ローカルでCLIをビルド:
 
 ```bash
-pnpm --filter create-kaenma build
+pnpm --filter create-openengage build
 ```
 
 主なコマンド:
 
 ```bash
-node packages/create-kaenma/dist/index.js
-node packages/create-kaenma/dist/index.js doctor
-node packages/create-kaenma/dist/index.js backup
-node packages/create-kaenma/dist/index.js update
-node packages/create-kaenma/dist/index.js domain add
+node packages/create-openengage/dist/index.js
+node packages/create-openengage/dist/index.js doctor
+node packages/create-openengage/dist/index.js backup
+node packages/create-openengage/dist/index.js update
+node packages/create-openengage/dist/index.js domain add
 ```
 
-`create-kaenma`はD1、R2、Queues、Secrets、Migration、2つのWorker deploymentを順番に構成します。
+`create-openengage`はD1、R2、Queues、Secrets、Migration、Agent bootstrap、Server → Agent → Clientの
+3 Worker deployment、相互Service Bindingの名前置換を順番に構成します。
 
 開発中のローカルテンプレートを使う場合:
 
 ```bash
-KAENMA_TEMPLATE_DIR=/path/to/kaenma node packages/create-kaenma/dist/index.js
+OPENENGAGE_TEMPLATE_DIR=/path/to/openengage node packages/create-openengage/dist/index.js
 ```
 
-GitHub・npm公開後は`npx create-kaenma`として利用する予定です。`KAENMA_TEMPLATE_REPOSITORY`でclone元も変更できます。
+GitHub・npm公開後は`npx create-openengage`として利用する予定です。`OPENENGAGE_TEMPLATE_REPOSITORY`でclone元も変更できます。
 
 ## Email Routing
 
@@ -633,7 +653,7 @@ WorkerテストはCloudflare Workers Vitest integration上で実行し、実際�
 - Segment差分評価と大規模データ向けQuery最適化
 - R2アーカイブの復元・検索Tool
 - Provider contract testと負荷試験Fixture
-- `create-kaenma`のnpm公開
+- `create-openengage`のnpm公開
 - デモWorkspaceとオートメーションTemplate
 
 ## コントリビューション

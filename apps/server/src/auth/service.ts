@@ -1,10 +1,9 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import { PermanentChannelError, ResendEmailAdapter } from "@openengage/channels";
+import { authSchema, createDatabase } from "@openengage/database";
 import { betterAuth } from "better-auth/minimal";
 import { organization, twoFactor } from "better-auth/plugins";
 import { adminAc, memberAc, ownerAc } from "better-auth/plugins/organization/access";
-
-import { PermanentChannelError, ResendEmailAdapter } from "@kaenma/channels";
-import { authSchema, createDatabase } from "@kaenma/database";
 
 import type { RuntimeEnv } from "../env";
 
@@ -24,7 +23,7 @@ export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
     trustedOrigins: [...new Set([env.APP_URL, baseURL])],
     advanced: {
       useSecureCookies: env.ENVIRONMENT !== "development",
-      cookiePrefix: "kaenma",
+      cookiePrefix: "openengage",
       defaultCookieAttributes: {
         httpOnly: true,
         sameSite: "lax",

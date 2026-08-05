@@ -1,4 +1,3 @@
-import { orpcQuery } from "@/lib/orpc";
 import type {
   LandingPage,
   PublishStatus,
@@ -6,7 +5,9 @@ import type {
   SignupFormDefinition,
   SiteMessage,
   SiteTracking,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
+
+import { orpcQuery } from "@/lib/orpc";
 
 export type { LandingPage, PublishStatus, SignupForm, SignupFormDefinition, SiteMessage };
 

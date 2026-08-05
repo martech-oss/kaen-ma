@@ -30,7 +30,7 @@ const offenders = listTsFiles(root)
 
 if (offenders.length > 0) {
   console.error(
-    "Raw .prepare( calls found in apps/server/src (SQL must live in @kaenma/database):",
+    "Raw .prepare( calls found in apps/server/src (SQL must live in @openengage/database):",
   );
   for (const path of offenders) console.error(`  - ${path}`);
   process.exit(1);

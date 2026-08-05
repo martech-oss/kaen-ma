@@ -1,9 +1,8 @@
+import { timingSafeEqual } from "@openengage/channels";
+import { ApiKeyRepository, createDatabase, resolveMemberContext } from "@openengage/database";
+import type { OpenEngageDatabase } from "@openengage/database";
+import type { WorkspaceContext } from "@openengage/orpc";
 import { createMiddleware } from "hono/factory";
-
-import { timingSafeEqual } from "@kaenma/channels";
-import { ApiKeyRepository, createDatabase, resolveMemberContext } from "@kaenma/database";
-import type { KaenmaDatabase } from "@kaenma/database";
-import type { WorkspaceContext } from "@kaenma/orpc";
 
 import type { AppEnvironment, SessionValue } from "../env";
 import { sha256Hex } from "../platform/crypto";
@@ -59,7 +58,7 @@ export async function resolveWorkspaceAccess({
   method,
   executionContext,
 }: {
-  database: KaenmaDatabase;
+  database: OpenEngageDatabase;
   env: AppEnvironment["Bindings"];
   headers: Headers;
   method: string;
@@ -77,6 +76,20 @@ export async function resolveWorkspaceAccess({
     return { workspace: apiContext, session: null };
   }
 
+  return resolveSessionWorkspaceAccess({ database, env, headers, method });
+}
+
+export async function resolveSessionWorkspaceAccess({
+  database,
+  env,
+  headers,
+  method,
+}: {
+  database: OpenEngageDatabase;
+  env: AppEnvironment["Bindings"];
+  headers: Headers;
+  method: string;
+}): Promise<WorkspaceAccess & { session: SessionValue }> {
   const auth = createAuth(env);
   const session = (await auth.api.getSession({
     headers,
@@ -93,7 +106,7 @@ export async function resolveWorkspaceAccess({
   }
 
   const requestedOrganizationId =
-    headers.get("x-kaenma-workspace") ?? session.session.activeOrganizationId ?? null;
+    headers.get("x-openengage-workspace") ?? session.session.activeOrganizationId ?? null;
   const workspace = await resolveMemberContext(database, session.user.id, requestedOrganizationId);
   if (!workspace) {
     throw new WorkspaceAccessError(
@@ -131,8 +144,8 @@ export function apiError(
   );
 }
 
-async function resolveApiKey(database: KaenmaDatabase, token: string) {
-  const match = token.match(/^kaenma_([A-Za-z0-9]{12})_([A-Za-z0-9-]{20,})$/);
+async function resolveApiKey(database: OpenEngageDatabase, token: string) {
+  const match = token.match(/^openengage_([A-Za-z0-9]{12})_([A-Za-z0-9-]{20,})$/);
   if (!match) return null;
   const prefix = match[1];
   if (!prefix) return null;

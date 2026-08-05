@@ -1,18 +1,18 @@
-import { compileSegmentFilter } from "@kaenma/core";
-import { SegmentRepository, type KaenmaDatabase } from "@kaenma/database";
-import { segmentFilterSchema } from "@kaenma/orpc";
+import { compileSegmentFilter } from "@openengage/core";
+import { SegmentRepository, type OpenEngageDatabase } from "@openengage/database";
+import { segmentFilterSchema } from "@openengage/orpc";
 
 /**
  * These helpers are called from flows that only carry a workspace id (bulk
  * contact actions, membership refreshes), so a minimal repository context is
  * synthesized here; the repository only reads `workspaceId` from it.
  */
-function segmentRepository(database: KaenmaDatabase, workspaceId: string): SegmentRepository {
+function segmentRepository(database: OpenEngageDatabase, workspaceId: string): SegmentRepository {
   return new SegmentRepository(database, { workspaceId, userId: "system", role: "owner" });
 }
 
 export async function updateSegmentMemberCount(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   segmentId: string,
 ): Promise<void> {
@@ -20,7 +20,7 @@ export async function updateSegmentMemberCount(
 }
 
 export async function refreshSegmentMemberships(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   segmentId: string,
 ): Promise<boolean> {

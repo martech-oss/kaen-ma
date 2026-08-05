@@ -1,10 +1,14 @@
-import { ConsentRepository, type KaenmaDatabase, type TopicCreateOutcome } from "@kaenma/database";
-import type { SubscriptionTopicRow, WorkspaceContext } from "@kaenma/orpc";
+import {
+  ConsentRepository,
+  type OpenEngageDatabase,
+  type TopicCreateOutcome,
+} from "@openengage/database";
+import type { SubscriptionTopicRow, WorkspaceContext } from "@openengage/orpc";
 
-export type { TopicCreateOutcome } from "@kaenma/database";
+export type { TopicCreateOutcome } from "@openengage/database";
 
 export async function listSubscriptionTopics(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
 ): Promise<SubscriptionTopicRow[]> {
   const rows = await new ConsentRepository(database, workspace).listTopics();
@@ -20,7 +24,7 @@ export async function listSubscriptionTopics(
 }
 
 export async function createSubscriptionTopic(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspace: WorkspaceContext,
   input: { name: string; slug: string; description: string; isDefault: boolean },
 ): Promise<TopicCreateOutcome> {

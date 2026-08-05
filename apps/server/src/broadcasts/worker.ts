@@ -1,5 +1,5 @@
-import { PermanentChannelError, type ChannelMessage } from "@kaenma/channels";
-import { compileSegmentFilter } from "@kaenma/core";
+import { PermanentChannelError, type ChannelMessage } from "@openengage/channels";
+import { compileSegmentFilter } from "@openengage/core";
 import {
   BroadcastWorkerRepository,
   MessagingWorkerRepository,
@@ -7,7 +7,7 @@ import {
   type BroadcastContactRecord,
   type BroadcastDeliveryOutcome,
   type BroadcastSendRecord,
-} from "@kaenma/database";
+} from "@openengage/database";
 
 import { type RuntimeEnv } from "../env";
 import { senderForPurpose } from "../messaging/delivery-worker";
@@ -15,7 +15,7 @@ import { buildReplyAddress } from "../messaging/reply-address";
 import { parseTemplateVariables, resolveTemplateVariables } from "../messaging/resend";
 import { createSignedToken } from "../platform/crypto";
 import { parseJsonRecord } from "../platform/values";
-import { type QueueMessage as KaenmaQueueMessage } from "../runtime/queues";
+import { type QueueMessage as OpenEngageQueueMessage } from "../runtime/queues";
 
 export type BroadcastRow = BroadcastSendRecord;
 export type BroadcastContactRow = BroadcastContactRecord;
@@ -108,7 +108,7 @@ export async function createBroadcastDeliveries(
     broadcast.workspaceId,
   );
   const outcomes: BroadcastDeliveryOutcome[] = [];
-  const deliveryMessages: Array<{ body: KaenmaQueueMessage }> = [];
+  const deliveryMessages: Array<{ body: OpenEngageQueueMessage }> = [];
   for (const contact of recipients) {
     if (!contact.email) {
       outcomes.push({ kind: "skip", contactId: contact.id });

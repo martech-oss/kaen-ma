@@ -3,11 +3,11 @@ import { escapeHtml } from "./html";
 
 export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: string): string {
   return `(() => {
-  if (window.kaenma) return;
+  if (window.openengage) return;
   const endpoint = ${JSON.stringify(trackingEndpoint)};
   const messagesEndpoint = ${JSON.stringify(messagesEndpoint)};
-  const settings = window.kaenmaSettings || {};
-  const visitorKey = "kaenma_visitor_" + endpoint.split("/").pop();
+  const settings = window.openengageSettings || {};
+  const visitorKey = "openengage_visitor_" + endpoint.split("/").pop();
   let email = typeof settings.email === "string" ? settings.email : undefined;
   let visitorId = localStorage.getItem(visitorKey) || undefined;
 
@@ -47,8 +47,8 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
       const response = await fetch(url);
       const payload = await response.json();
       const message = payload?.data?.[0];
-      if (!message || sessionStorage.getItem("kaenma_message_" + message.id)) return;
-      sessionStorage.setItem("kaenma_message_" + message.id, "shown");
+      if (!message || sessionStorage.getItem("openengage_message_" + message.id)) return;
+      sessionStorage.setItem("openengage_message_" + message.id, "shown");
 
       const container = document.createElement("aside");
       container.setAttribute("role", "status");
@@ -105,7 +105,7 @@ export function siteTrackingScript(trackingEndpoint: string, messagesEndpoint: s
     if (result?.identified) await loadMessage();
   }
 
-  window.kaenma = {
+  window.openengage = {
     consent() {
       settings.consent = true;
       void page();

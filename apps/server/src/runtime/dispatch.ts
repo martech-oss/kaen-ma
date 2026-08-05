@@ -1,12 +1,12 @@
-import { PermanentChannelError } from "@kaenma/channels";
-import { retryDelaySeconds } from "@kaenma/core";
+import { PermanentChannelError } from "@openengage/channels";
+import { retryDelaySeconds } from "@openengage/core";
 import {
   BroadcastWorkerRepository,
   AutomationEngineRepository,
   claimDueJobs,
   createDatabase,
   MessagingWorkerRepository,
-} from "@kaenma/database";
+} from "@openengage/database";
 
 import { enrollInactiveContacts } from "../automations/enrollment";
 import { processAutomationJob } from "../automations/worker";
@@ -19,7 +19,7 @@ import { persistDeadLetter, runDailyMaintenance } from "../platform/maintenance-
 import {
   campaignQueueBatchMessageSchema,
   deliveryQueueMessageSchema,
-  type QueueMessage as KaenmaQueueMessage,
+  type QueueMessage as OpenEngageQueueMessage,
 } from "./queues";
 
 export async function scheduled(
@@ -37,7 +37,7 @@ export async function scheduled(
   const leaseUntil = new Date(Date.now() + 5 * 60_000).toISOString();
   const engine = new AutomationEngineRepository(database);
   const workspaces = await engine.workspacesWithDueJobs(now, 50);
-  const messages: Array<{ body: KaenmaQueueMessage }> = [];
+  const messages: Array<{ body: OpenEngageQueueMessage }> = [];
   for (const workspace of workspaces) {
     const jobs = await claimDueJobs(database, now, leaseUntil, 20, workspace.workspaceId);
     for (const job of jobs) {
@@ -71,13 +71,13 @@ export async function scheduled(
 
 export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Promise<void> {
   for (const message of batch.messages) {
-    if (batch.queue === "kaenma-dead-letter") {
+    if (batch.queue === "openengage-dead-letter") {
       await persistDeadLetter(batch.queue, message.body, message.attempts, env);
       message.ack();
       continue;
     }
     try {
-      if (batch.queue === "kaenma-campaign") {
+      if (batch.queue === "openengage-campaign") {
         const parsed = campaignQueueBatchMessageSchema.safeParse(message.body);
         if (!parsed.success) throw new PermanentChannelError("Invalid campaign queue message");
         switch (parsed.data.kind) {
@@ -104,7 +104,7 @@ export async function queue(batch: MessageBatch<unknown>, env: RuntimeEnv): Prom
             await processContactExport(parsed.data.exportJobId, env);
             break;
         }
-      } else if (batch.queue === "kaenma-delivery") {
+      } else if (batch.queue === "openengage-delivery") {
         const parsed = deliveryQueueMessageSchema.safeParse(message.body);
         if (!parsed.success) throw new PermanentChannelError("Invalid delivery queue message");
         await processDelivery(parsed.data.deliveryId, env);

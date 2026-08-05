@@ -84,7 +84,7 @@ function TwoFactorSettings(): ReactNode {
     const password = getFormString(new FormData(event.currentTarget), "password");
     const result = await authClient.twoFactor.enable({
       password,
-      issuer: "Kaenma",
+      issuer: "OpenEngage",
     });
     if (result.data) setSetup(result.data);
   }

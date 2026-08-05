@@ -1,3 +1,4 @@
+import { type SegmentFilter } from "@openengage/orpc";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode } from "react";
 
@@ -13,7 +14,6 @@ import { optionalString } from "@/lib/form-data";
 import { orpcQuery } from "@/lib/orpc";
 import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
-import { type SegmentFilter } from "@kaenma/orpc";
 
 import { slugify } from "./contact-bits";
 

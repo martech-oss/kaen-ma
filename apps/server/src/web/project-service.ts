@@ -1,10 +1,9 @@
+import { projectItems, projects, uuidv7, type OpenEngageDatabase } from "@openengage/database";
+import type { ProjectRow } from "@openengage/orpc";
 import { and, count, desc, eq } from "drizzle-orm";
 
-import { projectItems, projects, uuidv7, type KaenmaDatabase } from "@kaenma/database";
-import type { ProjectRow } from "@kaenma/orpc";
-
 export async function listProjects(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
 ): Promise<ProjectRow[]> {
   const rows = await database.orm
@@ -32,7 +31,7 @@ export async function listProjects(
 }
 
 export async function createProject(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   input: { name: string; description: string; color: string },
 ): Promise<{ id: string }> {
@@ -53,7 +52,7 @@ export async function createProject(
 export type ProjectItemOutcome = { kind: "project_not_found" } | { kind: "done"; added: boolean };
 
 export async function addProjectItem(
-  database: KaenmaDatabase,
+  database: OpenEngageDatabase,
   workspaceId: string,
   input: { projectId: string; resourceType: string; resourceId: string },
 ): Promise<ProjectItemOutcome> {

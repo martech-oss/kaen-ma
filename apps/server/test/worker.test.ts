@@ -1,7 +1,3 @@
-import { env, exports } from "cloudflare:workers";
-import { and, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-
 import {
   companies,
   companyContacts,
@@ -14,7 +10,10 @@ import {
   segments,
   tags,
   uuidv7,
-} from "@kaenma/database";
+} from "@openengage/database";
+import { env, exports } from "cloudflare:workers";
+import { and, eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
 
 import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";
@@ -25,7 +24,7 @@ declare module "cloudflare:workers" {
   }
 }
 
-describe("Kaenma Worker", () => {
+describe("OpenEngage Worker", () => {
   it("uses the actual localhost port for Better Auth during development", () => {
     expect(
       resolveAuthBaseURL(
@@ -258,7 +257,7 @@ describe("Kaenma Worker", () => {
     const variable = await client.emails.createVariable({
       key: "brand_name",
       name: "Brand name",
-      value: "Kaenma",
+      value: "OpenEngage",
       description: "Shared brand label",
     });
     expect(variable.id).toBeTruthy();
@@ -267,7 +266,7 @@ describe("Kaenma Worker", () => {
         id: variable.id,
         key: "brand_name",
         name: "Brand name",
-        value: "Kaenma MA",
+        value: "OpenEngage MA",
         description: "Updated shared brand label",
       }),
     ).resolves.toEqual({ updated: true });
@@ -289,7 +288,7 @@ describe("Kaenma Worker", () => {
         "{{{MESSAGE_BRAND_NAME}}} update",
         JSON.stringify([
           { key: "MESSAGE_BRAND_NAME", type: "string", fallbackValue: null },
-          { key: "KAENMA_UNSUBSCRIBE_URL", type: "string", fallbackValue: null },
+          { key: "OPENENGAGE_UNSUBSCRIBE_URL", type: "string", fallbackValue: null },
         ]),
         now,
         now,

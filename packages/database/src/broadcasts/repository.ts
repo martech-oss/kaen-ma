@@ -1,3 +1,4 @@
+import type { WorkspaceContext } from "@openengage/orpc";
 import {
   and,
   asc,
@@ -14,9 +15,7 @@ import {
 } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
-import type { WorkspaceContext } from "@kaenma/orpc";
-
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contacts } from "../contacts/schema";
 import { deliveries, emailTemplates } from "../messaging/schema";
 import type { CompiledSegmentFilter } from "../segments/repository";
@@ -98,7 +97,7 @@ export type BroadcastDeliveryOutcome =
  * id. A full context is assignable wherever this scope is expected.
  */
 export class BroadcastRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,
@@ -320,7 +319,7 @@ export class BroadcastRepository {
  * repository is intentionally not workspace-scoped.
  */
 export class BroadcastWorkerRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(database: DatabaseSource) {
     this.database = createDatabase(database);

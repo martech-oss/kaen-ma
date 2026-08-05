@@ -1,5 +1,6 @@
+import type { ContactOptions, Tag } from "@openengage/orpc";
+
 import { orpc } from "@/lib/orpc";
-import type { ContactOptions, Tag } from "@kaenma/orpc";
 
 export type TagResource = Tag;
 

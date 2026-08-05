@@ -1,3 +1,4 @@
+import { contract } from "@openengage/orpc";
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { onError } from "@orpc/server";
@@ -6,8 +7,6 @@ import {
   ZodToJsonSchemaConverter,
 } from "@orpc/zod/zod4";
 import { createMiddleware } from "hono/factory";
-
-import { contract } from "@kaenma/orpc";
 
 import type { AppEnvironment } from "../env";
 import { logError } from "../observability";
@@ -59,7 +58,7 @@ let cachedDocument: Promise<object> | undefined;
 export function generateOpenApiDocument(appUrl: string): Promise<object> {
   cachedDocument ??= generator.generate(contract, {
     info: {
-      title: "Kaenma API",
+      title: "OpenEngage API",
       version: "0.1.0",
       description: "Cloudflare-native open source marketing automation",
     },
@@ -70,7 +69,7 @@ export function generateOpenApiDocument(appUrl: string): Promise<object> {
         bearerAuth: {
           type: "http",
           scheme: "bearer",
-          description: "Workspace API key (kaenma_<prefix>_<secret>)",
+          description: "Workspace API key (openengage_<prefix>_<secret>)",
         },
       },
     },

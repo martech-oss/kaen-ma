@@ -1,20 +1,19 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createOpenEngageClient } from "openengage";
 import * as z from "zod";
 
-import { createKaenmaClient } from "@kaenma/sdk";
-
-const baseUrl = process.env["KAENMA_URL"];
-const apiKey = process.env["KAENMA_API_KEY"];
+const baseUrl = process.env["OPENENGAGE_URL"];
+const apiKey = process.env["OPENENGAGE_API_KEY"];
 if (!baseUrl || !apiKey) {
-  process.stderr.write("KAENMA_URL and KAENMA_API_KEY are required\n");
+  process.stderr.write("OPENENGAGE_URL and OPENENGAGE_API_KEY are required\n");
   process.exit(1);
 }
 
-const client = createKaenmaClient({ baseUrl, apiKey });
+const client = createOpenEngageClient({ baseUrl, apiKey });
 const server = new McpServer({
-  name: "kaenma",
+  name: "openengage",
   version: "0.1.0",
 });
 
@@ -26,7 +25,7 @@ const pendingConfirmations = new Map<
 server.registerTool(
   "search_contacts",
   {
-    title: "Search Kaenma contacts",
+    title: "Search OpenEngage contacts",
     description: "Search contacts in the API key's workspace. This tool is read-only.",
     inputSchema: {
       query: z.string().max(191).default(""),
@@ -45,7 +44,7 @@ server.registerTool(
 server.registerTool(
   "get_dashboard",
   {
-    title: "Get Kaenma dashboard",
+    title: "Get OpenEngage dashboard",
     description: "Read aggregate contact, automation, and delivery health.",
     inputSchema: {},
   },
@@ -55,7 +54,7 @@ server.registerTool(
 server.registerTool(
   "list_automations",
   {
-    title: "List Kaenma automations",
+    title: "List OpenEngage automations",
     description: "List automations and their current status. This tool is read-only.",
     inputSchema: {},
   },

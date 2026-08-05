@@ -1,5 +1,3 @@
-import { and, asc, count, desc, eq, isNull, like, min, ne, or, sql, type SQL } from "drizzle-orm";
-
 import type {
   DealCreate,
   DealStatus,
@@ -7,10 +5,11 @@ import type {
   DealTaskStatus,
   DealTaskType,
   WorkspaceContext,
-} from "@kaenma/orpc";
+} from "@openengage/orpc";
+import { and, asc, count, desc, eq, isNull, like, min, ne, or, sql, type SQL } from "drizzle-orm";
 
 import { member, user } from "../auth/schema";
-import { createDatabase, type DatabaseSource, type KaenmaDatabase } from "../client";
+import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { companies, contacts } from "../contacts/schema";
 import { uuidv7 } from "../shared/uuid";
 import { dealPipelines, dealStages, deals, dealTasks } from "./schema";
@@ -139,7 +138,7 @@ export interface DealOptionRows {
  * wherever this scope is expected.
  */
 export class DealRepository {
-  private readonly database: KaenmaDatabase;
+  private readonly database: OpenEngageDatabase;
 
   public constructor(
     database: DatabaseSource,

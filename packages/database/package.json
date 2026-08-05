@@ -1,5 +1,5 @@
 {
-  "name": "@kaenma/database",
+  "name": "@openengage/database",
   "version": "0.1.0",
   "private": true,
   "files": [
@@ -16,8 +16,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@kaenma/core": "workspace:*",
-    "@kaenma/orpc": "workspace:*",
+    "@openengage/core": "workspace:*",
+    "@openengage/orpc": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import { hmacHex, timingSafeEqual } from "@kaenma/channels";
+import { hmacHex, timingSafeEqual } from "@openengage/channels";
 
 interface SignedTokenPayload {
   workspaceId: string;
