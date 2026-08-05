@@ -1,7 +1,3 @@
-import { oc } from "@orpc/contract";
-import * as z from "zod";
-
-import { workspaceErrors } from "../shared/errors";
 import {
   broadcastSegmentOptionSchema,
   broadcastWriteSchema,
@@ -12,7 +8,11 @@ import {
   messageVariableSchema,
   messageVariableWriteSchema,
   subscriptionTopicOptionSchema,
-} from "./schema";
+} from "@openengage/core/messaging";
+import { oc } from "@orpc/contract";
+import * as z from "zod";
+
+import { workspaceErrors } from "../shared/errors";
 
 const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },

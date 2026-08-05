@@ -1,4 +1,4 @@
-import type { WorkspaceContext } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   and,
   asc,

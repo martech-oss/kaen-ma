@@ -1,7 +1,3 @@
-import { oc } from "@orpc/contract";
-import * as z from "zod";
-
-import { workspaceErrors } from "../shared/errors";
 import {
   dealCreateSchema,
   dealDetailDataSchema,
@@ -12,7 +8,11 @@ import {
   dealTaskSchema,
   dealTaskUpdateSchema,
   dealUpdateSchema,
-} from "./schema";
+} from "@openengage/core/deals";
+import { oc } from "@orpc/contract";
+import * as z from "zod";
+
+import { workspaceErrors } from "../shared/errors";
 
 const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },

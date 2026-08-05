@@ -1,4 +1,4 @@
-import { PROVIDERS, WORKSPACE_ROLES } from "@openengage/orpc";
+import { PROVIDERS, WORKSPACE_ROLES } from "@openengage/core/shared";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 import { organization, user } from "../auth/schema";

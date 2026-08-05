@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@openengage/core": "workspace:*",
     "@orpc/contract": "^1.14.13",
     "zod": "^4.4.3"
   },

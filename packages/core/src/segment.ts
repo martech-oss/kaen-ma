@@ -1,5 +1,5 @@
-import type { SegmentCondition, SegmentFilter } from "@openengage/orpc";
-import { isSegmentOperatorAllowed } from "@openengage/orpc";
+import { isSegmentOperatorAllowed } from "./segments/fields.js";
+import type { SegmentCondition, SegmentFilter } from "./segments/schema.js";
 
 export interface CompiledSegment {
   sql: string;

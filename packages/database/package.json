@@ -17,7 +17,6 @@
   },
   "dependencies": {
     "@openengage/core": "workspace:*",
-    "@openengage/orpc": "workspace:*",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {

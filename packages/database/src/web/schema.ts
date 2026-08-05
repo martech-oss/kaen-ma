@@ -1,4 +1,8 @@
-import { ASSET_CHECKSUM_ALGORITHMS, ASSET_KINDS, ASSET_VISIBILITIES } from "@openengage/orpc";
+import {
+  ASSET_CHECKSUM_ALGORITHMS,
+  ASSET_KINDS,
+  ASSET_VISIBILITIES,
+} from "@openengage/core/shared";
 import { sql } from "drizzle-orm";
 import {
   check,

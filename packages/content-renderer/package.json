@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@openengage/orpc": "workspace:*"
+    "@openengage/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

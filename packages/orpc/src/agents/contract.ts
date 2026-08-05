@@ -1,8 +1,8 @@
+import { agentConversationSchema, agentKeySchema } from "@openengage/core/agents";
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import { workspaceErrors } from "../shared/errors";
-import { agentConversationSchema, agentKeySchema } from "./schema";
 
 export const agentConversationsContract = {
   create: oc

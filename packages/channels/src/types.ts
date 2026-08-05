@@ -1,4 +1,4 @@
-import type { DeliveryEvent, MessagePurpose } from "@openengage/orpc";
+import type { DeliveryEvent, MessagePurpose } from "@openengage/core/shared";
 
 export interface RenderedEmailMessage {
   kind: "email";

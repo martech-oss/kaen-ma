@@ -1,4 +1,4 @@
-import type { WorkspaceContext } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import { and, asc, count, eq, inArray, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 

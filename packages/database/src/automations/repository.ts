@@ -1,5 +1,5 @@
 import { assertJobTransition, type JobStatus } from "@openengage/core";
-import type { WorkspaceContext } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   and,
   asc,

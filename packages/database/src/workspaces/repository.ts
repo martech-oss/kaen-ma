@@ -1,4 +1,8 @@
-import { WORKSPACE_ROLES, type WorkspaceContext, type WorkspaceRole } from "@openengage/orpc";
+import {
+  WORKSPACE_ROLES,
+  type WorkspaceContext,
+  type WorkspaceRole,
+} from "@openengage/core/shared";
 import { and, asc, eq, gt, isNull, or } from "drizzle-orm";
 
 import { member } from "../auth/schema";

@@ -1,4 +1,4 @@
-import type { WorkspaceContext } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/core/shared";
 
 import { createDatabase, type DatabaseSource } from "../client";
 import { uuidv7 } from "../shared/uuid";

@@ -1,9 +1,14 @@
+import {
+  contactCreateSchema,
+  contactListInputSchema,
+  contactListResultSchema,
+  contactSchema,
+  contactUpdateSchema,
+} from "@openengage/core/contacts";
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import { workspaceErrors } from "../shared/errors";
-import { contactCreateSchema, contactSchema, contactUpdateSchema } from "./contact-schema";
-import { contactListInputSchema, contactListResultSchema } from "./schema";
 
 const contactNotFound = {
   CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },

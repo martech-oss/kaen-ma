@@ -1,16 +1,16 @@
-import { oc } from "@orpc/contract";
-import * as z from "zod";
-
-import { workspaceErrors } from "../shared/errors";
-import { contactSchema } from "./contact-schema";
 import {
   contactBulkActionSchema,
   contactOptionsSchema,
   contactProfileSchema,
+  contactSchema,
   contactScoreAdjustSchema,
   tagCreateSchema,
   tagSchema,
-} from "./resource-schema";
+} from "@openengage/core/contacts";
+import { oc } from "@orpc/contract";
+import * as z from "zod";
+
+import { workspaceErrors } from "../shared/errors";
 
 const forbidden = {
   FORBIDDEN: {

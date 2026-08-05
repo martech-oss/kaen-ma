@@ -1,5 +1,5 @@
-import type { WorkspaceContext } from "@openengage/orpc";
-import type { Contact, ContactCreate, ContactUpdate } from "@openengage/orpc";
+import type { Contact, ContactCreate, ContactUpdate } from "@openengage/core/contacts";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   and,
   asc,

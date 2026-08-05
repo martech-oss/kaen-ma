@@ -1,3 +1,4 @@
+import type { WorkspaceContext } from "@openengage/core/shared";
 import type {
   ContentDocument,
   LandingPageWrite,
@@ -5,8 +6,7 @@ import type {
   SignupFormWrite,
   SiteMessageWrite,
   SiteTrackingWrite,
-  WorkspaceContext,
-} from "@openengage/orpc";
+} from "@openengage/core/web";
 import {
   and,
   count,

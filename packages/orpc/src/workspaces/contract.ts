@@ -1,8 +1,8 @@
+import { workspaceSchema } from "@openengage/core/workspaces";
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
-import { workspaceSchema } from "./schema";
 
 export const webhookEndpointRowSchema = z.object({
   id: z.string(),

@@ -1,4 +1,4 @@
-import type { AgentConversation, AgentKey } from "@openengage/orpc";
+import type { AgentConversation, AgentKey } from "@openengage/core/agents";
 import { and, desc, eq } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource } from "../client";

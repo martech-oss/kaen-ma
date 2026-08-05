@@ -1,4 +1,5 @@
-import type { ContentDocument, WorkspaceContext } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/core/shared";
+import type { ContentDocument } from "@openengage/core/web";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 

@@ -1,4 +1,5 @@
-import type { SegmentFilter, WorkspaceContext } from "@openengage/orpc";
+import type { SegmentFilter } from "@openengage/core/segments";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
