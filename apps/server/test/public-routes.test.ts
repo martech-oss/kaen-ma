@@ -14,6 +14,8 @@ describe("public routes", () => {
     registerPublicRoutes(app as never);
 
     expect(app.routes.map((route) => `${route.method} ${route.path}`)).toEqual([
+      "GET /a/:workspaceSlug/:id/:filename",
+      "HEAD /a/:workspaceSlug/:id/:filename",
       "GET /p/:workspaceSlug/:pageSlug",
       "GET /api/public/forms/:workspaceSlug/:formSlug/embed.js",
       "GET /f/:workspaceSlug/:formSlug",

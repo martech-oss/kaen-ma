@@ -167,15 +167,31 @@ describe("oRPC contract completion (P2)", () => {
   it("uploads and downloads an asset through R2", async () => {
     const { client } = await createWorkspaceClient();
     const uploaded = await client.assets.upload({
-      name: "logo.svg",
-      file: new File(["<svg>kaenma</svg>"], "logo.svg", { type: "image/svg+xml" }),
+      name: "logo.png",
+      file: new File(["kaenma"], "logo.png", { type: "image/png" }),
     });
-    expect(uploaded).toMatchObject({ name: "logo.svg", contentType: "image/svg+xml" });
+    expect(uploaded).toMatchObject({
+      name: "logo.png",
+      contentType: "image/png",
+      kind: "image",
+      visibility: "private",
+      publicUrl: null,
+    });
     const file = await client.assets.download({ id: uploaded.id });
-    expect(await file.text()).toBe("<svg>kaenma</svg>");
+    expect(await file.text()).toBe("kaenma");
     await expect(client.assets.download({ id: uuidv7() })).rejects.toMatchObject({
       code: "ASSET_NOT_FOUND",
     });
+  });
+
+  it("refuses to store content types the delivery routes would execute", async () => {
+    const { client } = await createWorkspaceClient();
+    await expect(
+      client.assets.upload({
+        name: "logo.svg",
+        file: new File(["<svg onload='steal()' />"], "logo.svg", { type: "image/svg+xml" }),
+      }),
+    ).rejects.toMatchObject({ code: "ASSET_CONTENT_TYPE_BLOCKED" });
   });
 
   it("lists dead letters and rejects replaying unknown entries", async () => {

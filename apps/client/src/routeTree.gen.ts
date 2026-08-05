@@ -36,6 +36,7 @@ import { Route as AppEmailsArchiveRouteImport } from './routes/_app.emails.archi
 import { Route as AppEmailsTemplatesRouteImport } from './routes/_app.emails.templates'
 import { Route as AppEmailsVariablesRouteImport } from './routes/_app.emails.variables'
 import { Route as AppWebsiteIndexRouteImport } from './routes/_app.website.index'
+import { Route as AppWebsiteAssetsRouteImport } from './routes/_app.website.assets'
 import { Route as AppWebsiteFormsRouteImport } from './routes/_app.website.forms'
 import { Route as AppWebsiteMessagesRouteImport } from './routes/_app.website.messages'
 import { Route as AppWebsitePagesRouteImport } from './routes/_app.website.pages'
@@ -177,6 +178,11 @@ const AppWebsiteIndexRoute = AppWebsiteIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppWebsiteRoute,
 } as any)
+const AppWebsiteAssetsRoute = AppWebsiteAssetsRouteImport.update({
+  id: '/assets',
+  path: '/assets',
+  getParentRoute: () => AppWebsiteRoute,
+} as any)
 const AppWebsiteFormsRoute = AppWebsiteFormsRouteImport.update({
   id: '/forms',
   path: '/forms',
@@ -231,6 +237,7 @@ export interface FileRoutesByFullPath {
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
+  '/website/assets': typeof AppWebsiteAssetsRoute
   '/website/forms': typeof AppWebsiteFormsRoute
   '/website/messages': typeof AppWebsiteMessagesRoute
   '/website/pages': typeof AppWebsitePagesRoute
@@ -260,6 +267,7 @@ export interface FileRoutesByTo {
   '/emails/archive': typeof AppEmailsArchiveRoute
   '/emails/templates': typeof AppEmailsTemplatesRoute
   '/emails/variables': typeof AppEmailsVariablesRoute
+  '/website/assets': typeof AppWebsiteAssetsRoute
   '/website/forms': typeof AppWebsiteFormsRoute
   '/website/messages': typeof AppWebsiteMessagesRoute
   '/website/pages': typeof AppWebsitePagesRoute
@@ -296,6 +304,7 @@ export interface FileRoutesById {
   '/_app/emails/archive': typeof AppEmailsArchiveRoute
   '/_app/emails/templates': typeof AppEmailsTemplatesRoute
   '/_app/emails/variables': typeof AppEmailsVariablesRoute
+  '/_app/website/assets': typeof AppWebsiteAssetsRoute
   '/_app/website/forms': typeof AppWebsiteFormsRoute
   '/_app/website/messages': typeof AppWebsiteMessagesRoute
   '/_app/website/pages': typeof AppWebsitePagesRoute
@@ -332,6 +341,7 @@ export interface FileRouteTypes {
     | '/emails/archive'
     | '/emails/templates'
     | '/emails/variables'
+    | '/website/assets'
     | '/website/forms'
     | '/website/messages'
     | '/website/pages'
@@ -361,6 +371,7 @@ export interface FileRouteTypes {
     | '/emails/archive'
     | '/emails/templates'
     | '/emails/variables'
+    | '/website/assets'
     | '/website/forms'
     | '/website/messages'
     | '/website/pages'
@@ -396,6 +407,7 @@ export interface FileRouteTypes {
     | '/_app/emails/archive'
     | '/_app/emails/templates'
     | '/_app/emails/variables'
+    | '/_app/website/assets'
     | '/_app/website/forms'
     | '/_app/website/messages'
     | '/_app/website/pages'
@@ -608,6 +620,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppWebsiteIndexRouteImport
       parentRoute: typeof AppWebsiteRoute
     }
+    '/_app/website/assets': {
+      id: '/_app/website/assets'
+      path: '/assets'
+      fullPath: '/website/assets'
+      preLoaderRoute: typeof AppWebsiteAssetsRouteImport
+      parentRoute: typeof AppWebsiteRoute
+    }
     '/_app/website/forms': {
       id: '/_app/website/forms'
       path: '/forms'
@@ -717,6 +736,7 @@ const AppEmailsRouteWithChildren = AppEmailsRoute._addFileChildren(
 )
 
 interface AppWebsiteRouteChildren {
+  AppWebsiteAssetsRoute: typeof AppWebsiteAssetsRoute
   AppWebsiteFormsRoute: typeof AppWebsiteFormsRoute
   AppWebsiteMessagesRoute: typeof AppWebsiteMessagesRoute
   AppWebsitePagesRoute: typeof AppWebsitePagesRoute
@@ -725,6 +745,7 @@ interface AppWebsiteRouteChildren {
 }
 
 const AppWebsiteRouteChildren: AppWebsiteRouteChildren = {
+  AppWebsiteAssetsRoute: AppWebsiteAssetsRoute,
   AppWebsiteFormsRoute: AppWebsiteFormsRoute,
   AppWebsiteMessagesRoute: AppWebsiteMessagesRoute,
   AppWebsitePagesRoute: AppWebsitePagesRoute,

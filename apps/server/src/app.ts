@@ -10,6 +10,7 @@ import { logError } from "./observability";
 import { createOrpcRequestHandler } from "./orpc/handler";
 import { createOpenApiRequestHandler, generateOpenApiDocument } from "./orpc/openapi-handler";
 import { registerPublicRoutes } from "./public/routes";
+import { registerAssetRoutes } from "./web/asset-routes";
 
 const app = new Hono<AppEnvironment>();
 app.use("*", requestContext);
@@ -55,6 +56,7 @@ app.get("/api/health", async (context) => {
 app.get("/api/openapi.json", async (context) =>
   context.json(await generateOpenApiDocument(context.env.APP_URL)),
 );
+registerAssetRoutes(app);
 registerEmailWebhookRoutes(app);
 registerPublicRoutes(app);
 app.notFound((context) => apiError(context, 404, "not_found", "リソースが見つかりません"));

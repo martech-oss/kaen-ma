@@ -12,6 +12,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 - TanStack Startの公開Workerと、Service Binding経由でのみ呼び出すAPI Workerを分離
 - D1を業務データとオートメーション状態機械の正本として使用
 - R2によるAsset、CSV、受信添付ファイル、イベントアーカイブの保存
+- 画像・eBook・スライドを管理するAssetライブラリと、Worker経由の公開URL配信
 - Queuesと1分Cronによる再開可能なオートメーション実行
 - Resend Hosted TemplatesによるTransactional・Marketingメール
 - React Emailで管理する認証メールテンプレート
@@ -306,6 +307,50 @@ Reportingは最大366日の期間を指定し、D1に保存された実データ
 
 各詳細レポートはCSVでエクスポートできます。集計APIは`Analyst`以上の権限を必要とし、常にWorkspaceでスコープされます。
 
+## Asset管理
+
+画像、eBook、スライドなどのダウンロードコンテンツをR2で一元管理します。管理画面は`/website/assets`です。
+
+アップロードは2経路あります。
+
+```text
+POST /api/assets/upload?name=&visibility=&width=&height=   ストリーミング(〜100MB)
+PUT  /api/assets/:id/content?name=&width=&height=          差し替え(IDは維持)
+POST /api/v1/assets                                        バッファ(〜25MB、oRPC/SDK/MCP)
+```
+
+ストリーミング経路はリクエストボディをそのまま`R2Bucket.put()`へ流すため、100MBのスライドでも
+Workerのメモリ(128MB)を消費しません。ただしWebCryptoにストリーミングSHA-256がないため、
+この経路の`checksum`はR2側のMD5です(`checksum_algorithm`列で区別)。checksumはキャッシュバスターと
+重複検出のためのフィンガープリントであり、完全性の証明ではありません。上限100MBはCloudflareの
+受信ボディ制限(Free/Pro)であって、Kaenma側の設定値ではありません。
+
+配信は3経路です。
+
+```text
+GET|HEAD /a/:workspaceSlug/:id/:filename   公開(認証不要)
+GET|HEAD /api/assets/:id/raw               管理プレビュー(Session or Bearer)
+GET      /api/v1/assets/:id/file           SDK/MCP用ダウンロード
+```
+
+公開URLには`?v=<checksumの先頭12文字>`が付きます。一致したときだけ
+`Cache-Control: public, max-age=31536000, immutable`を返し、それ以外は`max-age=300`です。
+差し替えるとchecksumが変わってURLも変わるため、埋め込み済みの画像は自動的に新しいファイルへ
+切り替わります。`:filename`はルックアップに使わないので、リネームしても既存URLは生きたままです。
+
+### 共有バケットとセキュリティ
+
+`ASSETS_BUCKET`はAssetだけでなく、連絡先CSVエクスポート、受信メール添付、イベントアーカイブも
+格納します。したがってバケット自体を公開してはいけません。公開配信は必ずD1の行を先に引き、
+`visibility='public'`かつ未アーカイブであることを確認してからR2を読みます。さらに`r2_key`が
+`{workspaceId}/assets/`で始まることをassertし、行が壊れた場合もPII漏洩ではなく404に落とします。
+ワークスペース不明、Asset不明、非公開、アーカイブ済み、オブジェクト欠落はすべて同一の404を返し、
+存在を漏らしません。
+
+配信は管理画面と同一オリジンになるため、`text/html`や`image/svg+xml`など
+ブラウザがスクリプトとして実行しうるContent-Typeはアップロード時に拒否し、
+全Assetレスポンスに`Content-Security-Policy: default-src 'none'; ...; sandbox`を付与します。
+
 ## CSV Import / Export
 
 CSV ImportはWorkerで検証後、R2へNDJSONパートとして保存し、Queueで分割処理します。
@@ -332,8 +377,13 @@ APIはoRPC contract(`packages/orpc`)を単一の正本として、同じprocedur
 - `/api/rpc`: 管理画面用のRPCエンドポイント(TanStack Queryとの統合に使用)
 - `/api/v1`: SDK・MCP・外部連携用のREST(OpenAPI)エンドポイント。contractの`.route()`メタデータから提供
 
-手書きのRESTハンドラは存在しません。エンドポイントの追加はcontractへのprocedure追加だけで、
+JSON APIの面に手書きのRESTハンドラは存在しません。エンドポイントの追加はcontractへのprocedure追加だけで、
 両方の入口とOpenAPIドキュメント、SDKの型に同時に反映されます。
+
+唯一の例外はバイト転送を伴うAssetのルート(下記「Asset管理」)です。`z.file()`はファイル全体を
+Workerのメモリへ展開し、シリアライザがレスポンスを占有するため、無バッファのアップロードや
+`Range`/`ETag`/`Content-Disposition`をcontractでは表現できません。これらのハンドラも
+レスポンス本文はcontractの`Asset` DTOで型付けしてあり、契約から乖離しません。
 
 レスポンスはcamelCaseのDTOをそのまま返します(`{data: ...}`エンベロープはありません)。
 エラーは`{defined, code, status, message, data}`のJSONで、contractに宣言されたコードを返します。
@@ -384,7 +434,21 @@ GET    /api/v1/forms
 POST   /api/v1/forms
 GET    /api/v1/pages
 POST   /api/v1/pages
+
+GET    /api/v1/assets
+POST   /api/v1/assets
+GET    /api/v1/assets/:id
+GET    /api/v1/assets/:id/file
+PATCH  /api/v1/assets/:id
+DELETE /api/v1/assets/:id
+POST   /api/v1/assets/:id/archive
+POST   /api/v1/assets/:id/restore
 ```
+
+> **破壊的変更 (v0.1)**: Assetのダウンロードは `GET /api/v1/assets/:id` から
+> `GET /api/v1/assets/:id/file` へ移動しました。メタデータを返す `assets.get` が
+> 同じパスを必要とし、同一method+pathの2 procedureはOpenAPIハンドラが先勝ちで
+> 解決してしまうためです。管理画面は`/api/rpc`(procedure名で解決)を使うため影響はありません。
 
 APIではbodyやqueryの`workspace_id`を信用しません。Cookie SessionまたはBearer API KeyからWorkspaceを決定し、D1クエリにも必ず`workspace_id`を含めます。
 
@@ -517,6 +581,7 @@ TransactionalメールもBounce、Complaintなどの抑止対象です。Marketi
 - Webhook送信先のHTTPS強制とprivate/link-local IP拒否
 - Email HTMLの変数escapeと許可タグ制限
 - FormのTurnstile、honeypot、Origin制限、Idempotency Key
+- Assetの実行可能Content-Type拒否、`sandbox` CSP、共有バケットのkey prefix検証
 - Queue consumerの条件付き状態更新とDelivery冪等キー
 
 脆弱性を発見した場合は、公開Issueへ機密情報を書き込まず、RepositoryのSecurity Advisoryから報告してください。

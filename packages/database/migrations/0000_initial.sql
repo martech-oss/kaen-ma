@@ -692,18 +692,30 @@ CREATE TABLE `assets` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
 	`name` text NOT NULL,
+	`original_filename` text NOT NULL,
+	`kind` text DEFAULT 'other' NOT NULL,
+	`description` text DEFAULT '' NOT NULL,
+	`alt_text` text DEFAULT '' NOT NULL,
 	`r2_key` text NOT NULL,
 	`content_type` text NOT NULL,
 	`size` integer NOT NULL,
 	`checksum` text NOT NULL,
+	`checksum_algorithm` text DEFAULT 'sha256' NOT NULL,
+	`width` integer,
+	`height` integer,
 	`visibility` text DEFAULT 'private' NOT NULL,
+	`created_by_user_id` text,
+	`archived_at` text,
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	FOREIGN KEY (`workspace_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade,
-	CONSTRAINT "assets_visibility_check" CHECK("assets"."visibility" IN ('public', 'private'))
+	FOREIGN KEY (`created_by_user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE set null,
+	CONSTRAINT "assets_kind_check" CHECK("assets"."kind" IN ('image', 'document', 'video', 'audio', 'other')),
+	CONSTRAINT "assets_visibility_check" CHECK("assets"."visibility" IN ('public', 'private')),
+	CONSTRAINT "assets_checksum_algorithm_check" CHECK("assets"."checksum_algorithm" IN ('sha256', 'md5'))
 );
 --> statement-breakpoint
-CREATE INDEX `assets_workspace_created_idx` ON `assets` (`workspace_id`,`created_at`);--> statement-breakpoint
+CREATE INDEX `assets_workspace_archived_created_idx` ON `assets` (`workspace_id`,`archived_at`,`created_at`);--> statement-breakpoint
 CREATE UNIQUE INDEX `assets_workspace_key_unique` ON `assets` (`workspace_id`,`r2_key`);--> statement-breakpoint
 CREATE TABLE `form_submissions` (
 	`id` text PRIMARY KEY NOT NULL,

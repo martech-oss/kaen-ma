@@ -2,6 +2,8 @@ export * from "./contract";
 export * from "./shared/errors";
 export * from "./shared/schema";
 export * from "./assets/contract";
+export * from "./assets/schema";
+export * from "./assets/dto";
 export * from "./automations/contract";
 export * from "./automations/schema";
 export * from "./consent/contract";

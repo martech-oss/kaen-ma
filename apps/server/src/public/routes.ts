@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 
 import type { AppEnvironment } from "../env";
+import { registerPublicAssetRoutes } from "./asset-routes";
 import { registerPublicFormRoutes } from "./form-routes";
 import { registerPublicLandingRoutes } from "./landing-routes";
 import { registerPublicPreferenceRoutes } from "./preference-routes";
@@ -9,9 +10,11 @@ import { registerPublicTrackingRoutes } from "./tracking-routes";
 
 /**
  * Unauthenticated, browser-facing routes: hosted landing pages and forms, the
- * site tracking beacon, in-app messages, and unsubscribe/preference pages.
+ * site tracking beacon, in-app messages, public assets, and unsubscribe /
+ * preference pages.
  */
 export function registerPublicRoutes(publicApp: Hono<AppEnvironment>): void {
+  registerPublicAssetRoutes(publicApp);
   registerPublicLandingRoutes(publicApp);
   registerPublicFormRoutes(publicApp);
   registerPublicTrackingRoutes(publicApp);

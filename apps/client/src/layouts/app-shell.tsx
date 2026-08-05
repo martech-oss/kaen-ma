@@ -13,6 +13,7 @@ import {
   Gauge,
   GitBranch,
   Globe2,
+  Images,
   LayoutTemplate,
   LogOut,
   Mail,
@@ -89,6 +90,7 @@ const websiteNavigation = linkOptions([
     icon: LayoutTemplate,
   },
   { to: "/website/pages", label: "ランディングページ", icon: PanelsTopLeft },
+  { to: "/website/assets", label: "アセット", icon: Images },
   {
     to: "/website/messages",
     label: "サイトメッセージ",

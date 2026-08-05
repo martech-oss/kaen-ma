@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { ExternalLink, FileStack, Globe2, Pencil, Plus } from "lucide-react";
+import { ExternalLink, FileStack, Globe2, Image as ImageIcon, Pencil, Plus } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
@@ -15,6 +15,8 @@ import {
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { AssetPickerDialog } from "@/features/assets/asset-picker";
 import { landingPagesQueryOptions, type LandingPageRow } from "@/features/website/website-api";
 import { CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
 import { useFormSubmission } from "@/hooks/use-form-submission";
@@ -218,6 +220,12 @@ function LandingPageEditor({
 }): ReactNode {
   const current = readLandingContent(item?.contentDocument ?? undefined);
   const { busy, error, run } = useFormSubmission("保存できませんでした");
+  // The rest of this form is uncontrolled; the hero image is the one field a
+  // dialog writes into, so it keeps local state plus a hidden input and the
+  // submit path stays FormData-driven. The parent's `key` remounts on edit.
+  const [heroImageSrc, setHeroImageSrc] = useState(current.heroImageSrc);
+  const [heroImageAlt, setHeroImageAlt] = useState(current.heroImageAlt);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const createPage = useMutation(orpcQuery.website.createPage.mutationOptions());
   const updatePage = useMutation(orpcQuery.website.updatePage.mutationOptions());
@@ -235,6 +243,8 @@ function LandingPageEditor({
         body: getFormString(formData, "body"),
         ctaLabel: getFormString(formData, "ctaLabel"),
         ctaUrl: getFormString(formData, "ctaUrl"),
+        heroImageSrc: getFormString(formData, "heroImageSrc"),
+        heroImageAlt: getFormString(formData, "heroImageAlt"),
       }),
     } as const;
     await run(async () => {
@@ -278,6 +288,47 @@ function LandingPageEditor({
         <FormSelectOption value="draft">下書き</FormSelectOption>
         <FormSelectOption value="published">公開</FormSelectOption>
       </FormNativeSelect>
+      <Field>
+        <FieldLabel>ヒーロー画像</FieldLabel>
+        <input type="hidden" name="heroImageSrc" value={heroImageSrc} />
+        <input type="hidden" name="heroImageAlt" value={heroImageAlt} />
+        {heroImageSrc ? (
+          <img
+            src={heroImageSrc}
+            alt={heroImageAlt}
+            className="h-28 w-fit rounded-md border object-contain"
+          />
+        ) : null}
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => setPickerOpen(true)}>
+            <ImageIcon data-icon="inline-start" />
+            {heroImageSrc ? "画像を変更" : "アセットから選択"}
+          </Button>
+          {heroImageSrc ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setHeroImageSrc("");
+                setHeroImageAlt("");
+              }}
+            >
+              削除
+            </Button>
+          ) : null}
+        </div>
+        <FieldDescription>公開設定のアセットのみ埋め込めます。</FieldDescription>
+      </Field>
+      <AssetPickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onSelect={(asset) => {
+          setHeroImageSrc(asset.publicUrl ?? "");
+          setHeroImageAlt(asset.name);
+          setPickerOpen(false);
+        }}
+      />
       <FormInput
         label="見出し"
         name="headline"
@@ -310,6 +361,8 @@ function buildLandingContent(values: {
   body: string;
   ctaLabel: string;
   ctaUrl: string;
+  heroImageSrc: string;
+  heroImageAlt: string;
 }): ContentDocument {
   return {
     schemaVersion: 1,
@@ -317,6 +370,18 @@ function buildLandingContent(values: {
     contentColor: "#ffffff",
     width: 720,
     blocks: [
+      // The asset library hands over an absolute, cache-busted public URL, so
+      // `image.src` stays the plain `z.url()` it has always been.
+      ...(values.heroImageSrc
+        ? [
+            {
+              id: "hero-image",
+              type: "image" as const,
+              src: values.heroImageSrc,
+              alt: values.heroImageAlt,
+            },
+          ]
+        : []),
       {
         id: "hero",
         type: "text",
@@ -342,15 +407,20 @@ function readLandingContent(document?: ContentDocument): {
   body: string;
   ctaLabel: string;
   ctaUrl: string;
+  heroImageSrc: string;
+  heroImageAlt: string;
 } {
   const text = document?.blocks.find((block) => block.type === "text");
   const button = document?.blocks.find((block) => block.type === "button");
+  const image = document?.blocks.find((block) => block.type === "image");
   const html = text?.type === "text" ? text.html : "";
   return {
     headline: decodeBasicHtml(html.match(/<h1>(.*?)<\/h1>/i)?.[1] ?? ""),
     body: decodeBasicHtml(html.match(/<p>(.*?)<\/p>/i)?.[1] ?? ""),
     ctaLabel: button?.type === "button" ? button.label : "",
     ctaUrl: button?.type === "button" ? button.href : "",
+    heroImageSrc: image?.type === "image" ? image.src : "",
+    heroImageAlt: image?.type === "image" ? image.alt : "",
   };
 }
 

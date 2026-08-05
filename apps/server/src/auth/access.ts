@@ -108,9 +108,12 @@ export async function resolveWorkspaceAccess({
 export function apiError(
   context: {
     get(key: "requestId"): string;
-    json: (body: unknown, status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 503) => Response;
+    json: (
+      body: unknown,
+      status: 400 | 401 | 403 | 404 | 409 | 411 | 413 | 415 | 422 | 429 | 500 | 503,
+    ) => Response;
   },
-  status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500 | 503,
+  status: 400 | 401 | 403 | 404 | 409 | 411 | 413 | 415 | 422 | 429 | 500 | 503,
   code: string,
   message: string,
   details?: unknown,

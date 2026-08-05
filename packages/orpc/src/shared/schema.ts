@@ -24,6 +24,23 @@ export const PROVIDERS = ["resend", "webhook"] as const;
 export const providerSchema = z.enum(PROVIDERS);
 export type Provider = z.infer<typeof providerSchema>;
 
+/** Coarse facet derived from an asset's content type - drives the library filter tabs. */
+export const ASSET_KINDS = ["image", "document", "video", "audio", "other"] as const;
+export const assetKindSchema = z.enum(ASSET_KINDS);
+export type AssetKind = z.infer<typeof assetKindSchema>;
+
+export const ASSET_VISIBILITIES = ["public", "private"] as const;
+export const assetVisibilitySchema = z.enum(ASSET_VISIBILITIES);
+export type AssetVisibility = z.infer<typeof assetVisibilitySchema>;
+
+/**
+ * Buffered uploads hash with SHA-256; streamed uploads cannot (WebCrypto has no
+ * incremental digest), so they record R2's own MD5 instead. The column says which.
+ */
+export const ASSET_CHECKSUM_ALGORITHMS = ["sha256", "md5"] as const;
+export const assetChecksumAlgorithmSchema = z.enum(ASSET_CHECKSUM_ALGORITHMS);
+export type AssetChecksumAlgorithm = z.infer<typeof assetChecksumAlgorithmSchema>;
+
 export const DELIVERY_EVENT_TYPES = [
   "accepted",
   "delivered",

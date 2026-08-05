@@ -89,7 +89,16 @@ import {
   previewSegmentProcedure,
   refreshSegmentProcedure,
 } from "../segments/router";
-import { downloadAssetProcedure, uploadAssetProcedure } from "../web/asset-router";
+import {
+  archiveAssetProcedure,
+  deleteAssetProcedure,
+  downloadAssetProcedure,
+  getAssetProcedure,
+  listAssetsProcedure,
+  restoreAssetProcedure,
+  updateAssetProcedure,
+  uploadAssetProcedure,
+} from "../web/asset-router";
 import {
   addProjectItemProcedure,
   createProjectProcedure,
@@ -128,8 +137,14 @@ export const orpcRouter = os.router({
     createWebhookEndpoint: createWebhookEndpointProcedure,
   },
   assets: {
+    list: listAssetsProcedure,
+    get: getAssetProcedure,
     upload: uploadAssetProcedure,
     download: downloadAssetProcedure,
+    update: updateAssetProcedure,
+    archive: archiveAssetProcedure,
+    restore: restoreAssetProcedure,
+    delete: deleteAssetProcedure,
   },
   consent: {
     listTopics: listTopicsProcedure,
