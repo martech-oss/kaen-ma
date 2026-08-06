@@ -15,7 +15,7 @@ import { orpcRouter } from "./router";
 
 /**
  * Serves the same procedures as /api/rpc through their .route() metadata,
- * giving SDK/MCP/external integrations a stable REST surface at /api/v1.
+ * giving SDK and external integrations a stable REST surface at /api/v1.
  */
 const handler = new OpenAPIHandler(orpcRouter, {
   // Query strings arrive as text; coerce them into the schema's declared

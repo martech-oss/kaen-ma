@@ -6,6 +6,7 @@ import { registerAgentGatewayRoutes } from "./agents/gateway";
 import { apiError, requestContext } from "./auth/access";
 import { createAuth } from "./auth/service";
 import { type AppEnvironment } from "./env";
+import { registerMcpRoutes } from "./mcp/handler";
 import { logError } from "./observability";
 import { createOrpcRequestHandler } from "./orpc/handler";
 import { createOpenApiRequestHandler, generateOpenApiDocument } from "./orpc/openapi-handler";
@@ -26,6 +27,7 @@ app.on(["GET", "POST"], "/api/auth/*", (context) => {
   const requestOrigin = new URL(context.req.url).origin;
   return createAuth(context.env, requestOrigin).handler(context.req.raw);
 });
+registerMcpRoutes(app);
 app.use("/api/rpc/*", createOrpcRequestHandler());
 app.use("/api/v1/*", createOpenApiRequestHandler());
 app.get("/api/health", async (context) => {

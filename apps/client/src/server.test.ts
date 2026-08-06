@@ -13,6 +13,7 @@ describe("isBackendRequest", () => {
     "/a/acme/019f.../guide.pdf",
     "/a",
     "/api/rpc",
+    "/api/mcp",
     "/api/assets/019f.../raw",
     "/f/acme/contact",
     "/p/acme/spring",

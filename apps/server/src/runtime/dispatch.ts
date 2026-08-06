@@ -1,4 +1,3 @@
-import { PermanentChannelError } from "@openengage/channels";
 import { retryDelaySeconds } from "@openengage/core";
 import {
   AutomationEngineRepository,
@@ -9,6 +8,7 @@ import {
 
 import { enrollInactiveContacts } from "../automations/enrollment";
 import { processAutomationJob } from "../automations/worker";
+import { PermanentChannelError } from "../channels";
 import { processContactExport, processContactImport } from "../contacts/worker";
 import { type RuntimeEnv } from "../env";
 import { processCloudflareEmailEvent } from "../messaging/cloudflare-events";

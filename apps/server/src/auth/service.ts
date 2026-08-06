@@ -4,10 +4,10 @@ import { organization, twoFactor } from "better-auth/plugins";
 import { adminAc, memberAc, ownerAc } from "better-auth/plugins/organization/access";
 
 import { authSchema, createDatabase } from "@openengage/database";
-import { renderSystemEmail, type SystemEmailInput } from "@openengage/email-templates";
 
 import type { RuntimeEnv } from "../env";
 import { CloudflareEmailAdapter } from "../messaging/cloudflare-email";
+import { renderSystemEmail, type SystemEmailInput } from "./email-templates";
 
 export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
   const database = createDatabase(env.DB).orm;

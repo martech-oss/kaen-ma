@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renderContent, renderSubject } from "./index";
+import { renderContent, renderSubject } from "./content-renderer";
 
 describe("email renderer", () => {
   it("escapes variables and rejects arbitrary HTML attributes", () => {

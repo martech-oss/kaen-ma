@@ -20,7 +20,7 @@ Mauticの「Contact・Segment・Form・Content・Score・Automation・計測」�
 - ステージ型パイプライン、商談、営業タスクを管理するDeals CRM
 - Contact・Automation・Email・Deals・Siteを横断するReporting
 - Better Authのメール認証、Organization、RBAC、任意のTOTP
-- Workspace限定APIキー、TypeScript SDK、MCPサーバー
+- Workspace限定APIキー、TypeScript SDK、Remote MCP endpoint
 - 対話式セットアップ、`doctor`、`backup`、`update` CLI
 
 ## メール送信ポリシー
@@ -64,19 +64,19 @@ flowchart LR
 ```text
 apps/
   client/                公開Worker、TanStack Start/Query、Vite、Tailwind、React Flow
-  server/                内部API Worker、Hono、Cron、Queue、Email Routing
+  server/                内部API Worker、Hono、MCP、Cron、Queue、Channel、Renderer、Email Routing
   agent/                 非公開Flue Agent Worker、Durable Objects
 packages/
   orpc/                  ドメイン別のoRPC contractと通信固有DTO
-  channels/              Channel型、Webhook adapter
   core/                  業務型・Zod schema・純粋ロジックの正本
   create-openengage/     Setup、doctor、backup、update CLI
   database/              Drizzle schema/client、D1 migration、repository
-  content-renderer/      Landing Page等の安全なHTML/Text renderer
-  email-templates/       認証メール用React Emailと直接レンダラー
-  mcp-server/            OpenEngage MCP server
   sdk/                   contract型付きTypeScript SDK
 ```
+
+Channel adapter、安全なHTML/Text renderer、認証メール用React Email templateは、利用元が
+Server Workerに限られるため、それぞれ`apps/server/src/channels`、`rendering`、
+`auth/email-templates`で管理します。
 
 `apps/server/src`と`packages/database/src`は同じ12ドメインで一致します:
 auth / automations / consent / contacts / deals / messaging /
@@ -318,7 +318,7 @@ Reportingは最大366日の期間を指定し、D1に保存された実データ
 ```text
 POST /api/assets/upload?name=&visibility=&width=&height=   ストリーミング(〜100MB)
 PUT  /api/assets/:id/content?name=&width=&height=          差し替え(IDは維持)
-POST /api/v1/assets                                        バッファ(〜25MB、oRPC/SDK/MCP)
+POST /api/v1/assets                                        バッファ(〜25MB、oRPC/SDK)
 ```
 
 ストリーミング経路はリクエストボディをそのまま`R2Bucket.put()`へ流すため、100MBのスライドでも
@@ -332,7 +332,7 @@ Workerのメモリ(128MB)を消費しません。ただしWebCryptoにストリ�
 ```text
 GET|HEAD /a/:workspaceSlug/:id/:filename   公開(認証不要)
 GET|HEAD /api/assets/:id/raw               管理プレビュー(Session or Bearer)
-GET      /api/v1/assets/:id/file           SDK/MCP用ダウンロード
+GET      /api/v1/assets/:id/file           SDK用ダウンロード
 ```
 
 公開URLには`?v=<checksumの先頭12文字>`が付きます。一致したときだけ
@@ -377,7 +377,7 @@ email,external_id,first_name,last_name,phone,stage
 APIはoRPC contract(`packages/orpc`)を単一の正本として、同じprocedureを2つの入口で提供します。
 
 - `/api/rpc`: 管理画面用のRPCエンドポイント(TanStack Queryとの統合に使用)
-- `/api/v1`: SDK・MCP・外部連携用のREST(OpenAPI)エンドポイント。contractの`.route()`メタデータから提供
+- `/api/v1`: SDK・外部連携用のREST(OpenAPI)エンドポイント。contractの`.route()`メタデータから提供
 
 JSON APIの面に手書きのRESTハンドラは存在しません。エンドポイントの追加はcontractへのprocedure追加だけで、
 両方の入口とOpenAPIドキュメント、SDKの型に同時に反映されます。
@@ -488,20 +488,14 @@ import { isDefinedError } from "openengage";
 
 APIキーはWorkspace限定で、D1にはSHA-256ハッシュだけを保存します。平文キーは作成時に一度だけ表示されます。
 
-## MCPサーバー
+## Remote MCP
 
-ビルド:
+公開URLの`/api/mcp`でstateless Streamable HTTP endpointを提供します。接続にはWorkspace
+APIキーをBearer tokenとして指定します。
 
-```bash
-pnpm --filter openengage-mcp build
-```
-
-環境変数:
-
-```bash
-export OPENENGAGE_URL=https://ma.example.com
-export OPENENGAGE_API_KEY=openengage_xxxxxxxxxxxx_xxxxxxxxxxxxxxxxxxxx
-node packages/mcp-server/dist/index.js
+```text
+URL: https://ma.example.com/api/mcp
+Authorization: Bearer openengage_xxxxxxxxxxxx_xxxxxxxxxxxxxxxxxxxx
 ```
 
 提供する主なTool:
@@ -512,7 +506,8 @@ node packages/mcp-server/dist/index.js
 - オートメーション enrollmentの準備
 - 明示確認後のオートメーション enrollment
 
-実配信につながるオートメーション enrollmentは二段階です。準備Toolが短時間有効な確認Tokenを発行し、確認Toolで `CONFIRM SEND` を明示しない限り実行されません。
+実配信につながるオートメーション enrollmentは二段階です。準備ToolがD1へ5分間有効な
+一回限りの確認Tokenを保存し、確認Toolで`CONFIRM SEND`を明示しない限り実行されません。
 
 ## セットアップCLI
 

@@ -1,4 +1,3 @@
-import { PermanentChannelError } from "@openengage/channels";
 import { computeDueAt, outgoingEdges } from "@openengage/core";
 import {
   type AutomationDefinition,
@@ -12,6 +11,7 @@ import {
   type AutomationJobRow,
 } from "@openengage/database";
 
+import { PermanentChannelError } from "../channels";
 import { recordContactEvent } from "../contacts/event-service";
 import { type RuntimeEnv } from "../env";
 import { createEmailDelivery, createWebhookDelivery } from "../messaging/delivery-worker";

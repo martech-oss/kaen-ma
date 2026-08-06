@@ -1,10 +1,10 @@
 import type { Hono } from "hono";
 
-import { renderContent } from "@openengage/content-renderer";
 import { PublicWebRepository } from "@openengage/database";
 
 import { apiError } from "../auth/access";
 import type { AppEnvironment } from "../env";
+import { renderContent } from "../rendering/content-renderer";
 
 export function registerPublicLandingRoutes(publicApp: Hono<AppEnvironment>): void {
   publicApp.get("/p/:workspaceSlug/:pageSlug", async (context) => {

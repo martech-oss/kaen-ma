@@ -20,11 +20,11 @@ for (const file of files) {
   if (
     (workspacePath.startsWith("packages/core/src/") ||
       workspacePath.startsWith("packages/database/src/") ||
-      workspacePath.startsWith("packages/channels/src/") ||
-      workspacePath.startsWith("packages/content-renderer/src/")) &&
+      workspacePath.startsWith("apps/server/src/channels/") ||
+      workspacePath.startsWith("apps/server/src/rendering/")) &&
     imports.includes("@openengage/orpc")
   ) {
-    violations.push(`${workspacePath}: lower-level package must not import @openengage/orpc`);
+    violations.push(`${workspacePath}: lower-level module must not import @openengage/orpc`);
   }
   if (
     workspacePath.startsWith("apps/client/src/") &&

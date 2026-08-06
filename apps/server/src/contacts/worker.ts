@@ -1,6 +1,6 @@
-import { PermanentChannelError } from "@openengage/channels";
 import { DataJobWorkerRepository, type ContactImportRow } from "@openengage/database";
 
+import { PermanentChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";
 import { parseJsonRecord, stringValue } from "../platform/values";
 

@@ -115,7 +115,7 @@ describe("accounts over oRPC", () => {
   });
 
   // /api/v1 is the OpenAPIHandler rendering of the same procedures for the
-  // SDK, MCP server and OpenAPI document: same output DTOs as plain JSON (no
+  // SDK and OpenAPI document: same output DTOs as plain JSON (no
   // envelope), typed error codes as the error body. Driving one operation over
   // both surfaces catches them drifting apart.
   it("serves the same data over the REST routes", async () => {

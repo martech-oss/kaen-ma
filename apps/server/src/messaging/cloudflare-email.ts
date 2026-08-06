@@ -6,7 +6,7 @@ import {
   type ChannelHealth,
   type ChannelMessage,
   type ChannelSendResult,
-} from "@openengage/channels";
+} from "../channels";
 
 const maximumMessageBytes = 5 * 1024 * 1024;
 const transientCodes = new Set([

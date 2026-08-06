@@ -5,8 +5,7 @@ import {
   RecipientSuppressedChannelError,
   TransientChannelError,
   type ChannelMessage,
-} from "@openengage/channels";
-
+} from "../channels";
 import { CloudflareEmailAdapter } from "./cloudflare-email";
 
 const message: ChannelMessage = {

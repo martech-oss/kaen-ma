@@ -1,11 +1,3 @@
-import {
-  OutboundWebhookAdapter,
-  PermanentChannelError,
-  RecipientSuppressedChannelError,
-  TransientChannelError,
-  type ChannelMessage,
-} from "@openengage/channels";
-import { renderContent, renderSubject } from "@openengage/content-renderer";
 import { evaluateSendEligibility, retryDelaySeconds } from "@openengage/core";
 import type { AutomationNode } from "@openengage/core/automations";
 import {
@@ -16,10 +8,18 @@ import {
   type DeliveryClaimRecord,
 } from "@openengage/database";
 
+import {
+  OutboundWebhookAdapter,
+  PermanentChannelError,
+  RecipientSuppressedChannelError,
+  TransientChannelError,
+  type ChannelMessage,
+} from "../channels";
 import { type RuntimeEnv } from "../env";
 import { CloudflareEmailAdapter } from "../messaging/cloudflare-email";
 import { buildReplyAddress } from "../messaging/reply-address";
 import { decryptCredentials } from "../platform/crypto";
+import { renderContent, renderSubject } from "../rendering/content-renderer";
 
 export type DeliveryRow = DeliveryClaimRecord;
 

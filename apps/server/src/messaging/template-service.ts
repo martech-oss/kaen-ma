@@ -1,4 +1,3 @@
-import { renderContent, renderSubject } from "@openengage/content-renderer";
 import { type EmailTemplate, type EmailTemplateWrite } from "@openengage/core/messaging";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import {
@@ -6,6 +5,8 @@ import {
   type EmailTemplateRecord,
   type OpenEngageDatabase,
 } from "@openengage/database";
+
+import { renderContent, renderSubject } from "../rendering/content-renderer";
 
 export async function listEmailTemplates(
   database: OpenEngageDatabase,
