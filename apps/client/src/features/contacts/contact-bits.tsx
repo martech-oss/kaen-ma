@@ -59,12 +59,36 @@ export function ControlledSelect({
   );
 }
 
+/**
+ * Avatar tints in the list view. Picked by a hash of the contact id so a row
+ * keeps its colour across pages and refetches — the point is recognisability in
+ * a dense table, not encoding anything about the contact.
+ */
+const AVATAR_TINTS = [
+  "oklch(0.58 0.16 25)",
+  "oklch(0.55 0.13 163)",
+  "oklch(0.5 0.1 255)",
+  "oklch(0.6 0.12 75)",
+  "oklch(0.52 0.11 300)",
+  "oklch(0.5 0.06 40)",
+];
+
+function avatarTint(contact: Contact): string | undefined {
+  if (contact.status === "anonymous") return "oklch(0.72 0.012 40)";
+  let hash = 0;
+  for (const character of contact.id) hash = (hash + character.charCodeAt(0)) % AVATAR_TINTS.length;
+  return AVATAR_TINTS[hash];
+}
+
 export function ContactAvatar({
   contact,
   large = false,
+  tinted = false,
 }: {
   contact: Contact;
   large?: boolean;
+  /** Fills the avatar with the contact's stable tint, for the dense list rows. */
+  tinted?: boolean;
 }): ReactNode {
   const initials = [contact.firstName, contact.lastName]
     .filter(Boolean)
@@ -73,11 +97,57 @@ export function ContactAvatar({
     .slice(0, 2)
     .toUpperCase();
   return (
-    <Avatar size={large ? "lg" : "default"} className={cn(large && "size-14")}>
-      <AvatarFallback className={cn(large && "text-lg")}>
+    <Avatar
+      size={large ? "lg" : "default"}
+      className={cn(large && "size-14", tinted && "size-6.5")}
+    >
+      <AvatarFallback
+        className={cn(large && "text-lg", tinted && "text-[10.5px] font-semibold text-white")}
+        style={tinted ? { backgroundColor: avatarTint(contact) } : undefined}
+      >
         {initials || <UserRound />}
       </AvatarFallback>
     </Avatar>
+  );
+}
+
+const STATUS_TONES: Record<Contact["status"], string> = {
+  active: "var(--color-success)",
+  archived: "var(--color-muted-foreground)",
+  anonymous: "var(--color-warning)",
+};
+
+export const CONTACT_STATUS_LABELS: Record<Contact["status"], string> = {
+  active: "有効",
+  archived: "アーカイブ",
+  anonymous: "匿名",
+};
+
+/** Dot-and-label status, the badge-free form the dense list rows use. */
+export function ContactStatusDot({ status }: { status: Contact["status"] }): ReactNode {
+  return (
+    <span className="flex items-center gap-1.5 text-[11px] font-medium whitespace-nowrap">
+      <span
+        className="size-1.5 shrink-0 rounded-full"
+        style={{ backgroundColor: STATUS_TONES[status] }}
+      />
+      {CONTACT_STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+export function ContactScoreBadge({ score }: { score: number }): ReactNode {
+  return (
+    <span
+      className={cn(
+        "inline-block min-w-9 rounded-sm px-1.5 py-0.5 text-center text-[11.5px] font-semibold tabular-nums",
+        score >= 50 && "bg-success/15 text-success",
+        score >= 20 && score < 50 && "bg-warning/20 text-warning-foreground",
+        score < 20 && "bg-secondary text-muted-foreground",
+      )}
+    >
+      {score}
+    </span>
   );
 }
 
@@ -89,10 +159,9 @@ export function ContactStatusBadge({ status }: { status: Contact["status"] }): R
       anonymous: "bg-warning text-warning-foreground",
     } satisfies Record<Contact["status"], string>
   )[status];
-  const label = { active: "有効", archived: "アーカイブ", anonymous: "匿名" }[status];
   return (
     <Badge variant="secondary" className={classes}>
-      {label}
+      {CONTACT_STATUS_LABELS[status]}
     </Badge>
   );
 }

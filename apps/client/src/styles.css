@@ -2,49 +2,68 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/noto-sans-jp";
 
+/*
+ * Warm-neutral palette from the 新デザイン画面 design doc: every grey carries a
+ * hue-40 tint so the chrome reads as paper rather than as the stock zero-chroma
+ * shadcn grey, and the brand red doubles as the single accent (active nav,
+ * primary buttons, focus ring).
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --background: oklch(0.978 0.002 60);
+  --foreground: oklch(0.18 0.01 40);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.18 0.01 40);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
+  --popover-foreground: oklch(0.18 0.01 40);
+  --primary: oklch(0.58 0.16 25);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.965 0.005 40);
+  --secondary-foreground: oklch(0.28 0.012 40);
+  --muted: oklch(0.965 0.005 40);
+  --muted-foreground: oklch(0.52 0.012 40);
+  --accent: oklch(0.955 0.028 25);
+  --accent-foreground: oklch(0.45 0.15 25);
+  --destructive: oklch(0.577 0.245 27);
   --success: oklch(0.59 0.145 163);
   --success-foreground: oklch(0.985 0 0);
   --warning: oklch(0.77 0.16 75);
   --warning-foreground: oklch(0.22 0.04 75);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: oklch(0.915 0.006 40);
+  --input: oklch(0.91 0.006 40);
+  --ring: oklch(0.58 0.16 25);
+  --chart-1: oklch(0.59 0.145 163);
+  --chart-2: oklch(0.77 0.16 75);
+  --chart-3: oklch(0.577 0.245 27);
+  --chart-4: oklch(0.55 0.11 255);
+  --chart-5: oklch(0.58 0.16 25);
+  --radius: 0.5625rem;
+  --sidebar: oklch(0.975 0.004 40);
+  --sidebar-foreground: oklch(0.36 0.012 40);
+  --sidebar-primary: oklch(0.58 0.16 25);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.955 0.028 25);
+  --sidebar-accent-foreground: oklch(0.45 0.15 25);
+  --sidebar-border: oklch(0.905 0.006 40);
+  --sidebar-ring: oklch(0.58 0.16 25);
+  /* Row/header hairlines inside dense tables, lighter than --border. */
+  --row-border: oklch(0.965 0.004 40);
+  --table-header: oklch(0.985 0.003 40);
 }
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: "Geist Variable", sans-serif;
+  /*
+   * Geist first so latin text and the many tabular figures in this UI keep
+   * their metrics, with Noto Sans JP picking up every kana/kanji Geist has no
+   * glyph for — the same pairing the design doc loads from Google Fonts.
+   */
+  --font-sans: "Geist Variable", "Noto Sans JP Variable", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --color-row-border: var(--row-border);
+  --color-table-header: var(--table-header);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -83,7 +102,8 @@
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
+  /* Cards are `rounded-xl`; the design draws them at ~10px, not at the stock 1.4x. */
+  --radius-xl: calc(var(--radius) * 1.1);
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);

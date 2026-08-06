@@ -28,6 +28,8 @@ export interface DataTablePagination {
   hasPreviousPage: boolean;
   onNext: () => void;
   onPrevious: () => void;
+  /** Optional "1–50 / 1,842 件" style summary shown opposite the page buttons. */
+  rangeLabel?: ReactNode;
 }
 
 /**
@@ -49,6 +51,8 @@ export function DataTable<T>({
   emptyAction,
   onRowClick,
   className,
+  containerClassName,
+  compact = false,
   pagination,
 }: {
   columns: DataTableColumn<T>[];
@@ -62,17 +66,36 @@ export function DataTable<T>({
   emptyAction?: ReactNode;
   onRowClick?: (row: T) => void;
   className?: string;
+  /** Applied to the scroll container, e.g. `min-h-0 flex-1` for a table that fills its card. */
+  containerClassName?: string;
+  /**
+   * Dense list-screen treatment: fixed-height rows, hairline row rules and a
+   * sticky monospace header, per the 新デザイン画面 contacts table.
+   */
+  compact?: boolean;
   pagination?: DataTablePagination;
 }): ReactNode {
   const showEmpty = !loading && rows.length === 0;
   return (
     <>
-      <Table className={className}>
+      <Table
+        className={className}
+        {...(containerClassName === undefined ? {} : { containerClassName })}
+      >
         <TableCaption className="sr-only">{caption}</TableCaption>
-        <TableHeader>
+        <TableHeader
+          className={cn(compact && "sticky top-0 z-10 bg-table-header [&_tr]:border-b-border")}
+        >
           <TableRow>
             {columns.map((column) => (
-              <TableHead key={column.key} className={column.headClassName}>
+              <TableHead
+                key={column.key}
+                className={cn(
+                  compact &&
+                    "h-auto py-1.5 font-mono text-[10px] font-medium tracking-[0.06em] text-muted-foreground uppercase",
+                  column.headClassName,
+                )}
+              >
                 {column.header}
               </TableHead>
             ))}
@@ -93,6 +116,7 @@ export function DataTable<T>({
                 <TableRow
                   key={rowKey(row)}
                   className={cn(
+                    compact && "h-11 border-row-border",
                     onRowClick &&
                       "cursor-pointer focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset",
                   )}
@@ -107,7 +131,10 @@ export function DataTable<T>({
                   tabIndex={onRowClick ? 0 : undefined}
                 >
                   {columns.map((column) => (
-                    <TableCell key={column.key} className={column.cellClassName}>
+                    <TableCell
+                      key={column.key}
+                      className={cn(compact && "py-0", column.cellClassName)}
+                    >
                       {column.cell(row)}
                     </TableCell>
                   ))}
@@ -124,7 +151,10 @@ export function DataTable<T>({
         />
       ) : null}
       {pagination ? (
-        <div className="flex items-center justify-end gap-2 border-t px-4 py-3">
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t px-4 py-2.5">
+          {pagination.rangeLabel ? (
+            <span className="mr-auto text-xs text-muted-foreground">{pagination.rangeLabel}</span>
+          ) : null}
           <Button
             variant="outline"
             size="sm"

@@ -34,6 +34,6 @@ export const Route = createFileRoute("/_app")({
 });
 
 function ProtectedLayout() {
-  const { session } = Route.useRouteContext();
-  return <AppShell user={session.user} />;
+  const { session, workspace } = Route.useRouteContext();
+  return <AppShell user={session.user} workspace={workspace} />;
 }

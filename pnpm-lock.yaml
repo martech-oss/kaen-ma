@@ -93,6 +93,12 @@ importers:
       '@fontsource-variable/geist':
         specifier: ^5.3.0
         version: 5.3.0
+      '@fontsource-variable/geist-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource-variable/noto-sans-jp':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@openengage/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1370,8 +1376,14 @@ packages:
     peerDependencies:
       vite: ^8.0.0
 
+  '@fontsource-variable/geist-mono@5.3.0':
+    resolution: {integrity: sha512-vBbuwDEo9AkrqADMXOrlAR3DFcJi4/JxeuU43FoiQERnNwsfXNnvxvReZG02cQKmyk4DZkZdBZX3oTDvy2zBAw==}
+
   '@fontsource-variable/geist@5.3.0':
     resolution: {integrity: sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA==}
+
+  '@fontsource-variable/noto-sans-jp@5.3.0':
+    resolution: {integrity: sha512-XVL9GfGBRjj523v9w3Bctu4mNq7E5rUa+AMZm8DK1EM3LAGlKC3DZMvuqkLn4DB4TwwoAjcsJUCiRpUTDzzOkw==}
 
   '@google/genai@1.52.0':
     resolution: {integrity: sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q==}
@@ -6716,7 +6728,11 @@ snapshots:
       - ws
       - zod
 
+  '@fontsource-variable/geist-mono@5.3.0': {}
+
   '@fontsource-variable/geist@5.3.0': {}
+
+  '@fontsource-variable/noto-sans-jp@5.3.0': {}
 
   '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))':
     dependencies:

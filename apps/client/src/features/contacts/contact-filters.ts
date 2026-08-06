@@ -12,6 +12,8 @@ import { useDebouncedSearch } from "@/hooks/use-debounced-search";
  * flushed to the URL after a pause. Navigation uses `replace` so filtering does
  * not fill the history stack.
  */
+export type ContactFilters = ReturnType<typeof useContactFilters>;
+
 export function useContactFilters(initialSearch: ContactSearch) {
   const navigate = useNavigate();
   const [query, setQuery] = useState(initialSearch.q);

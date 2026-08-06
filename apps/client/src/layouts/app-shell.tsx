@@ -1,30 +1,7 @@
-import { useQueryClient } from "@tanstack/react-query";
-import { Link, Outlet, linkOptions, useNavigate, useRouter } from "@tanstack/react-router";
-import {
-  Archive,
-  Blocks,
-  Braces,
-  Building2,
-  BriefcaseBusiness,
-  ChevronsUpDown,
-  ContactRound,
-  ChartNoAxesCombined,
-  FileText,
-  Gauge,
-  GitBranch,
-  Globe2,
-  Images,
-  LayoutTemplate,
-  LogOut,
-  Mail,
-  MessageSquareText,
-  PanelsTopLeft,
-  Settings,
-  Shapes,
-  Tags,
-  UsersRound,
-} from "lucide-react";
-import type { ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, Outlet, useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
+import { Blocks, ChevronsUpDown, LogOut } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
 
 import { authClient } from "@/auth-client";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -40,73 +17,40 @@ import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
-  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { contactOptionsQueryOptions } from "@/features/contacts/contact-api";
+import { activeSection, navigationSections, settingsSection } from "@/layouts/navigation";
+import { cn } from "@/lib/utils";
+import type { Workspace } from "@/lib/workspace";
 
-const dashboardNavigation = linkOptions([
-  { to: "/dashboard", label: "ダッシュボード", icon: Gauge },
-  { to: "/reports", label: "Reporting", icon: ChartNoAxesCombined },
-]);
+/** 212px in the design doc — narrow enough that the 13px nav labels set the width. */
+const SIDEBAR_WIDTH = "13.25rem";
 
-const contactNavigation = linkOptions([
-  { to: "/contacts", label: "連絡先", icon: UsersRound },
-  { to: "/contacts/companies", label: "会社", icon: Building2 },
-  { to: "/contacts/tags", label: "タグ", icon: Tags },
-  { to: "/contacts/segments", label: "セグメント", icon: Shapes },
-]);
+/** Saved segments listed under the nav, matching the design's short shortcut list. */
+const SIDEBAR_SEGMENT_LIMIT = 4;
 
-const automationNavigation = linkOptions([
-  { to: "/automations", label: "オートメーション", icon: GitBranch },
-]);
+const NAV_ITEM_CLASS = "h-auto rounded-[7px] px-2.5 py-2 text-[13px] font-medium";
 
-const dealNavigation = linkOptions([{ to: "/deals", label: "Deals", icon: BriefcaseBusiness }]);
-
-const emailNavigation = linkOptions([
-  { to: "/emails/templates", label: "テンプレート", icon: FileText },
-  { to: "/emails/variables", label: "メッセージ変数", icon: Braces },
-  { to: "/emails/archive", label: "アーカイブ", icon: Archive },
-]);
-
-const websiteNavigation = linkOptions([
-  {
-    to: "/website/forms",
-    label: "サインアップフォーム",
-    icon: LayoutTemplate,
-  },
-  { to: "/website/pages", label: "ランディングページ", icon: PanelsTopLeft },
-  { to: "/website/assets", label: "アセット", icon: Images },
-  {
-    to: "/website/messages",
-    label: "サイトメッセージ",
-    icon: MessageSquareText,
-  },
-  {
-    to: "/website/tracking",
-    label: "サイトトラッキング",
-    icon: ChartNoAxesCombined,
-  },
-]);
-
-const utilityNavigation = linkOptions([{ to: "/settings", label: "設定", icon: Settings }]);
-
-export function AppShell({ user }: { user: { name: string; email: string } }): ReactNode {
+export function AppShell({
+  user,
+  workspace,
+}: {
+  user: { name: string; email: string };
+  workspace: Workspace;
+}): ReactNode {
   const navigate = useNavigate();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const section = activeSection(pathname);
 
   async function signOut(): Promise<void> {
     await authClient.signOut();
@@ -120,7 +64,10 @@ export function AppShell({ user }: { user: { name: string; email: string } }): R
   }
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      className="h-svh"
+      style={{ "--sidebar-width": SIDEBAR_WIDTH } as CSSProperties}
+    >
       <a
         href="#main-content"
         className="sr-only z-[100] rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:ring-3 focus:ring-ring/50 focus:outline-none"
@@ -128,66 +75,113 @@ export function AppShell({ user }: { user: { name: string; email: string } }): R
         メインコンテンツへ移動
       </a>
       <Sidebar collapsible="icon">
-        <SidebarHeader>
-          <SidebarMenu>
-            <SidebarMenuItem className="flex items-center gap-1">
+        <SidebarHeader className="border-b border-sidebar-border p-0">
+          <WorkspaceSwitcher workspace={workspace} />
+        </SidebarHeader>
+        <SidebarContent className="gap-0 px-2 py-2.5">
+          <SidebarMenu className="gap-0.5">
+            {navigationSections.map((item) => (
+              <SidebarMenuItem key={item.to}>
+                <SidebarMenuButton
+                  render={<Link to={item.to} />}
+                  tooltip={item.label}
+                  className={NAV_ITEM_CLASS}
+                  {...(section?.to === item.to ? { "data-active": "true" } : {})}
+                >
+                  <item.icon />
+                  <span>{item.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+          <SavedSegments />
+        </SidebarContent>
+        <SidebarFooter className="gap-0.5 border-t border-sidebar-border p-2">
+          <SidebarMenu className="gap-0.5">
+            <SidebarMenuItem>
               <SidebarMenuButton
-                render={<Link to="/dashboard" />}
-                size="lg"
-                tooltip="OpenEngage"
-                className="flex-1 group-data-[collapsible=icon]:hidden"
+                render={<Link to={settingsSection.to} />}
+                tooltip={settingsSection.label}
+                className={NAV_ITEM_CLASS}
+                {...(section?.to === settingsSection.to ? { "data-active": "true" } : {})}
               >
-                <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Blocks />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">OpenEngage</span>
-                </div>
+                <settingsSection.icon />
+                <span>{settingsSection.label}</span>
               </SidebarMenuButton>
-              <SidebarTrigger className="shrink-0" aria-label="ナビゲーションを開閉" />
             </SidebarMenuItem>
           </SidebarMenu>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>ワークスペース</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                <PrimaryNavigation items={dashboardNavigation} />
-                <NestedNavigation
-                  to="/contacts"
-                  label="コンタクト"
-                  icon={ContactRound}
-                  items={contactNavigation}
-                />
-                <PrimaryNavigation items={dealNavigation} />
-                <PrimaryNavigation items={automationNavigation} />
-                <NestedNavigation to="/emails" label="メール" icon={Mail} items={emailNavigation} />
-                <NestedNavigation
-                  to="/website"
-                  label="Website"
-                  icon={Globe2}
-                  items={websiteNavigation}
-                />
-                <PrimaryNavigation items={utilityNavigation} />
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarFooter>
           <AccountMenu user={user} onSignOut={signOut} />
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset id="main-content" tabIndex={-1}>
-        <div className="p-2 pb-0 md:hidden">
-          <SidebarTrigger aria-label="ナビゲーションを開く" />
-        </div>
-        <div className="mx-auto w-full max-w-[1500px] p-4 lg:p-8">
-          <Outlet />
-        </div>
+      <SidebarInset
+        id="main-content"
+        tabIndex={-1}
+        className="min-h-0 overflow-hidden outline-none"
+      >
+        <Outlet />
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+function WorkspaceSwitcher({ workspace }: { workspace: Workspace }): ReactNode {
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          render={<Link to="/settings" />}
+          tooltip={workspace.name}
+          className="h-auto gap-2.5 rounded-none px-3 py-3.5"
+        >
+          <div className="flex size-6.5 shrink-0 items-center justify-center rounded-[7px] bg-primary text-primary-foreground">
+            <Blocks className="size-[15px]" />
+          </div>
+          <div className="grid min-w-0 flex-1 text-left">
+            <span className="truncate text-[13px] leading-tight font-bold text-foreground">
+              OpenEngage
+            </span>
+            <span className="truncate text-[10.5px] leading-tight text-muted-foreground">
+              {workspace.slug}
+            </span>
+          </div>
+          <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
+
+/**
+ * The design's shortcut list under the nav. Rendered from the segments the
+ * contacts filters already load, so it stays absent — rather than showing
+ * placeholder rows — until a workspace actually has saved segments.
+ */
+function SavedSegments(): ReactNode {
+  const { state } = useSidebar();
+  const { data } = useQuery(contactOptionsQueryOptions());
+  const segments = data?.segments.slice(0, SIDEBAR_SEGMENT_LIMIT) ?? [];
+  if (state === "collapsed" || segments.length === 0) return null;
+
+  return (
+    <div className="mt-3.5 flex flex-col group-data-[collapsible=icon]:hidden">
+      <div className="px-2.5 pb-1.5 font-mono text-[10px] font-medium tracking-[0.1em] text-muted-foreground uppercase">
+        保存したセグメント
+      </div>
+      {segments.map((segment) => (
+        <Link
+          key={segment.id}
+          to="/contacts"
+          search={{ segmentId: segment.id }}
+          className="flex items-center justify-between gap-2 rounded-[7px] px-2.5 py-1 text-xs text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          <span className="truncate">{segment.name}</span>
+          <span className="shrink-0 text-[10.5px] text-muted-foreground tabular-nums">
+            {segment.memberCount.toLocaleString()}
+          </span>
+        </Link>
+      ))}
+    </div>
   );
 }
 
@@ -209,20 +203,25 @@ function AccountMenu({
           <DropdownMenuTrigger
             render={
               <SidebarMenuButton
-                size="lg"
                 tooltip="アカウントメニュー"
-                className="data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground"
+                className={cn(
+                  "h-auto gap-2.5 rounded-[7px] px-2.5 py-1.5",
+                  "data-popup-open:bg-sidebar-accent data-popup-open:text-sidebar-accent-foreground",
+                )}
               />
             }
           >
-            <Avatar className="size-8">
-              <AvatarFallback>{fallback}</AvatarFallback>
+            <Avatar className="size-6.5">
+              <AvatarFallback className="text-[11px]">{fallback}</AvatarFallback>
             </Avatar>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">{displayName}</span>
-              <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+            <div className="grid min-w-0 flex-1 text-left">
+              <span className="truncate text-xs leading-tight font-medium text-foreground">
+                {displayName}
+              </span>
+              <span className="truncate text-[10px] leading-tight text-muted-foreground">
+                {user.email}
+              </span>
             </div>
-            <ChevronsUpDown className="ml-auto" />
           </DropdownMenuTrigger>
           <DropdownMenuContent side={isMobile ? "top" : "right"} align="end" className="min-w-56">
             <DropdownMenuGroup>
@@ -236,64 +235,5 @@ function AccountMenu({
         </DropdownMenu>
       </SidebarMenuItem>
     </SidebarMenu>
-  );
-}
-
-type NavigationItem = {
-  to: string;
-  label: string;
-  icon: typeof Gauge;
-};
-
-function PrimaryNavigation({ items }: { items: readonly NavigationItem[] }): ReactNode {
-  return items.map((item) => (
-    <SidebarMenuItem key={item.to}>
-      <SidebarMenuButton
-        render={<Link to={item.to} activeProps={{ "data-active": "true" }} />}
-        tooltip={item.label}
-      >
-        <item.icon />
-        <span>{item.label}</span>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  ));
-}
-
-function NestedNavigation({
-  to,
-  label,
-  icon: Icon,
-  items,
-}: NavigationItem & {
-  items: readonly NavigationItem[];
-}): ReactNode {
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        render={<Link to={to} activeProps={{ "data-active": "true" }} />}
-        tooltip={label}
-      >
-        <Icon />
-        <span>{label}</span>
-      </SidebarMenuButton>
-      <SidebarMenuSub>
-        {items.map((item) => (
-          <SidebarMenuSubItem key={item.to}>
-            <SidebarMenuSubButton
-              render={
-                <Link
-                  to={item.to}
-                  activeOptions={{ exact: true }}
-                  activeProps={{ "data-active": "true" }}
-                />
-              }
-            >
-              <item.icon />
-              <span>{item.label}</span>
-            </SidebarMenuSubButton>
-          </SidebarMenuSubItem>
-        ))}
-      </SidebarMenuSub>
-    </SidebarMenuItem>
   );
 }

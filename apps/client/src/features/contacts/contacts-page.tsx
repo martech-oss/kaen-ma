@@ -1,6 +1,5 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { Building2, ChevronDown, Filter, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 
 import {
@@ -9,48 +8,40 @@ import {
   FormNativeSelect,
   PageLayout as Page,
 } from "@/components/app-ui";
-import { type DataTableColumn, DataTable } from "@/components/data-table";
-import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { Card } from "@/components/ui/card";
 import { NativeSelectOption } from "@/components/ui/native-select";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   bulkUpdateContacts,
+  CONTACTS_PAGE_SIZE,
   contactOptionsQueryOptions,
   type ContactSearch,
-  type ContactSort,
   contactsQueryOptions,
-  type ContactStatus,
   invalidateContactOptions,
   invalidateContactsList,
 } from "@/features/contacts/contact-api";
 import { refreshSegment as refreshSegmentResource } from "@/features/segments/segment-api";
 import { useCursorPagination } from "@/hooks/use-cursor-pagination";
 import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { exportCsv } from "@/lib/csv";
 import { formatLongDateTime } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import type { ContactSummary } from "@openengage/core/contacts";
 
-import {
-  type BulkAction,
-  ColorChip,
-  ContactAvatar,
-  contactName,
-  ContactStatusBadge,
-  ControlledSelect,
-} from "./contact-bits";
+import { type BulkAction, contactName, ControlledSelect } from "./contact-bits";
 import { ContactDrawer } from "./contact-drawer";
 import { useContactFilters } from "./contact-filters";
 import { ContactCreateForm, SegmentSaveForm } from "./contact-forms";
+import { contactColumns } from "./contacts-columns";
+import { BulkActionBar, ContactsToolbar } from "./contacts-toolbar";
 import { createSegmentFilter } from "./segment-filter";
+
+/** The design lists bulk operations inline, so only the common ones get a button. */
+const BULK_ACTIONS: Array<{ action: BulkAction; label: string; resource?: "tag" | "segment" }> = [
+  { action: "add_tag", label: "タグを追加", resource: "tag" },
+  { action: "add_segment", label: "セグメントへ追加", resource: "segment" },
+  { action: "archive", label: "アーカイブ" },
+];
 
 export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }): ReactNode {
   const queryClient = useQueryClient();
@@ -68,36 +59,14 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   const total = contactsQuery.data?.total ?? 0;
   const nextCursor = contactsQuery.data?.nextCursor;
   const loading = contactsQuery.isFetching;
-  const {
-    query,
-    setQuery,
-    status,
-    setStatus,
-    stage,
-    setStage,
-    tagId,
-    setTagId,
-    companyId,
-    setCompanyId,
-    segmentId,
-    setSegmentId,
-    scoreMin,
-    setScoreMin,
-    scoreMax,
-    setScoreMax,
-    sort,
-    setSort,
-    direction,
-    setDirection,
-    hasAdvancedFilters,
-    clearFilters,
-  } = useContactFilters(initialSearch);
+  const filters = useContactFilters(initialSearch);
+  const [pageIndex, setPageIndex] = useState(0);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [activeContactId, setActiveContactId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showSegmentSave, setShowSegmentSave] = useState(false);
-  const [bulkAction, setBulkAction] = useState<BulkAction>("add_tag");
+  const [bulkAction, setBulkAction] = useState<BulkAction | null>(null);
   const [bulkResourceId, setBulkResourceId] = useState("");
   // applyBulkAction/refreshSegment share one busy/error pair, mirroring the
   // pre-DataTable design where both buttons disable together while either is
@@ -115,381 +84,230 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
     await Promise.all([refreshContacts(), refreshOptions()]);
   }, [refreshContacts, refreshOptions]);
 
-  const selectedSegment = options.segments.find((segment) => segment.id === segmentId);
-  const allVisibleSelected =
-    contacts.length > 0 && contacts.every((contact) => selected.has(contact.id));
-
   function goToNextPage() {
     goToNextCursor(nextCursor);
+    setPageIndex((index) => index + 1);
     setSelected(new Set());
   }
 
   function goToPreviousPage() {
     goToPreviousCursor();
+    setPageIndex((index) => Math.max(0, index - 1));
     setSelected(new Set());
   }
 
-  async function applyBulkAction() {
-    if (selected.size === 0) return;
-    const needsResource = !["archive", "restore"].includes(bulkAction);
-    if (needsResource && !bulkResourceId) {
-      setError("一括操作の対象を選択してください");
-      return;
-    }
+  async function applyBulkAction(action: BulkAction, contactIds: string[], resourceId?: string) {
+    if (contactIds.length === 0) return;
     await run(async () => {
       await bulkUpdateContacts({
-        contactIds: [...selected],
-        action: bulkAction,
-        ...(needsResource ? { resourceId: bulkResourceId } : {}),
+        contactIds,
+        action,
+        ...(resourceId ? { resourceId } : {}),
       });
       await refreshContactData();
+      setBulkAction(null);
+      setBulkResourceId("");
     });
   }
 
+  function runSelectedBulkAction() {
+    const definition = BULK_ACTIONS.find((item) => item.action === bulkAction);
+    if (!definition) return;
+    if (definition.resource && !bulkResourceId) {
+      setError("一括操作の対象を選択してください");
+      return;
+    }
+    void applyBulkAction(definition.action, [...selected], bulkResourceId || undefined);
+  }
+
   async function refreshSegment() {
-    if (!segmentId) return;
+    if (!filters.segmentId) return;
     await run(async () => {
-      await refreshSegmentResource(segmentId);
+      await refreshSegmentResource(filters.segmentId);
       await refreshContactData();
     });
   }
 
   function buildSegmentFilter() {
     return createSegmentFilter(
-      { q: query, status, stage, tagId, companyId, scoreMin, scoreMax },
+      {
+        q: filters.query,
+        status: filters.status,
+        stage: filters.stage,
+        tagId: filters.tagId,
+        companyId: filters.companyId,
+        scoreMin: filters.scoreMin,
+        scoreMax: filters.scoreMax,
+      },
       options,
     );
   }
 
-  const columns: DataTableColumn<ContactSummary>[] = [
-    {
-      key: "select",
-      header: (
-        <Checkbox
-          checked={allVisibleSelected}
-          onCheckedChange={(checked) =>
-            setSelected(checked ? new Set(contacts.map((contact) => contact.id)) : new Set())
-          }
-          aria-label="表示中の連絡先をすべて選択"
-        />
-      ),
-      cell: (contact) => (
-        <Checkbox
-          checked={selected.has(contact.id)}
-          onCheckedChange={(checked) => {
-            const next = new Set(selected);
-            if (checked) next.add(contact.id);
-            else next.delete(contact.id);
-            setSelected(next);
-          }}
-          onClick={(event) => event.stopPropagation()}
-          aria-label={`${contactName(contact)}を選択`}
-        />
-      ),
-      headClassName: "w-12 px-5",
-      cellClassName: "px-5",
-    },
-    {
-      key: "contact",
-      header: "連絡先",
-      cell: (contact) => (
-        <div className="flex items-center gap-3">
-          <ContactAvatar contact={contact} />
-          <div className="min-w-0">
-            <div className="truncate font-medium">{contactName(contact)}</div>
-            <div className="truncate text-xs text-muted-foreground">
-              {contact.email ?? contact.phone ?? contact.externalId ?? "匿名Contact"}
-            </div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "status",
-      header: "状態",
-      cell: (contact) => (
-        <div className="flex flex-wrap gap-1.5">
-          <ContactStatusBadge status={contact.status} />
-          <Badge variant="outline">{contact.stage}</Badge>
-        </div>
-      ),
-    },
-    {
-      key: "classification",
-      header: "会社・分類",
-      cell: (contact) => (
-        <div className="flex flex-wrap gap-1">
-          {contact.companies.slice(0, 1).map((company) => (
-            <Badge key={company.id} variant="secondary">
-              <Building2 />
-              {company.name}
-            </Badge>
-          ))}
-          {contact.tags.slice(0, 3).map((tag) => (
-            <ColorChip key={tag.id} item={tag} />
-          ))}
-          {contact.companies.length + contact.tags.length === 0 && (
-            <span className="text-xs text-muted-foreground">未分類</span>
-          )}
-        </div>
-      ),
-      cellClassName: "max-w-80",
-    },
-    {
-      key: "score",
-      header: "スコア",
-      cell: (contact) => (
-        <Badge
-          variant="secondary"
-          className={cn(
-            "min-w-12 justify-center tabular-nums",
-            contact.score >= 50 && "bg-success text-success-foreground",
-            contact.score >= 20 && contact.score < 50 && "bg-warning text-warning-foreground",
-          )}
-        >
-          {contact.score}
-        </Badge>
-      ),
-      headClassName: "text-right",
-      cellClassName: "text-right",
-    },
-    {
-      key: "updatedAt",
-      header: "更新日",
-      cell: (contact) => formatLongDateTime(contact.updatedAt),
-      headClassName: "px-5 text-right",
-      cellClassName: "px-5 text-right text-xs text-muted-foreground",
-    },
-  ];
+  function exportContacts() {
+    exportCsv(
+      "contacts.csv",
+      contacts.map((contact) => ({
+        名前: contactName(contact),
+        メール: contact.email ?? "",
+        電話番号: contact.phone ?? "",
+        状態: contact.status,
+        ステージ: contact.stage,
+        会社: contact.companies.map((company) => company.name).join(" / "),
+        タグ: contact.tags.map((tag) => tag.name).join(" / "),
+        スコア: contact.score,
+        更新日: formatLongDateTime(contact.updatedAt),
+      })),
+    );
+  }
+
+  const columns = contactColumns({
+    contacts,
+    selected,
+    onSelectedChange: setSelected,
+    onOpen: (contact: ContactSummary) => setActiveContactId(contact.id),
+    onArchive: (contact: ContactSummary) =>
+      void applyBulkAction(contact.status === "archived" ? "restore" : "archive", [contact.id]),
+  });
+  const firstRow = contacts.length === 0 ? 0 : pageIndex * CONTACTS_PAGE_SIZE + 1;
+  const lastRow = pageIndex * CONTACTS_PAGE_SIZE + contacts.length;
 
   return (
     <Page
       title="連絡先"
+      fill
       action={
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/companies" />}>
-            <Building2 data-icon="inline-start" />
-            会社
+          <Button variant="outline" size="sm" onClick={exportContacts}>
+            <Download data-icon="inline-start" />
+            エクスポート
           </Button>
-          <Button variant="outline" nativeButton={false} render={<Link to="/contacts/tags" />}>
-            <Tags data-icon="inline-start" />
-            タグ
-          </Button>
-          <Button onClick={() => setShowCreate(true)}>
+          <Button size="sm" onClick={() => setShowCreate(true)}>
             <Plus data-icon="inline-start" />
             連絡先を追加
           </Button>
         </div>
       }
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ToggleGroup
-          value={[status]}
-          onValueChange={(values) => {
-            const nextStatus = values[0] as ContactStatus | undefined;
-            if (nextStatus) setStatus(nextStatus);
-          }}
-          variant="outline"
-          spacing={0}
-        >
-          <ToggleGroupItem value="active">有効</ToggleGroupItem>
-          <ToggleGroupItem value="all">すべて</ToggleGroupItem>
-          <ToggleGroupItem value="archived">アーカイブ</ToggleGroupItem>
-          <ToggleGroupItem value="anonymous">匿名</ToggleGroupItem>
-        </ToggleGroup>
-        <Badge variant="secondary">{total.toLocaleString()}件</Badge>
-      </div>
+      <Card className="min-h-0 flex-1 gap-0 py-0">
+        <ContactsToolbar
+          filters={filters}
+          options={options}
+          total={total}
+          advancedOpen={advancedOpen}
+          onToggleAdvanced={() => setAdvancedOpen((open) => !open)}
+          onSaveSegment={() => setShowSegmentSave(true)}
+          canSaveSegment={Boolean(buildSegmentFilter()) && !filters.segmentId}
+          onRefreshSegment={() => void refreshSegment()}
+          onExport={exportContacts}
+          busy={busy}
+        />
 
-      <Card>
-        <CardHeader className="border-b">
-          <div className="flex flex-wrap gap-2">
-            <InputGroup className="min-w-64 flex-1">
-              <InputGroupAddon>
-                <Search />
-              </InputGroupAddon>
-              <InputGroupInput
-                placeholder="名前、メール、電話番号、外部IDで検索"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-              {query && (
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    size="icon-xs"
-                    onClick={() => setQuery("")}
-                    aria-label="検索をクリア"
-                  >
-                    <X />
-                  </InputGroupButton>
-                </InputGroupAddon>
-              )}
-            </InputGroup>
-            <ControlledSelect
-              value={tagId}
-              onValueChange={setTagId}
-              placeholder="すべてのタグ"
-              options={options.tags.map((tag) => ({
-                value: tag.id,
-                label: tag.name,
-              }))}
-            />
-            <ControlledSelect
-              value={companyId}
-              onValueChange={setCompanyId}
-              placeholder="すべての会社"
-              className="min-w-44"
-              options={options.companies.map((company) => ({
-                value: company.id,
-                label: company.name,
-              }))}
-            />
-            <ControlledSelect
-              value={segmentId}
-              onValueChange={setSegmentId}
-              placeholder="すべてのセグメント"
-              className="min-w-44"
-              options={options.segments.map((segment) => ({
-                value: segment.id,
-                label: segment.name,
-              }))}
-            />
-            <Button
-              variant="outline"
-              className={cn((advancedOpen || hasAdvancedFilters) && "border-primary text-primary")}
-              onClick={() => setAdvancedOpen((open) => !open)}
+        {advancedOpen && (
+          <div className="grid shrink-0 gap-3 border-b bg-secondary/50 p-3.5 md:grid-cols-2 xl:grid-cols-5">
+            <FormNativeSelect
+              label="ステージ"
+              name="stage-filter"
+              value={filters.stage}
+              onChange={(event) => filters.setStage(event.target.value)}
             >
-              <Filter data-icon="inline-start" />
-              詳細検索
-              <ChevronDown
-                data-icon="inline-end"
-                className={cn("transition", advancedOpen && "rotate-180")}
-              />
-            </Button>
+              <NativeSelectOption value="">すべて</NativeSelectOption>
+              {options.stages.map((item) => (
+                <NativeSelectOption key={item.stage} value={item.stage}>
+                  {item.stage} ({item.contactCount})
+                </NativeSelectOption>
+              ))}
+            </FormNativeSelect>
+            <FormNativeSelect
+              label="タグ"
+              name="tag-filter"
+              value={filters.tagId}
+              onChange={(event) => filters.setTagId(event.target.value)}
+            >
+              <NativeSelectOption value="">すべて</NativeSelectOption>
+              {options.tags.map((tag) => (
+                <NativeSelectOption key={tag.id} value={tag.id}>
+                  {tag.name}
+                </NativeSelectOption>
+              ))}
+            </FormNativeSelect>
+            <FormNativeSelect
+              label="会社"
+              name="company-filter"
+              value={filters.companyId}
+              onChange={(event) => filters.setCompanyId(event.target.value)}
+            >
+              <NativeSelectOption value="">すべて</NativeSelectOption>
+              {options.companies.map((company) => (
+                <NativeSelectOption key={company.id} value={company.id}>
+                  {company.name}
+                </NativeSelectOption>
+              ))}
+            </FormNativeSelect>
+            <FormInput
+              label="スコア下限"
+              name="scoreMin-filter"
+              type="number"
+              value={filters.scoreMin}
+              onChange={(event) => filters.setScoreMin(event.target.value)}
+            />
+            <FormInput
+              label="スコア上限"
+              name="scoreMax-filter"
+              type="number"
+              value={filters.scoreMax}
+              onChange={(event) => filters.setScoreMax(event.target.value)}
+            />
           </div>
-
-          {advancedOpen && (
-            <div className="grid gap-3 rounded-lg bg-muted/50 p-4 md:grid-cols-2 xl:grid-cols-4">
-              <FormNativeSelect
-                label="ステージ"
-                name="stage-filter"
-                value={stage}
-                onChange={(event) => setStage(event.target.value)}
-              >
-                <NativeSelectOption value="">すべて</NativeSelectOption>
-                {options.stages.map((item) => (
-                  <NativeSelectOption key={item.stage} value={item.stage}>
-                    {item.stage} ({item.contactCount})
-                  </NativeSelectOption>
-                ))}
-              </FormNativeSelect>
-              <FormInput
-                label="スコア下限"
-                name="scoreMin-filter"
-                type="number"
-                value={scoreMin}
-                onChange={(event) => setScoreMin(event.target.value)}
-              />
-              <FormInput
-                label="スコア上限"
-                name="scoreMax-filter"
-                type="number"
-                value={scoreMax}
-                onChange={(event) => setScoreMax(event.target.value)}
-              />
-              <FormNativeSelect
-                label="並び順"
-                name="sort-filter"
-                value={`${sort}:${direction}`}
-                onChange={(event) => {
-                  const [nextSort = "updatedAt", nextDirection = "desc"] =
-                    event.target.value.split(":");
-                  setSort(nextSort as ContactSort);
-                  setDirection(nextDirection === "asc" ? "asc" : "desc");
-                }}
-              >
-                <NativeSelectOption value="updatedAt:desc">更新が新しい順</NativeSelectOption>
-                <NativeSelectOption value="createdAt:desc">作成が新しい順</NativeSelectOption>
-                <NativeSelectOption value="score:desc">スコアが高い順</NativeSelectOption>
-                <NativeSelectOption value="score:asc">スコアが低い順</NativeSelectOption>
-                <NativeSelectOption value="name:asc">名前順</NativeSelectOption>
-                <NativeSelectOption value="email:asc">メール順</NativeSelectOption>
-              </FormNativeSelect>
-              <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
-                <Button variant="outline" onClick={clearFilters}>
-                  条件をクリア
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!buildSegmentFilter() || Boolean(segmentId)}
-                  onClick={() => setShowSegmentSave(true)}
-                >
-                  条件をセグメント保存
-                </Button>
-                {selectedSegment && (
-                  <Button variant="outline" disabled={busy} onClick={() => void refreshSegment()}>
-                    <RefreshCw data-icon="inline-start" />
-                    セグメントを再評価
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-        </CardHeader>
+        )}
 
         {selected.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 border-b bg-muted/50 px-4 py-3">
-            <Badge>{selected.size}件を選択中</Badge>
-            <ControlledSelect
-              value={bulkAction}
-              onValueChange={(value) => {
-                setBulkAction(value as BulkAction);
-                setBulkResourceId("");
-              }}
-              placeholder="一括操作"
-              options={[
-                { value: "add_tag", label: "タグを追加" },
-                { value: "remove_tag", label: "タグを削除" },
-                { value: "add_segment", label: "セグメントへ追加" },
-                { value: "remove_segment", label: "セグメントから削除" },
-                { value: "archive", label: "アーカイブ" },
-                { value: "restore", label: "復元" },
-              ]}
-            />
-            {bulkAction.includes("tag") && (
+          <BulkActionBar count={selected.size} onClear={() => setSelected(new Set())}>
+            {BULK_ACTIONS.map((item) => (
+              <Button
+                key={item.action}
+                variant={bulkAction === item.action ? "secondary" : "ghost"}
+                size="sm"
+                disabled={busy}
+                onClick={() => {
+                  if (!item.resource) {
+                    void applyBulkAction(item.action, [...selected]);
+                    return;
+                  }
+                  setBulkAction(bulkAction === item.action ? null : item.action);
+                  setBulkResourceId("");
+                }}
+              >
+                {item.label}
+              </Button>
+            ))}
+            {bulkAction === "add_tag" && (
               <ControlledSelect
                 value={bulkResourceId}
                 onValueChange={setBulkResourceId}
                 placeholder="タグを選択"
-                options={options.tags.map((tag) => ({
-                  value: tag.id,
-                  label: tag.name,
-                }))}
+                options={options.tags.map((tag) => ({ value: tag.id, label: tag.name }))}
               />
             )}
-            {bulkAction.includes("segment") && (
+            {bulkAction === "add_segment" && (
               <ControlledSelect
                 value={bulkResourceId}
                 onValueChange={setBulkResourceId}
                 placeholder="セグメントを選択"
                 options={options.segments
                   .filter((segment) => segment.kind === "static")
-                  .map((segment) => ({
-                    value: segment.id,
-                    label: segment.name,
-                  }))}
+                  .map((segment) => ({ value: segment.id, label: segment.name }))}
               />
             )}
-            <Button disabled={busy} onClick={() => void applyBulkAction()}>
-              適用
-            </Button>
-            <Button variant="ghost" className="ml-auto" onClick={() => setSelected(new Set())}>
-              選択解除
-            </Button>
-          </div>
+            {bulkAction && (
+              <Button size="sm" disabled={busy} onClick={runSelectedBulkAction}>
+                適用
+              </Button>
+            )}
+          </BulkActionBar>
         )}
 
         {(error || contactsQuery.error || optionsQuery.error) && (
-          <div className="border-b p-4">
+          <div className="shrink-0 border-b p-3.5">
             <ErrorNotice>
               {error ||
                 getErrorMessage(
@@ -499,25 +317,28 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
             </ErrorNotice>
           </div>
         )}
-        <CardContent className="px-0">
-          <DataTable
-            columns={columns}
-            rows={contacts}
-            rowKey={(contact) => contact.id}
-            caption="連絡先一覧"
-            loading={loading}
-            emptyTitle="条件に一致する連絡先がありません"
-            emptyDescription="検索条件を変更するか、新しい連絡先を追加してください。"
-            onRowClick={(contact) => setActiveContactId(contact.id)}
-            className="min-w-[980px]"
-            pagination={{
-              hasNextPage: Boolean(nextCursor),
-              hasPreviousPage,
-              onNext: goToNextPage,
-              onPrevious: goToPreviousPage,
-            }}
-          />
-        </CardContent>
+
+        <DataTable
+          compact
+          columns={columns}
+          rows={contacts}
+          rowKey={(contact) => contact.id}
+          caption="連絡先一覧"
+          loading={loading}
+          skeletonRowCount={12}
+          emptyTitle="条件に一致する連絡先がありません"
+          emptyDescription="検索条件を変更するか、新しい連絡先を追加してください。"
+          onRowClick={(contact) => setActiveContactId(contact.id)}
+          className="min-w-[900px]"
+          containerClassName="min-h-0 flex-1 overflow-y-auto"
+          pagination={{
+            hasNextPage: Boolean(nextCursor),
+            hasPreviousPage,
+            onNext: goToNextPage,
+            onPrevious: goToPreviousPage,
+            rangeLabel: `${firstRow.toLocaleString()}–${lastRow.toLocaleString()} / ${total.toLocaleString()} 件`,
+          }}
+        />
       </Card>
 
       <ContactCreateForm

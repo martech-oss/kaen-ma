@@ -63,6 +63,33 @@ export function formatShortDate(value: string): string {
   return shortDateFormatter.format(new Date(`${value}T00:00:00`));
 }
 
+const relativeTimeFormatter = new Intl.RelativeTimeFormat("ja", { numeric: "auto" });
+
+const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ["second", 1000],
+  ["minute", 60_000],
+  ["hour", 3_600_000],
+  ["day", 86_400_000],
+  ["month", 2_592_000_000],
+  ["year", 31_536_000_000],
+];
+
+/**
+ * `3分前` — coarse "how long ago" for activity feeds, where the exact clock
+ * time matters less than the recency. Use {@link formatDateTime} when the
+ * reader needs the actual timestamp.
+ */
+export function formatRelativeTime(value: string): string {
+  const elapsed = new Date(value).getTime() - Date.now();
+  if (Number.isNaN(elapsed)) return "";
+  let [unit, size] = RELATIVE_UNITS[0]!;
+  for (const [candidateUnit, candidateSize] of RELATIVE_UNITS) {
+    if (Math.abs(elapsed) < candidateSize) break;
+    [unit, size] = [candidateUnit, candidateSize];
+  }
+  return relativeTimeFormatter.format(Math.round(elapsed / size), unit);
+}
+
 /** `¥1,234` for JPY, `$1,234.00` otherwise. Falls back to plain text on an unknown currency code. */
 export function formatMoney(value: number, currency: string): string {
   try {

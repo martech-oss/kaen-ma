@@ -59,6 +59,7 @@ export function SimpleBarChart({
   height = 224,
   valueFormat = (value) => value.toLocaleString(),
   yDomain,
+  stacked = false,
 }: {
   data: Array<Record<string, string | number>>;
   series: BarChartSeries[];
@@ -66,6 +67,8 @@ export function SimpleBarChart({
   height?: number;
   valueFormat?: (value: number) => string;
   yDomain?: [number, number];
+  /** Stack the series into one bar per bucket instead of grouping them side by side. */
+  stacked?: boolean;
 }): ReactNode {
   return (
     <div className="w-full" style={{ height }}>
@@ -94,13 +97,16 @@ export function SimpleBarChart({
             content={<BarChartTooltip series={series} valueFormat={valueFormat} />}
             cursor={{ fill: "var(--muted)" }}
           />
-          {series.map((item) => (
+          {series.map((item, index) => (
             <Bar
               key={item.key}
               dataKey={item.key}
               name={item.label}
               fill={item.color}
-              radius={[2, 2, 0, 0]}
+              {...(stacked ? { stackId: "bar" } : {})}
+              // Only the topmost band of a stack gets the rounded cap, so the
+              // segments underneath still meet flush.
+              radius={stacked && index < series.length - 1 ? 0 : [2, 2, 0, 0]}
             />
           ))}
         </BarChart>
