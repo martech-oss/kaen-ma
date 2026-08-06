@@ -3,12 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 /**
  * The five report output schemas are transcriptions of what the query functions
  * build. tsc only checks they are structurally compatible; oRPC validates the

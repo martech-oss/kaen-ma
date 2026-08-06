@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { type DealPipeline, type DealSummary } from "@/features/deals/deal-api";
 import { formatMoney, formatMonthDayTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 import { DealStatusBadge } from "./deal-widgets";
 
@@ -72,7 +73,7 @@ export function DealBoard({
                   <Card
                     key={deal.id}
                     size="sm"
-                    className={`bg-card ${draggedDealId === deal.id ? "opacity-50" : ""}`}
+                    className={cn("bg-card", draggedDealId === deal.id && "opacity-50")}
                     draggable={movingId !== deal.id}
                     onDragStart={(event) => {
                       event.dataTransfer.effectAllowed = "move";

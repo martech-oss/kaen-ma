@@ -4,9 +4,9 @@ import { type ReactNode, useState } from "react";
 
 import { PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import { emailTemplateOptionsQueryOptions } from "@/features/automations/automation-api";
 import {
   emailArchivedTemplatesQueryOptions,
+  emailTemplateOptionsQueryOptions,
   type EmailTemplateRow,
   emailVariablesListQueryOptions,
   type MessageVariableRow,

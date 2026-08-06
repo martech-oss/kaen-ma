@@ -1,10 +1,10 @@
-import type { SegmentCondition } from "@openengage/orpc";
 import {
   getSegmentFieldDefinition,
   isSegmentOperatorAllowed,
+  type SegmentCondition,
   type SegmentField,
   type SegmentOperator,
-} from "@openengage/orpc";
+} from "@openengage/core/segments";
 
 export const segmentFieldOptions = [
   { field: "email", label: "メールアドレス" },

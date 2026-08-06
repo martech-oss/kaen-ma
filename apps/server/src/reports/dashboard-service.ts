@@ -1,7 +1,7 @@
 import type { Dashboard } from "@openengage/core/reports";
 import { ReportsRepository, type OpenEngageDatabase } from "@openengage/database";
 
-import { numericValue, parseJsonRecord, primitiveString } from "../platform/values";
+import { toFiniteNumber, parseJsonRecord, primitiveString } from "../platform/values";
 
 export async function getDashboard(
   database: OpenEngageDatabase,
@@ -9,12 +9,12 @@ export async function getDashboard(
 ): Promise<Dashboard> {
   const data = await new ReportsRepository(database).dashboardSummary(workspaceId);
   return {
-    contacts: { count: numericValue(data.contacts["count"]) },
-    automations: { count: numericValue(data.automations["count"]) },
+    contacts: { count: toFiniteNumber(data.contacts["count"]) },
+    automations: { count: toFiniteNumber(data.automations["count"]) },
     deliveries: {
-      sent: numericValue(data.deliveries["sent"]),
-      delivered: numericValue(data.deliveries["delivered"]),
-      failed: numericValue(data.deliveries["failed"]),
+      sent: toFiniteNumber(data.deliveries["sent"]),
+      delivered: toFiniteNumber(data.deliveries["delivered"]),
+      failed: toFiniteNumber(data.deliveries["failed"]),
     },
     recentEvents: data.events.map((row) => ({
       type: primitiveString(row["type"]),

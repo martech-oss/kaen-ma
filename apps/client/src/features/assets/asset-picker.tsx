@@ -4,9 +4,12 @@ import type { ReactNode } from "react";
 
 import { AppDialog } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import { type AssetSummary, formatBytes } from "@/features/assets/asset-api";
+import {
+  type AssetSummary,
+  formatBytes,
+  publicImageAssetsQueryOptions,
+} from "@/features/assets/asset-api";
 import { AssetThumbnail } from "@/features/assets/asset-bits";
-import { orpcQuery } from "@/lib/orpc";
 
 /**
  * Picks a *public* image to embed. Private assets are excluded on purpose:
@@ -23,9 +26,7 @@ export function AssetPickerDialog({
   onSelect: (asset: AssetSummary) => void;
 }): ReactNode {
   const assetsQuery = useQuery({
-    ...orpcQuery.assets.list.queryOptions({
-      input: { kind: "image", visibility: "public", status: "active", limit: 60 },
-    }),
+    ...publicImageAssetsQueryOptions(),
     enabled: open,
   });
   const items = (assetsQuery.data?.items ?? []).filter((asset) => asset.publicUrl !== null);

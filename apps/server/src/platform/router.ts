@@ -1,3 +1,5 @@
+import { ack } from "@openengage/orpc";
+
 import { authed, requireRole } from "../orpc/base";
 import { listDeadLetters, replayDeadLetter } from "./dead-letter-service";
 
@@ -18,7 +20,7 @@ export const replayDeadLetterProcedure = authed.platform.replayDeadLetter.handle
       input.id,
     );
     if (outcome.kind === "not_found") throw errors.DEAD_LETTER_NOT_FOUND();
-    return { replayed: true as const };
+    return ack;
   },
 );
 

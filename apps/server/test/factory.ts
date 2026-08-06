@@ -13,7 +13,7 @@ import {
   user,
   uuidv7,
 } from "@openengage/database";
-import { contract, type WorkspaceRole } from "@openengage/orpc";
+import { contract, type WorkspaceContext, type WorkspaceRole } from "@openengage/orpc";
 
 import { randomIdentifier, sha256Hex } from "../src/platform/crypto";
 
@@ -95,6 +95,43 @@ export async function seedMember(
       role: input.role ?? "owner",
       createdAt: new Date(),
     });
+}
+
+/**
+ * Seeds a workspace, user and membership row, for tests that construct a
+ * repository directly instead of going through an authenticated oRPC client.
+ */
+export async function seedWorkspaceContext(
+  db: D1Database,
+  label: string,
+  role: WorkspaceRole = "owner",
+): Promise<WorkspaceContext> {
+  const workspaceId = uuidv7();
+  const userId = uuidv7();
+  const now = new Date();
+  await createDatabase(db).orm.batch([
+    createDatabase(db)
+      .orm.insert(user)
+      .values({
+        id: userId,
+        name: `${label} User`,
+        email: `${label}-${userId}@example.com`,
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    createDatabase(db)
+      .orm.insert(organization)
+      .values({
+        id: workspaceId,
+        name: `${label} Workspace`,
+        slug: `${label}-${workspaceId}`,
+        createdAt: now,
+        timezone: "UTC",
+      }),
+  ]);
+  await seedMember(db, { workspaceId, userId, role });
+  return { workspaceId, userId, role };
 }
 
 /** Typed oRPC client for a seeded fixture, driven through the worker's fetch handler. */

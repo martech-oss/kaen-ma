@@ -5,12 +5,6 @@ import { uuidv7 } from "@openengage/database";
 
 import { seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 function pngFile(name: string, body = "openengage"): File {
   return new File([body], name, { type: "image/png" });
 }
@@ -51,7 +45,7 @@ describe("Asset library", () => {
       `${env.APP_URL}/a/${slug}/${uploaded.id}/hero.png?v=${published.checksum.slice(0, 12)}`,
     );
 
-    await expect(client.assets.archive({ id: uploaded.id })).resolves.toEqual({ archived: true });
+    await expect(client.assets.archive({ id: uploaded.id })).resolves.toEqual({ ok: true });
     // Archiving withdraws the public URL even though visibility is still public.
     await expect(client.assets.get({ id: uploaded.id })).resolves.toMatchObject({
       publicUrl: null,
@@ -63,12 +57,12 @@ describe("Asset library", () => {
       code: "ASSET_NOT_FOUND",
     });
 
-    await expect(client.assets.restore({ id: uploaded.id })).resolves.toEqual({ restored: true });
+    await expect(client.assets.restore({ id: uploaded.id })).resolves.toEqual({ ok: true });
     await expect(client.assets.restore({ id: uploaded.id })).rejects.toMatchObject({
       code: "ASSET_NOT_ARCHIVED",
     });
 
-    await expect(client.assets.delete({ id: uploaded.id })).resolves.toEqual({ deleted: true });
+    await expect(client.assets.delete({ id: uploaded.id })).resolves.toEqual({ ok: true });
     await expect(client.assets.get({ id: uploaded.id })).rejects.toMatchObject({
       code: "ASSET_NOT_FOUND",
     });
@@ -96,13 +90,30 @@ describe("Asset library", () => {
     await expect(client.assets.list({ kind: "other" })).resolves.toMatchObject({ total: 1 });
     await expect(client.assets.list({ visibility: "public" })).resolves.toMatchObject({ total: 1 });
     await expect(client.assets.list({ query: "guide" })).resolves.toMatchObject({ total: 1 });
-    // `%` is a LIKE wildcard and must not match everything when typed by a user.
-    await expect(client.assets.list({ query: "%" })).resolves.toMatchObject({ total: 3 });
+    // `%`/`_` are LIKE wildcards and must be matched literally, not as wildcards,
+    // when typed by a user — none of these filenames contain a literal `%`.
+    await expect(client.assets.list({ query: "%" })).resolves.toMatchObject({ total: 0 });
 
     await client.assets.archive({ id: blob.id });
     await expect(client.assets.list({})).resolves.toMatchObject({ total: 2 });
     await expect(client.assets.list({ status: "archived" })).resolves.toMatchObject({ total: 1 });
     await expect(client.assets.list({ status: "all" })).resolves.toMatchObject({ total: 3 });
+  });
+
+  it("treats `_` in a search query as a literal character, not a wildcard", async () => {
+    const { client } = await seedWorkspaceClient(env.DB);
+    const underscored = await client.assets.upload({
+      name: "foo_bar.png",
+      file: pngFile("foo_bar.png"),
+    });
+    await client.assets.upload({ name: "foobar.png", file: pngFile("foobar.png") });
+
+    // An unescaped `_` is a single-character wildcard and would match both
+    // "foo_bar.png" and "foobar.png"; escaped, it must match only the former.
+    await expect(client.assets.list({ query: "foo_bar" })).resolves.toMatchObject({
+      total: 1,
+      items: [expect.objectContaining({ id: underscored.id })],
+    });
   });
 
   it("pages through the library with a cursor", async () => {
@@ -125,6 +136,7 @@ describe("Asset library", () => {
   it("gates writes on role and isolates assets per workspace", async () => {
     const owner = await seedWorkspaceClient(env.DB);
     const analyst = await seedWorkspaceClient(env.DB, { role: "analyst" });
+    const marketer = await seedWorkspaceClient(env.DB, { role: "marketer" });
     const other = await seedWorkspaceClient(env.DB);
 
     const asset = await owner.client.assets.upload({
@@ -136,6 +148,22 @@ describe("Asset library", () => {
     await expect(
       analyst.client.assets.upload({ name: "nope.png", file: pngFile("nope.png") }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
+
+    // Uploading and editing only need marketer, but archive/restore need admin -
+    // even for an asset the marketer uploaded themselves.
+    const own = await marketer.client.assets.upload({
+      name: "own.png",
+      file: pngFile("own.png"),
+    });
+    await expect(
+      marketer.client.assets.update({ id: own.id, name: "marketer-edit" }),
+    ).resolves.toMatchObject({ name: "marketer-edit" });
+    await expect(marketer.client.assets.archive({ id: own.id })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(marketer.client.assets.restore({ id: own.id })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
 
     // A different workspace must not see, read or mutate another's asset.
     await expect(other.client.assets.get({ id: asset.id })).rejects.toMatchObject({

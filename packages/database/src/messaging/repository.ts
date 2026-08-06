@@ -1,15 +1,23 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
-import { channelMessageSchema, type ChannelMessage } from "@openengage/core/messaging";
-import type { WorkspaceContext } from "@openengage/core/shared";
+import {
+  channelMessageSchema,
+  emailTemplateSchema,
+  messageVariableSchema,
+  type ChannelMessage,
+  type EmailTemplate,
+  type MessageVariable,
+} from "@openengage/core/messaging";
 import { contentDocumentSchema, type ContentDocument } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { suppressions } from "../consent/schema";
 import { contactEvents } from "../contacts/schema";
-import { decodeJson, decodeNullableJson, encodeJson } from "../shared/json-codec";
+import { changedExactlyOne, nowIso } from "../shared/database-utils";
+import { decodeJson, defineJsonCodec } from "../shared/json-codec";
+import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
+import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { webhookEndpoints } from "../workspaces/schema";
 import {
@@ -19,33 +27,6 @@ import {
   inboundEmails,
   messageVariables,
 } from "./schema";
-
-export interface EmailTemplateRecord {
-  id: string;
-  name: string;
-  purpose: string;
-  draftSubject: string;
-  draftContent: ContentDocument;
-  draftRevision: number;
-  publishedSubject: string | null;
-  publishedContent: ContentDocument | null;
-  publishedRevision: number | null;
-  publishedAt: string | null;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface MessageVariableRecord {
-  id: string;
-  key: string;
-  name: string;
-  value: string;
-  description: string;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
 
 /** The delivery columns the queue worker needs to claim and send one delivery. */
 export interface DeliveryClaimRecord {
@@ -79,68 +60,59 @@ const emailTemplateSelection = {
   updatedAt: emailTemplates.updatedAt,
 };
 
-function decodeEmailTemplate(
-  row: Omit<EmailTemplateRecord, "draftContent" | "publishedContent"> & {
-    draftContent: string;
-    publishedContent: string | null;
-  },
-): EmailTemplateRecord {
-  return {
-    ...row,
-    draftContent: decodeJson(
-      row.draftContent,
-      contentDocumentSchema,
-      "email_templates.draft_content",
-    ),
-    publishedContent: decodeNullableJson(
-      row.publishedContent,
-      contentDocumentSchema,
-      "email_templates.published_content",
-    ),
-  };
+const draftContentCodec = defineJsonCodec(contentDocumentSchema, "email_templates.draft_content");
+const publishedContentCodec = defineJsonCodec(
+  contentDocumentSchema,
+  "email_templates.published_content",
+);
+
+/** Batch size for one worker sweep of the delivery queue. */
+const DUE_DELIVERY_SCAN_LIMIT = 100;
+
+function toEmailTemplate(row: {
+  id: string;
+  name: string;
+  draftSubject: string;
+  draftContent: string;
+  draftRevision: number;
+  publishedRevision: number | null;
+  publishedAt: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}): EmailTemplate {
+  return emailTemplateSchema.parse({
+    id: row.id,
+    name: row.name,
+    purpose: "transactional",
+    subject: row.draftSubject,
+    content: draftContentCodec.decode(row.draftContent),
+    draftRevision: row.draftRevision,
+    publishedRevision: row.publishedRevision,
+    hasUnpublishedChanges: row.publishedRevision !== row.draftRevision,
+    publishedAt: row.publishedAt,
+    archivedAt: row.archivedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    sendable: row.publishedRevision !== null && !row.archivedAt,
+  });
 }
 
-/**
- * Admin-facing queries for email templates and message variables.
- *
- * Scoped by workspace id only (not the full {@link WorkspaceContext}), because
- * the messaging endpoints authorize upstream and resolve just the workspace id.
- * A full context is assignable wherever this scope is expected.
- */
-export class MessagingRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: Pick<WorkspaceContext, "workspaceId">,
-  ) {
-    this.database = createDatabase(database);
-  }
-
-  public async listEmailTemplates(archived: boolean): Promise<EmailTemplateRecord[]> {
+/** Admin-facing queries for email templates and message variables. */
+export class MessagingRepository extends WorkspaceRepository {
+  public async listEmailTemplates(archived: boolean): Promise<EmailTemplate[]> {
     const rows = await this.database.orm
       .select(emailTemplateSelection)
       .from(emailTemplates)
       .where(
         and(
-          eq(emailTemplates.workspaceId, this.context.workspaceId),
+          this.inWorkspace(emailTemplates),
           archived ? isNotNull(emailTemplates.archivedAt) : isNull(emailTemplates.archivedAt),
         ),
       )
       .orderBy(desc(emailTemplates.updatedAt))
-      .limit(200);
-    return rows.map(decodeEmailTemplate);
-  }
-
-  public async getEmailTemplate(id: string): Promise<EmailTemplateRecord | null> {
-    const row = await this.database.orm
-      .select(emailTemplateSelection)
-      .from(emailTemplates)
-      .where(
-        and(eq(emailTemplates.workspaceId, this.context.workspaceId), eq(emailTemplates.id, id)),
-      )
-      .get();
-    return row ? decodeEmailTemplate(row) : null;
+      .limit(UNPAGINATED_LIST_LIMIT);
+    return rows.map(toEmailTemplate);
   }
 
   public async createEmailTemplate(input: {
@@ -149,18 +121,14 @@ export class MessagingRepository {
     content: ContentDocument;
   }): Promise<{ id: string }> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(emailTemplates).values({
       id,
       workspaceId: this.context.workspaceId,
       name: input.name,
       purpose: "transactional",
       draftSubject: input.subject,
-      draftContent: encodeJson(
-        input.content,
-        contentDocumentSchema,
-        "email_templates.draft_content",
-      ),
+      draftContent: draftContentCodec.encode(input.content),
       createdAt: now,
       updatedAt: now,
     });
@@ -171,32 +139,28 @@ export class MessagingRepository {
     id: string,
     input: { name: string; subject: string; content: ContentDocument },
   ): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .update(emailTemplates)
       .set({
         name: input.name,
         draftSubject: input.subject,
-        draftContent: encodeJson(
-          input.content,
-          contentDocumentSchema,
-          "email_templates.draft_content",
-        ),
+        draftContent: draftContentCodec.encode(input.content),
         draftRevision: sql`${emailTemplates.draftRevision} + 1`,
         updatedAt: now,
       })
       .where(
         and(
-          eq(emailTemplates.workspaceId, this.context.workspaceId),
+          this.inWorkspace(emailTemplates),
           eq(emailTemplates.id, id),
           isNull(emailTemplates.archivedAt),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   public async publishEmailTemplate(id: string): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .update(emailTemplates)
       .set({
@@ -208,31 +172,31 @@ export class MessagingRepository {
       })
       .where(
         and(
-          eq(emailTemplates.workspaceId, this.context.workspaceId),
+          this.inWorkspace(emailTemplates),
           eq(emailTemplates.id, id),
           isNull(emailTemplates.archivedAt),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   public async archiveEmailTemplate(id: string): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .update(emailTemplates)
       .set({ archivedAt: now, updatedAt: now })
       .where(
         and(
-          eq(emailTemplates.workspaceId, this.context.workspaceId),
+          this.inWorkspace(emailTemplates),
           eq(emailTemplates.id, id),
           isNull(emailTemplates.archivedAt),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
-  public async listMessageVariables(archived: boolean): Promise<MessageVariableRecord[]> {
-    return await this.database.orm
+  public async listMessageVariables(archived: boolean): Promise<MessageVariable[]> {
+    const rows = await this.database.orm
       .select({
         id: messageVariables.id,
         key: messageVariables.key,
@@ -246,11 +210,12 @@ export class MessagingRepository {
       .from(messageVariables)
       .where(
         and(
-          eq(messageVariables.workspaceId, this.context.workspaceId),
+          this.inWorkspace(messageVariables),
           archived ? isNotNull(messageVariables.archivedAt) : isNull(messageVariables.archivedAt),
         ),
       )
       .orderBy(desc(messageVariables.updatedAt));
+    return rows.map((row) => messageVariableSchema.parse(row));
   }
 
   /** Inserts a variable; unique-key violations bubble up to the caller. */
@@ -261,7 +226,7 @@ export class MessagingRepository {
     description: string;
   }): Promise<{ id: string }> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(messageVariables).values({
       id,
       workspaceId: this.context.workspaceId,
@@ -287,31 +252,31 @@ export class MessagingRepository {
         name: input.name,
         value: input.value,
         description: input.description,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
       .where(
         and(
-          eq(messageVariables.workspaceId, this.context.workspaceId),
+          this.inWorkspace(messageVariables),
           eq(messageVariables.id, id),
           isNull(messageVariables.archivedAt),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   public async archiveMessageVariable(id: string): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .update(messageVariables)
       .set({ archivedAt: now, updatedAt: now })
       .where(
         and(
-          eq(messageVariables.workspaceId, this.context.workspaceId),
+          this.inWorkspace(messageVariables),
           eq(messageVariables.id, id),
           isNull(messageVariables.archivedAt),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 }
 
@@ -320,13 +285,7 @@ export class MessagingRepository {
  * Deliveries are claimed by id alone — the workspace comes from the delivery
  * row itself — so this repository is intentionally not workspace-scoped.
  */
-export class MessagingWorkerRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(database: DatabaseSource) {
-    this.database = createDatabase(database);
-  }
-
+export class MessagingWorkerRepository extends DatabaseRepository {
   /** Loads a live template for sending; archived templates are invisible. */
   public async findSendableTemplate(
     workspaceId: string,
@@ -360,7 +319,7 @@ export class MessagingWorkerRepository {
       id: row.id,
       purpose: "transactional",
       subject: row.subject,
-      content: decodeJson(row.content, contentDocumentSchema, "email_templates.published_content"),
+      content: publishedContentCodec.decode(row.content),
     };
   }
 
@@ -441,7 +400,7 @@ export class MessagingWorkerRepository {
     idempotencyKey: string;
     payload: string;
   }): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .insert(deliveries)
       .values({
@@ -462,7 +421,7 @@ export class MessagingWorkerRepository {
         updatedAt: now,
       })
       .onConflictDoNothing();
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   public async findDeliveryForProcessing(deliveryId: string): Promise<DeliveryClaimRecord | null> {
@@ -502,21 +461,21 @@ export class MessagingWorkerRepository {
       .set({
         status: "sending",
         attempts: sql`${deliveries.attempts} + 1`,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
       .where(and(eq(deliveries.id, deliveryId), inArray(deliveries.status, ["queued", "failed"])));
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   public async markDeliverySuppressed(deliveryId: string, reason: string): Promise<void> {
     await this.database.orm
       .update(deliveries)
-      .set({ status: "suppressed", lastError: reason, updatedAt: new Date().toISOString() })
+      .set({ status: "suppressed", lastError: reason, updatedAt: nowIso() })
       .where(eq(deliveries.id, deliveryId));
   }
 
   public async markDeliveryProviderSuppressed(deliveryId: string): Promise<void> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     await orm.batch([
       orm
@@ -554,7 +513,7 @@ export class MessagingWorkerRepository {
     providerMessageId: string;
     acceptedAt: string;
   }): Promise<void> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     await orm.batch([
       orm
@@ -595,7 +554,7 @@ export class MessagingWorkerRepository {
         status: input.status,
         nextAttemptAt: input.nextAttemptAt,
         lastError: input.lastError,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
       .where(and(eq(deliveries.id, deliveryId), eq(deliveries.status, "sending")));
   }
@@ -612,7 +571,7 @@ export class MessagingWorkerRepository {
         ),
       )
       .orderBy(asc(deliveries.createdAt))
-      .limit(100);
+      .limit(DUE_DELIVERY_SCAN_LIMIT);
   }
 
   /** Resolves the delivery a signed reply address points at, if it still exists. */
@@ -729,7 +688,7 @@ export class MessagingWorkerRepository {
       )
       .get();
     if (!delivery) return false;
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     const statements: [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]] = [
       orm
@@ -752,7 +711,7 @@ export class MessagingWorkerRepository {
       statements.push(
         orm
           .update(deliveries)
-          .set({ status: input.status, updatedAt: new Date().toISOString() })
+          .set({ status: input.status, updatedAt: nowIso() })
           .where(eq(deliveries.id, delivery.id)),
       );
     }

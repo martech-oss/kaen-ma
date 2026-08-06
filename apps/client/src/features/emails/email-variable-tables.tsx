@@ -1,15 +1,14 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Copy, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
-import { ArchiveConfirm } from "@/components/app-ui";
+import { ArchiveConfirm, CopyButton } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import type { MessageVariableRow } from "@/features/emails/email-api";
+import { type MessageVariableRow, useArchiveEmailVariable } from "@/features/emails/email-api";
+import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
 
 export function VariableReference({ variables }: { variables: MessageVariableRow[] }): ReactNode {
   const builtInVariables = [
@@ -56,15 +55,13 @@ export function VariableTable({
   loading: boolean;
   onEdit: (variable: MessageVariableRow) => void;
 }): ReactNode {
-  const queryClient = useQueryClient();
-  const archiveVariable = useMutation(orpcQuery.emails.archiveVariable.mutationOptions());
+  const archiveVariable = useArchiveEmailVariable();
   async function archive(variable: MessageVariableRow) {
     try {
       await archiveVariable.mutateAsync({ id: variable.id });
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listVariables.key() });
       toast.success("メッセージ変数をアーカイブしました");
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
+      toast.error(getErrorMessage(caught, "アーカイブできませんでした"));
     }
   }
 
@@ -135,25 +132,6 @@ export function VariableTable({
       />
     </div>
   );
-}
-
-function CopyButton({ value }: { value: string }): ReactNode {
-  return (
-    <Button
-      type="button"
-      size="icon-sm"
-      variant="ghost"
-      aria-label={`${value}をコピー`}
-      onClick={() => void copyValue(value)}
-    >
-      <Copy />
-    </Button>
-  );
-}
-
-async function copyValue(value: string): Promise<void> {
-  await navigator.clipboard.writeText(value);
-  toast.success("クリップボードにコピーしました");
 }
 
 function messageVariableToken(key: string): string {

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { RouteError, RoutePending } from "@/components/route-status";
+import { routeStatusComponents } from "@/components/route-status";
 import {
   dashboardQueryOptions,
   deliveryTrendQueryOptions,
@@ -13,7 +13,6 @@ export const Route = createFileRoute("/_app/dashboard")({
       context.queryClient.ensureQueryData(dashboardQueryOptions()),
       context.queryClient.ensureQueryData(deliveryTrendQueryOptions()),
     ]),
-  pendingComponent: RoutePending,
-  errorComponent: RouteError,
+  ...routeStatusComponents,
   component: DashboardPage,
 });

@@ -10,12 +10,11 @@
     "deploy:bootstrap": "CLOUDFLARE_ENV=bootstrap vite build && wrangler deploy",
     "typecheck": "tsc --noEmit",
     "check:types": "pnpm typecheck",
-    "cf:types": "wrangler types worker-configuration.d.ts --env-interface AgentBindings --config wrangler.jsonc --config ../server/wrangler.jsonc"
+    "cf:types": "wrangler types worker-configuration.d.ts --env-interface AgentBindings --config wrangler.jsonc"
   },
   "dependencies": {
     "@flue/runtime": "^2.0.1",
     "@openengage/core": "workspace:*",
-    "@openengage/orpc": "workspace:*",
     "agents": "^0.14.2",
     "hono": "^4.7.0",
     "just-bash": "^3.2.0",

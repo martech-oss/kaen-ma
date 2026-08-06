@@ -1,4 +1,4 @@
-import { computeDueAt, outgoingEdges } from "@openengage/core";
+import { computeDueAt, outgoingEdges } from "@openengage/core/automations";
 import {
   type AutomationDefinition,
   type AutomationEdge,
@@ -9,6 +9,7 @@ import {
   createDatabase,
   type AutomationContactColumn,
   type AutomationJobRow,
+  type OpenEngageDatabase,
 } from "@openengage/database";
 
 import { PermanentChannelError } from "../channels";
@@ -22,7 +23,8 @@ export async function processAutomationJob(
   leaseId: string,
   env: RuntimeEnv,
 ): Promise<void> {
-  const engine = new AutomationEngineRepository(createDatabase(env.DB));
+  const database = createDatabase(env.DB);
+  const engine = new AutomationEngineRepository(database);
   const job = await engine.findJobForProcessing(jobId, leaseId);
   if (!job) return;
   const started = await engine.startLeasedJob(jobId, leaseId, new Date().toISOString());
@@ -32,7 +34,7 @@ export async function processAutomationJob(
     const definition = job.graph;
     const node = definition.nodes.find((candidate) => candidate.id === job.nodeId);
     if (!node) throw new PermanentChannelError(`Automation node ${job.nodeId} is missing`);
-    const result = await executeNode(node, definition, job, env);
+    const result = await executeNode(node, definition, job, env, database, engine);
     if (result.waitUntil) {
       await engine.parkJobUntil(job.id, leaseId, {
         dueAt: result.waitUntil,
@@ -41,7 +43,7 @@ export async function processAutomationJob(
       });
       return;
     }
-    await finishNode(job, leaseId, definition, result.branch, env);
+    await finishNode(job, leaseId, definition, result.branch, engine);
   } catch (error) {
     await engine.releaseJobForRetry(
       job.id,
@@ -58,6 +60,8 @@ export async function executeNode(
   definition: AutomationDefinition,
   job: AutomationJobRow,
   env: RuntimeEnv,
+  database: OpenEngageDatabase,
+  engine: AutomationEngineRepository,
 ): Promise<{ branch?: AutomationEdge["branch"]; waitUntil?: string }> {
   if (node.type === "source") return { branch: "next" };
   if (node.type === "delay") {
@@ -67,10 +71,8 @@ export async function executeNode(
     };
   }
   if (node.type === "condition") {
-    return { branch: (await evaluateCondition(node, job, env)) ? "yes" : "no" };
+    return { branch: (await evaluateCondition(node, job, engine)) ? "yes" : "no" };
   }
-  const database = createDatabase(env.DB);
-  const engine = new AutomationEngineRepository(database);
   if (node.type === "decision") {
     const eventType = {
       opened: "email_opened",
@@ -98,10 +100,10 @@ export async function executeNode(
   const now = new Date().toISOString();
   switch (action.action) {
     case "send_email":
-      await createEmailDelivery(action, job, env);
+      await createEmailDelivery(action, job, env, database);
       break;
     case "send_webhook":
-      await createWebhookDelivery(action.endpointId, job, env);
+      await createWebhookDelivery(action.endpointId, job, env, database);
       break;
     case "add_tag":
       await engine.addContactTag(job.workspaceId, job.contactId, action.tagId, now);
@@ -140,7 +142,7 @@ export async function executeNode(
       );
       break;
     case "update_field":
-      await updateContactField(job, action.field, action.value, env);
+      await updateContactField(job, action.field, action.value, engine);
       break;
   }
   return { branch: "next" };
@@ -151,9 +153,8 @@ export async function finishNode(
   leaseId: string,
   definition: AutomationDefinition,
   branch: AutomationEdge["branch"] | undefined,
-  env: RuntimeEnv,
+  engine: AutomationEngineRepository,
 ): Promise<void> {
-  const engine = new AutomationEngineRepository(createDatabase(env.DB));
   const next = outgoingEdges(definition, job.nodeId, branch ?? "next")[0];
   const now = new Date().toISOString();
   if (!next) {
@@ -166,7 +167,7 @@ export async function finishNode(
 export async function evaluateCondition(
   node: Extract<AutomationNode, { type: "condition" }>,
   job: AutomationJobRow,
-  env: RuntimeEnv,
+  engine: AutomationEngineRepository,
 ): Promise<boolean> {
   const fieldMap: Record<string, unknown> = {
     email: job.contactEmail,
@@ -178,7 +179,6 @@ export async function evaluateCondition(
     ...job.customFields,
   };
   if (node.config.field === "tag") {
-    const engine = new AutomationEngineRepository(createDatabase(env.DB));
     const tagged = await engine.contactHasTagWithSlug(
       job.workspaceId,
       job.contactId,
@@ -213,9 +213,8 @@ export async function updateContactField(
   job: AutomationJobRow,
   field: string,
   value: unknown,
-  env: RuntimeEnv,
+  engine: AutomationEngineRepository,
 ): Promise<void> {
-  const engine = new AutomationEngineRepository(createDatabase(env.DB));
   const columns: Record<string, AutomationContactColumn> = {
     first_name: "first_name",
     last_name: "last_name",

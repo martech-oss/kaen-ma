@@ -1,3 +1,5 @@
+import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
+
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type { CompanyContactDto, CompanyDetail, CompanySummary } from "@openengage/core/contacts";
 
@@ -16,6 +18,12 @@ export interface CompanySearch {
 }
 
 export const companySearchDefaults: CompanySearch = { q: "" };
+
+export function parseCompanySearch(search: Record<string, unknown>): CompanySearch {
+  return {
+    q: typeof search.q === "string" ? search.q : "",
+  };
+}
 
 export function companiesQueryOptions(query = "") {
   return orpcQuery.companies.list.queryOptions({
@@ -48,4 +56,48 @@ export function assignCompanyContact(input: {
 
 export function removeCompanyContact(companyId: string, contactId: string) {
   return orpc.companies.removeContact({ id: companyId, contactId });
+}
+
+export function invalidateCompanyQueries(
+  queryClient: QueryClient,
+  companyId: string,
+): Promise<void> {
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
+    }),
+    queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() }),
+  ]).then(() => undefined);
+}
+
+export function useCreateCompany() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.companies.create.mutationOptions(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() }),
+  });
+}
+
+export function useUpdateCompany() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.companies.update.mutationOptions(),
+    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  });
+}
+
+export function useAssignCompanyContact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.companies.assignContact.mutationOptions(),
+    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  });
+}
+
+export function useRemoveCompanyContact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.companies.removeContact.mutationOptions(),
+    onSuccess: (_data, variables) => invalidateCompanyQueries(queryClient, variables.id),
+  });
 }

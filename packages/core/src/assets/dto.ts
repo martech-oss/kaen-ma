@@ -6,7 +6,7 @@ import {
   assetVisibilitySchema,
 } from "../shared/schema";
 
-export const assetSummarySchema = z.object({
+const assetSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
   originalFilename: z.string(),

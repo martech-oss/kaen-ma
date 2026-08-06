@@ -1,4 +1,9 @@
-import { DeadLetterRepository, MaintenanceRepository, uuidv7 } from "@openengage/database";
+import {
+  createDatabase,
+  DeadLetterRepository,
+  MaintenanceRepository,
+  uuidv7,
+} from "@openengage/database";
 
 import { type RuntimeEnv } from "../env";
 import { primitiveString } from "./values";
@@ -11,7 +16,7 @@ export async function persistDeadLetter(
   error = "Queue retries exhausted",
 ): Promise<void> {
   const parsed = body as { jobId?: string; deliveryId?: string };
-  const repository = new DeadLetterRepository(env.DB);
+  const repository = new DeadLetterRepository(createDatabase(env.DB));
   let workspaceId: string | null = null;
   if (parsed.jobId) {
     workspaceId = await repository.findJobWorkspace(parsed.jobId);
@@ -32,7 +37,7 @@ export async function persistDeadLetter(
 export async function runDailyMaintenance(env: RuntimeEnv): Promise<void> {
   const retentionDays = Math.max(1, Number(env.RAW_EVENT_RETENTION_DAYS) || 90);
   const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
-  const repository = new MaintenanceRepository(env.DB);
+  const repository = new MaintenanceRepository(createDatabase(env.DB));
   const events = await repository.findEventsToArchive(cutoff);
   if (events.length > 0) {
     const firstWorkspace = primitiveString(events[0]?.["workspaceId"], "unknown");

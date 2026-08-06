@@ -14,7 +14,7 @@ export type EmailBlock =
       blocks: EmailBlock[];
     };
 
-export const emailBlockSchema: z.ZodType<EmailBlock> = z.lazy(() =>
+const emailBlockSchema: z.ZodType<EmailBlock> = z.lazy(() =>
   z.discriminatedUnion("type", [
     z.object({ id: z.string(), type: z.literal("text"), html: z.string().max(100_000) }),
     z.object({

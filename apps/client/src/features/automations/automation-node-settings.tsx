@@ -5,11 +5,73 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel, FieldSeparator } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { type AutomationEdge, type AutomationNode } from "@openengage/orpc";
+import { type AutomationEdge, type AutomationNode } from "@openengage/core/automations";
 
 import { connectionBranches, sourceConfig } from "./automation-graph";
 import { formatDuration, nodeLabel, nodeTypeLabel } from "./automation-labels";
 import { type AutomationOptions } from "./automation-types";
+
+type SourceNodeConfig = Extract<AutomationNode, { type: "source" }>["config"];
+type ActionNodeConfig = Extract<AutomationNode, { type: "action" }>["config"];
+type DelayNodeConfig = Extract<AutomationNode, { type: "delay" }>["config"];
+
+function nodeTypeIs<TType extends AutomationNode["type"]>(
+  type: TType,
+): (node: AutomationNode) => node is Extract<AutomationNode, { type: TType }> {
+  return (node): node is Extract<AutomationNode, { type: TType }> => node.type === type;
+}
+
+function sourceIs<TSource extends SourceNodeConfig["source"]>(
+  source: TSource,
+): (node: AutomationNode) => node is Extract<AutomationNode, { type: "source" }> & {
+  config: Extract<SourceNodeConfig, { source: TSource }>;
+} {
+  return (
+    node,
+  ): node is Extract<AutomationNode, { type: "source" }> & {
+    config: Extract<SourceNodeConfig, { source: TSource }>;
+  } => node.type === "source" && node.config.source === source;
+}
+
+function actionIs<TAction extends ActionNodeConfig["action"]>(
+  action: TAction,
+): (node: AutomationNode) => node is Extract<AutomationNode, { type: "action" }> & {
+  config: Extract<ActionNodeConfig, { action: TAction }>;
+} {
+  return (
+    node,
+  ): node is Extract<AutomationNode, { type: "action" }> & {
+    config: Extract<ActionNodeConfig, { action: TAction }>;
+  } => node.type === "action" && node.config.action === action;
+}
+
+function delayModeIs<TMode extends DelayNodeConfig["mode"]>(
+  mode: TMode,
+): (node: AutomationNode) => node is Extract<AutomationNode, { type: "delay" }> & {
+  config: Extract<DelayNodeConfig, { mode: TMode }>;
+} {
+  return (
+    node,
+  ): node is Extract<AutomationNode, { type: "delay" }> & {
+    config: Extract<DelayNodeConfig, { mode: TMode }>;
+  } => node.type === "delay" && node.config.mode === mode;
+}
+
+// Captures the `current.type === "…" ? { ...current, config: { ...current.config, … } } : current`
+// guard-and-patch shape repeated across the settings components below. `isMatch` narrows the node
+// (and, via sourceIs/actionIs/delayModeIs, its config's inner discriminant); `patch` returns the
+// fields to merge into `config`.
+function patchNodeConfig<TNode extends AutomationNode>(
+  onUpdate: (update: (node: AutomationNode) => AutomationNode) => void,
+  isMatch: (node: AutomationNode) => node is TNode,
+  patch: (config: TNode["config"]) => Partial<TNode["config"]>,
+): void {
+  onUpdate((current) =>
+    isMatch(current)
+      ? { ...current, config: { ...current.config, ...patch(current.config) } }
+      : current,
+  );
+}
 
 export function NodeSettings({
   node,
@@ -163,11 +225,7 @@ function SourceSettings({
           label="フォーム"
           value={node.config.formId}
           onChange={(value) =>
-            onUpdate((current) =>
-              current.type === "source"
-                ? { ...current, config: { ...node.config, formId: value } }
-                : current,
-            )
+            patchNodeConfig(onUpdate, sourceIs("form_submitted"), () => ({ formId: value }))
           }
           options={options.forms.map((form) => [form.id, form.name])}
         />
@@ -177,11 +235,7 @@ function SourceSettings({
           label="セグメント"
           value={node.config.segmentId}
           onChange={(value) =>
-            onUpdate((current) =>
-              current.type === "source"
-                ? { ...current, config: { ...node.config, segmentId: value } }
-                : current,
-            )
+            patchNodeConfig(onUpdate, sourceIs("segment_joined"), () => ({ segmentId: value }))
           }
           options={options.segments.map((segment) => [segment.id, segment.name])}
         />
@@ -210,14 +264,9 @@ function SourceSettings({
           max={3650}
           value={String(node.config.days)}
           onChange={(value) =>
-            onUpdate((current) =>
-              current.type === "source" && current.config.source === "contact_inactive"
-                ? {
-                    ...current,
-                    config: { ...current.config, days: Math.max(1, Number(value) || 1) },
-                  }
-                : current,
-            )
+            patchNodeConfig(onUpdate, sourceIs("contact_inactive"), () => ({
+              days: Math.max(1, Number(value) || 1),
+            }))
           }
         />
       ) : null}
@@ -271,17 +320,7 @@ function ActionSettings({
         onChange={(value) => {
           const template = options.templates.find((item) => item.id === value);
           if (!template) return;
-          onUpdate((current) =>
-            current.type === "action" && current.config.action === "send_email"
-              ? {
-                  ...current,
-                  config: {
-                    ...current.config,
-                    templateId: value,
-                  },
-                }
-              : current,
-          );
+          patchNodeConfig(onUpdate, actionIs("send_email"), () => ({ templateId: value }));
         }}
         options={options.templates.map((template) => [template.id, template.name])}
       />
@@ -294,11 +333,9 @@ function ActionSettings({
         type="number"
         value={String(node.config.amount)}
         onChange={(value) =>
-          onUpdate((current) =>
-            current.type === "action" && current.config.action === "change_score"
-              ? { ...current, config: { ...current.config, amount: Number(value) || 0 } }
-              : current,
-          )
+          patchNodeConfig(onUpdate, actionIs("change_score"), () => ({
+            amount: Number(value) || 0,
+          }))
         }
       />
     );
@@ -329,14 +366,9 @@ function DelaySettings({
       value={String(node.config.minutes)}
       description={`${formatDuration(node.config.minutes)} 待ってから次へ進みます。`}
       onChange={(value) =>
-        onUpdate((current) =>
-          current.type === "delay" && current.config.mode === "relative"
-            ? {
-                ...current,
-                config: { ...current.config, minutes: Math.max(1, Number(value) || 1) },
-              }
-            : current,
-        )
+        patchNodeConfig(onUpdate, delayModeIs("relative"), () => ({
+          minutes: Math.max(1, Number(value) || 1),
+        }))
       }
     />
   );
@@ -355,17 +387,9 @@ function DecisionSettings({
         label="待つ行動"
         value={node.config.event}
         onChange={(value) =>
-          onUpdate((current) =>
-            current.type === "decision"
-              ? {
-                  ...current,
-                  config: {
-                    ...current.config,
-                    event: value as typeof current.config.event,
-                  },
-                }
-              : current,
-          )
+          patchNodeConfig(onUpdate, nodeTypeIs("decision"), (config) => ({
+            event: value as typeof config.event,
+          }))
         }
         options={[
           ["opened", "メール開封"],
@@ -381,14 +405,9 @@ function DecisionSettings({
         value={node.config.resourceId ?? ""}
         placeholder={node.config.event === "custom_event" ? "purchase_completed" : "未指定"}
         onChange={(value) =>
-          onUpdate((current) =>
-            current.type === "decision"
-              ? {
-                  ...current,
-                  config: { ...current.config, resourceId: value || undefined },
-                }
-              : current,
-          )
+          patchNodeConfig(onUpdate, nodeTypeIs("decision"), () => ({
+            resourceId: value || undefined,
+          }))
         }
       />
       <SettingInput
@@ -398,17 +417,9 @@ function DecisionSettings({
         max={525600}
         value={String(node.config.withinMinutes)}
         onChange={(value) =>
-          onUpdate((current) =>
-            current.type === "decision"
-              ? {
-                  ...current,
-                  config: {
-                    ...current.config,
-                    withinMinutes: Math.max(1, Number(value) || 1),
-                  },
-                }
-              : current,
-          )
+          patchNodeConfig(onUpdate, nodeTypeIs("decision"), () => ({
+            withinMinutes: Math.max(1, Number(value) || 1),
+          }))
         }
       />
       <p className="text-xs leading-5 text-muted-foreground">
@@ -432,28 +443,16 @@ function ConditionSettings({
         value={node.config.field}
         placeholder="stage"
         onChange={(value) =>
-          onUpdate((current) =>
-            current.type === "condition"
-              ? { ...current, config: { ...current.config, field: value } }
-              : current,
-          )
+          patchNodeConfig(onUpdate, nodeTypeIs("condition"), () => ({ field: value }))
         }
       />
       <SettingSelect
         label="比較"
         value={node.config.operator}
         onChange={(value) =>
-          onUpdate((current) =>
-            current.type === "condition"
-              ? {
-                  ...current,
-                  config: {
-                    ...current.config,
-                    operator: value as typeof current.config.operator,
-                  },
-                }
-              : current,
-          )
+          patchNodeConfig(onUpdate, nodeTypeIs("condition"), (config) => ({
+            operator: value as typeof config.operator,
+          }))
         }
         options={[
           ["eq", "等しい"],
@@ -474,13 +473,7 @@ function ConditionSettings({
             ? node.config.value
             : String(node.config.value ?? "")
         }
-        onChange={(value) =>
-          onUpdate((current) =>
-            current.type === "condition"
-              ? { ...current, config: { ...current.config, value } }
-              : current,
-          )
-        }
+        onChange={(value) => patchNodeConfig(onUpdate, nodeTypeIs("condition"), () => ({ value }))}
       />
       <p className="text-xs leading-5 text-muted-foreground">
         条件一致は「はい」、不一致は「いいえ」の接続先へ進みます。

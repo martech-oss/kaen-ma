@@ -13,3 +13,14 @@ export const workspaceSchema = z.object({
 });
 
 export type Workspace = z.infer<typeof workspaceSchema>;
+
+export const webhookEndpointRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  url: z.string(),
+  eventTypes: z.array(z.string()),
+  enabled: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type WebhookEndpointRow = z.infer<typeof webhookEndpointRowSchema>;

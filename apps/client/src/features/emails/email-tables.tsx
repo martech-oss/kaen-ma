@@ -1,4 +1,3 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil } from "lucide-react";
 import { type ReactNode } from "react";
 import { toast } from "sonner";
@@ -7,9 +6,13 @@ import { ArchiveConfirm } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { type EmailTemplateRow } from "@/features/emails/email-api";
+import {
+  type EmailTemplateRow,
+  useArchiveEmailTemplate,
+  usePublishEmailTemplate,
+} from "@/features/emails/email-api";
+import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
 
 export function TemplateTable({
   items,
@@ -20,27 +23,24 @@ export function TemplateTable({
   loading: boolean;
   onEdit: (template: EmailTemplateRow) => void;
 }): ReactNode {
-  const queryClient = useQueryClient();
-  const publishTemplate = useMutation(orpcQuery.emails.publishTemplate.mutationOptions());
-  const archiveTemplate = useMutation(orpcQuery.emails.archiveTemplate.mutationOptions());
+  const publishTemplate = usePublishEmailTemplate();
+  const archiveTemplate = useArchiveEmailTemplate();
 
   async function publish(template: EmailTemplateRow) {
     try {
       await publishTemplate.mutateAsync({ id: template.id });
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() });
       toast.success("テンプレートを公開しました");
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "テンプレートを公開できませんでした");
+      toast.error(getErrorMessage(caught, "テンプレートを公開できませんでした"));
     }
   }
 
   async function archive(template: EmailTemplateRow) {
     try {
       await archiveTemplate.mutateAsync({ id: template.id });
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() });
       toast.success("テンプレートをアーカイブしました");
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "アーカイブできませんでした");
+      toast.error(getErrorMessage(caught, "アーカイブできませんでした"));
     }
   }
 

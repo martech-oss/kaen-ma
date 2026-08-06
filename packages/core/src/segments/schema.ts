@@ -7,7 +7,7 @@ import {
   segmentOperatorValues,
 } from "./fields";
 
-export const segmentFieldSchema = z.enum(segmentFieldValues);
+const segmentFieldSchema = z.enum(segmentFieldValues);
 export const segmentOperatorSchema = z.enum(segmentOperatorValues);
 export const segmentValueSchema = z.union([
   z.string(),

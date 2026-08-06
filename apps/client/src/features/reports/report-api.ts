@@ -1,3 +1,5 @@
+import { queryOptions } from "@tanstack/react-query";
+
 import { orpc } from "@/lib/orpc";
 import type {
   AutomationsReport,
@@ -6,14 +8,9 @@ import type {
   EmailsReport,
   ReportCategory,
   SiteReport,
-} from "@openengage/orpc";
+} from "@openengage/core/reports";
 
 export type { AutomationsReport, ContactsReport, DealsReport, EmailsReport, SiteReport };
-
-export interface ReportRange {
-  from: string;
-  to: string;
-}
 
 export type ReportView = "overview" | ReportCategory;
 
@@ -43,6 +40,30 @@ export const reportSearchDefaults: ReportSearch = {
   to: isoDate(today),
   currency: "",
 };
+
+function isReportView(value: unknown): value is ReportView {
+  return (
+    value === "overview" ||
+    value === "contacts" ||
+    value === "automations" ||
+    value === "emails" ||
+    value === "deals" ||
+    value === "site"
+  );
+}
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+export function parseReportSearch(search: Record<string, unknown>): ReportSearch {
+  return {
+    view: isReportView(search.view) ? search.view : "overview",
+    from: isIsoDate(search.from) ? search.from : reportSearchDefaults.from,
+    to: isIsoDate(search.to) ? search.to : reportSearchDefaults.to,
+    currency: typeof search.currency === "string" ? search.currency : "",
+  };
+}
 
 export async function loadReportWorkspace(
   search: ReportSearch,
@@ -75,6 +96,18 @@ export async function loadReportWorkspace(
     case "site":
       return { view: search.view, site: await orpc.reports.site(range, options) };
   }
+}
+
+/**
+ * No single oRPC procedure returns the whole workspace, so the query key is
+ * built by hand instead of via `orpcQuery` — it stays namespaced under
+ * "reports"/"workspace" so it can never collide with an oRPC-generated key.
+ */
+export function reportWorkspaceQueryOptions(search: ReportSearch) {
+  return queryOptions({
+    queryKey: ["reports", "workspace", search] as const,
+    queryFn: ({ signal }) => loadReportWorkspace(search, signal),
+  });
 }
 
 function isoDate(value: Date): string {

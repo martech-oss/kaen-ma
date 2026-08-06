@@ -1,17 +1,17 @@
-import {
-  CompanyRepository,
-  writeAuditLog,
-  type OpenEngageDatabase,
-  type CompanySummary as RepositoryAccountSummary,
-} from "@openengage/database";
 import type {
   Company,
   CompanyContactDto,
   CompanyCreate,
   CompanyDetail,
   CompanyUpdate,
-  WorkspaceContext,
-} from "@openengage/orpc";
+} from "@openengage/core/contacts";
+import type { WorkspaceContext } from "@openengage/core/shared";
+import {
+  CompanyRepository,
+  writeAuditLog,
+  type OpenEngageDatabase,
+  type CompanySummary as RepositoryAccountSummary,
+} from "@openengage/database";
 
 /** Raised when a write conflicts with the unique domain constraint. */
 export class CompanyConflictError extends Error {

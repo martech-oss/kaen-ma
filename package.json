@@ -16,7 +16,7 @@
     "dev": "pnpm db:migrate:local && pnpm --parallel --filter @openengage/client --filter @openengage/agent dev",
     "dev:client": "pnpm --filter @openengage/client dev",
     "deploy": "pnpm --filter @openengage/server deploy && pnpm --filter @openengage/agent deploy && pnpm --filter @openengage/client deploy",
-    "typecheck": "pnpm -r --if-present typecheck",
+    "typecheck": "pnpm cf:types && pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test --passWithNoTests",
     "cf:types": "pnpm --filter @openengage/server cf:types && pnpm --filter @openengage/agent cf:types && pnpm --filter @openengage/client cf:types",
     "db:generate": "pnpm --filter @openengage/database db:generate",

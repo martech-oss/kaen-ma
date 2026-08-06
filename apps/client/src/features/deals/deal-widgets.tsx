@@ -1,42 +1,7 @@
 import { type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { type DealStatus } from "@/features/deals/deal-api";
-
-export function MetricCard({
-  label,
-  value,
-  detail,
-  icon,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: ReactNode;
-}): ReactNode {
-  return (
-    <Card>
-      <CardHeader>
-        <CardDescription>{label}</CardDescription>
-        <CardTitle className="truncate text-xl">{value}</CardTitle>
-        <CardAction>
-          <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-muted-foreground [&>svg]:size-4">
-            {icon}
-          </span>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="text-xs text-muted-foreground">{detail}</CardContent>
-    </Card>
-  );
-}
 
 export function DetailItem({
   label,

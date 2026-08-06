@@ -1,4 +1,4 @@
-import type { SegmentFilter } from "@openengage/orpc";
+import type { SegmentFilter } from "@openengage/core/segments";
 
 import type { ContactSearch } from "./contact-api";
 

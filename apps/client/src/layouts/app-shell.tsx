@@ -154,7 +154,12 @@ export function AppShell({ user }: { user: { name: string; email: string } }): R
             <SidebarGroupContent>
               <SidebarMenu>
                 <PrimaryNavigation items={dashboardNavigation} />
-                <ContactNavigation />
+                <NestedNavigation
+                  to="/contacts"
+                  label="コンタクト"
+                  icon={ContactRound}
+                  items={contactNavigation}
+                />
                 <PrimaryNavigation items={dealNavigation} />
                 <PrimaryNavigation items={automationNavigation} />
                 <NestedNavigation to="/emails" label="メール" icon={Mail} items={emailNavigation} />
@@ -273,38 +278,6 @@ function NestedNavigation({
       </SidebarMenuButton>
       <SidebarMenuSub>
         {items.map((item) => (
-          <SidebarMenuSubItem key={item.to}>
-            <SidebarMenuSubButton
-              render={
-                <Link
-                  to={item.to}
-                  activeOptions={{ exact: true }}
-                  activeProps={{ "data-active": "true" }}
-                />
-              }
-            >
-              <item.icon />
-              <span>{item.label}</span>
-            </SidebarMenuSubButton>
-          </SidebarMenuSubItem>
-        ))}
-      </SidebarMenuSub>
-    </SidebarMenuItem>
-  );
-}
-
-function ContactNavigation(): ReactNode {
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        render={<Link to="/contacts" activeProps={{ "data-active": "true" }} />}
-        tooltip="コンタクト"
-      >
-        <ContactRound />
-        <span>コンタクト</span>
-      </SidebarMenuButton>
-      <SidebarMenuSub>
-        {contactNavigation.map((item) => (
           <SidebarMenuSubItem key={item.to}>
             <SidebarMenuSubButton
               render={

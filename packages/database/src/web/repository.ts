@@ -13,26 +13,32 @@ import {
   sql,
 } from "drizzle-orm";
 
-import {
-  jsonRecordSchema,
-  stringArraySchema,
-  type WorkspaceContext,
-} from "@openengage/core/shared";
+import { jsonRecordSchema, stringArraySchema } from "@openengage/core/shared";
 import {
   contentDocumentSchema,
+  landingPageSchema,
   signupFormDefinitionSchema,
+  signupFormSchema,
+  siteMessageSchema,
+  siteTrackingSchema,
   type ContentDocument,
+  type LandingPage,
   type LandingPageWrite,
+  type SignupForm,
   type SignupFormDefinition,
   type SignupFormWrite,
+  type SiteMessage,
   type SiteMessageWrite,
+  type SiteTracking,
   type SiteTrackingWrite,
 } from "@openengage/core/web";
 
 import { organization } from "../auth/schema";
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contactEvents, contacts } from "../contacts/schema";
-import { decodeJson, decodeNullableJson, encodeJson } from "../shared/json-codec";
+import { changedExactlyOne, nowIso } from "../shared/database-utils";
+import { decodeJson, defineJsonCodec } from "../shared/json-codec";
+import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
+import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import {
   assets,
@@ -44,68 +50,21 @@ import {
   siteTrackingSettings,
 } from "./schema";
 
-export interface SignupFormRecord {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  version: number;
-  definition: SignupFormDefinition;
-  allowedDomains: string[];
-  turnstileEnabled: boolean;
-  successMessage: string;
-  submissionCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface LandingPageRecord {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  currentVersionId: string | null;
-  version: number | null;
-  contentDocument: ContentDocument | null;
-  createdAt: string;
-  updatedAt: string;
-}
+const formDefinitionCodec = defineJsonCodec(signupFormDefinitionSchema, "forms.definition");
+const formAllowedDomainsCodec = defineJsonCodec(stringArraySchema, "forms.allowed_domains");
+const landingPageContentCodec = defineJsonCodec(
+  contentDocumentSchema,
+  "landing_page_versions.content_document",
+);
+const trackingAllowedDomainsCodec = defineJsonCodec(
+  stringArraySchema,
+  "site_tracking_settings.allowed_domains",
+);
 
 export type LandingPageUpdateOutcome =
   | { kind: "not_found" }
   | { kind: "archived" }
   | { kind: "ok"; id: string; versionId: string };
-
-export interface SiteTrackingOverview {
-  settings: { enabled: boolean; allowedDomains: string[]; updatedAt: string } | null;
-  workspaceSlug: string | null;
-  summary: { pageViews: number; uniqueVisitors: number; identifiedContacts: number };
-  topPages: Array<{ url: string | null; views: number }>;
-  recentEvents: Array<{
-    visitorId: string | null;
-    contactId: string | null;
-    resourceId: string | null;
-    properties: Record<string, unknown>;
-    occurredAt: string;
-  }>;
-}
-
-export interface SiteMessageRecord {
-  id: string;
-  name: string;
-  status: string;
-  headline: string;
-  body: string;
-  ctaLabel: string;
-  ctaUrl: string | null;
-  pagePattern: string;
-  startsAt: string | null;
-  endsAt: string | null;
-  impressionCount: number;
-  clickCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export interface PublicFormRecord {
   id: string;
@@ -124,21 +83,9 @@ export interface PublicFormRecord {
  * tracking and site-message endpoints need once they've already resolved a
  * workspace id (via {@link loadPublicTrackingWorkspace}), for cohesion with
  * the rest of the web domain.
- *
- * Scoped by workspace id only (not the full {@link WorkspaceContext}), so a
- * full context is assignable wherever this scope is expected.
  */
-export class WebRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: Pick<WorkspaceContext, "workspaceId">,
-  ) {
-    this.database = createDatabase(database);
-  }
-
-  public async listSignupForms(): Promise<SignupFormRecord[]> {
+export class WebRepository extends WorkspaceRepository {
+  public async listSignupForms(): Promise<SignupForm[]> {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
     const rows = await orm
@@ -167,25 +114,27 @@ export class WebRepository {
       .from(forms)
       .where(and(eq(forms.workspaceId, workspaceId), ne(forms.status, "archived")))
       .orderBy(desc(forms.updatedAt))
-      .limit(200);
-    return rows.map((row) => ({
-      ...row,
-      definition: decodeJson(row.definition, signupFormDefinitionSchema, "forms.definition"),
-      allowedDomains: decodeJson(row.allowedDomains, stringArraySchema, "forms.allowed_domains"),
-    }));
+      .limit(UNPAGINATED_LIST_LIMIT);
+    return rows.map((row) =>
+      signupFormSchema.parse({
+        ...row,
+        definition: formDefinitionCodec.decode(row.definition),
+        allowedDomains: formAllowedDomainsCodec.decode(row.allowedDomains),
+      }),
+    );
   }
 
   public async createSignupForm(input: SignupFormWrite): Promise<{ id: string }> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(forms).values({
       id,
       workspaceId: this.context.workspaceId,
       name: input.name,
       slug: input.slug,
       status: input.status,
-      definition: encodeJson(input.definition, signupFormDefinitionSchema, "forms.definition"),
-      allowedDomains: encodeJson(input.allowedDomains, stringArraySchema, "forms.allowed_domains"),
+      definition: formDefinitionCodec.encode(input.definition),
+      allowedDomains: formAllowedDomainsCodec.encode(input.allowedDomains),
       turnstileEnabled: input.turnstileEnabled,
       successMessage: input.successMessage,
       createdAt: now,
@@ -202,41 +151,25 @@ export class WebRepository {
         slug: input.slug,
         status: input.status,
         version: sql`${forms.version} + 1`,
-        definition: encodeJson(input.definition, signupFormDefinitionSchema, "forms.definition"),
-        allowedDomains: encodeJson(
-          input.allowedDomains,
-          stringArraySchema,
-          "forms.allowed_domains",
-        ),
+        definition: formDefinitionCodec.encode(input.definition),
+        allowedDomains: formAllowedDomainsCodec.encode(input.allowedDomains),
         turnstileEnabled: input.turnstileEnabled,
         successMessage: input.successMessage,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
-      .where(
-        and(
-          eq(forms.workspaceId, this.context.workspaceId),
-          eq(forms.id, id),
-          ne(forms.status, "archived"),
-        ),
-      );
-    return result.meta.changes === 1;
+      .where(and(this.inWorkspace(forms), eq(forms.id, id), ne(forms.status, "archived")));
+    return changedExactlyOne(result);
   }
 
   public async archiveSignupForm(id: string): Promise<boolean> {
     const result = await this.database.orm
       .update(forms)
-      .set({ status: "archived", updatedAt: new Date().toISOString() })
-      .where(
-        and(
-          eq(forms.workspaceId, this.context.workspaceId),
-          eq(forms.id, id),
-          ne(forms.status, "archived"),
-        ),
-      );
-    return result.meta.changes === 1;
+      .set({ status: "archived", updatedAt: nowIso() })
+      .where(and(this.inWorkspace(forms), eq(forms.id, id), ne(forms.status, "archived")));
+    return changedExactlyOne(result);
   }
 
-  public async listLandingPages(): Promise<LandingPageRecord[]> {
+  public async listLandingPages(): Promise<LandingPage[]> {
     const rows = await this.database.orm
       .select({
         id: landingPages.id,
@@ -257,21 +190,14 @@ export class WebRepository {
           eq(landingPageVersions.id, landingPages.currentVersionId),
         ),
       )
-      .where(
-        and(
-          eq(landingPages.workspaceId, this.context.workspaceId),
-          ne(landingPages.status, "archived"),
-        ),
-      )
+      .where(and(this.inWorkspace(landingPages), ne(landingPages.status, "archived")))
       .orderBy(desc(landingPages.updatedAt));
-    return rows.map((row) => ({
-      ...row,
-      contentDocument: decodeNullableJson(
-        row.contentDocument,
-        contentDocumentSchema,
-        "landing_page_versions.content_document",
-      ),
-    }));
+    return rows.map((row) =>
+      landingPageSchema.parse({
+        ...row,
+        contentDocument: landingPageContentCodec.decodeNullable(row.contentDocument),
+      }),
+    );
   }
 
   public async createLandingPage(
@@ -279,7 +205,7 @@ export class WebRepository {
   ): Promise<{ id: string; versionId: string }> {
     const id = uuidv7();
     const versionId = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
     await orm.batch([
@@ -298,11 +224,7 @@ export class WebRepository {
         workspaceId,
         pageId: id,
         version: 1,
-        contentDocument: encodeJson(
-          input.content,
-          contentDocumentSchema,
-          "landing_page_versions.content_document",
-        ),
+        contentDocument: landingPageContentCodec.encode(input.content),
         publishedAt: input.status === "published" ? now : null,
         createdAt: now,
       }),
@@ -337,7 +259,7 @@ export class WebRepository {
       );
     const nextVersion = (versionRow?.maxVersion ?? 0) + 1;
     const versionId = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     await orm.batch([
       orm.insert(landingPageVersions).values({
@@ -345,11 +267,7 @@ export class WebRepository {
         workspaceId,
         pageId: page.id,
         version: nextVersion,
-        contentDocument: encodeJson(
-          input.content,
-          contentDocumentSchema,
-          "landing_page_versions.content_document",
-        ),
+        contentDocument: landingPageContentCodec.encode(input.content),
         publishedAt: input.status === "published" ? now : null,
         createdAt: now,
       }),
@@ -370,19 +288,19 @@ export class WebRepository {
   public async archiveLandingPage(id: string): Promise<boolean> {
     const result = await this.database.orm
       .update(landingPages)
-      .set({ status: "archived", updatedAt: new Date().toISOString() })
+      .set({ status: "archived", updatedAt: nowIso() })
       .where(
         and(
-          eq(landingPages.workspaceId, this.context.workspaceId),
+          this.inWorkspace(landingPages),
           eq(landingPages.id, id),
           ne(landingPages.status, "archived"),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   /** Loads the tracking settings, 30-day summary/top-pages and recent events in one atomic batch. */
-  public async getTrackingOverview(): Promise<SiteTrackingOverview> {
+  public async getTracking(): Promise<SiteTracking> {
     const workspaceId = this.context.workspaceId;
     const orm = this.database.orm;
     const recentWindow = sql`${contactEvents.occurredAt} >= datetime('now', '-30 days')`;
@@ -444,40 +362,34 @@ export class WebRepository {
           .where(eq(organization.id, workspaceId)),
       ]);
     const settingsRow = settingsRows[0];
-    return {
-      settings: settingsRow
-        ? {
-            enabled: settingsRow.enabled,
-            allowedDomains: decodeJson(
-              settingsRow.allowedDomains,
-              stringArraySchema,
-              "site_tracking_settings.allowed_domains",
-            ),
-            updatedAt: settingsRow.updatedAt,
-          }
-        : null,
-      workspaceSlug: organizationRows[0]?.slug ?? null,
+    return siteTrackingSchema.parse({
+      enabled: settingsRow?.enabled ?? false,
+      allowedDomains: settingsRow
+        ? trackingAllowedDomainsCodec.decode(settingsRow.allowedDomains)
+        : [],
+      consentMode: "required",
+      workspaceSlug: organizationRows[0]?.slug ?? "",
       summary: {
         pageViews: summaryRows[0]?.pageViews ?? 0,
         uniqueVisitors: summaryRows[0]?.uniqueVisitors ?? 0,
         identifiedContacts: summaryRows[0]?.identifiedContacts ?? 0,
       },
-      topPages: topPageRows,
+      topPages: topPageRows.map((row) => ({ url: row.url ?? "", views: row.views })),
       recentEvents: recentEventRows.map((row) => ({
-        ...row,
+        visitorId: row.visitorId ?? "",
+        contactId: row.contactId,
+        resourceId: row.resourceId ?? "",
         properties: decodeJson(row.properties, jsonRecordSchema, "contact_events.properties"),
+        occurredAt: row.occurredAt,
       })),
-    };
+      updatedAt: settingsRow?.updatedAt ?? null,
+    });
   }
 
   /** Upserts the singleton tracking-settings row for this workspace. */
   public async saveTrackingSettings(input: SiteTrackingWrite): Promise<void> {
-    const now = new Date().toISOString();
-    const allowedDomains = encodeJson(
-      [...new Set(input.allowedDomains)],
-      stringArraySchema,
-      "site_tracking_settings.allowed_domains",
-    );
+    const now = nowIso();
+    const allowedDomains = trackingAllowedDomainsCodec.encode([...new Set(input.allowedDomains)]);
     await this.database.orm
       .insert(siteTrackingSettings)
       .values({
@@ -494,8 +406,8 @@ export class WebRepository {
       });
   }
 
-  public async listSiteMessages(): Promise<SiteMessageRecord[]> {
-    return await this.database.orm
+  public async listSiteMessages(): Promise<SiteMessage[]> {
+    const rows = await this.database.orm
       .select({
         id: siteMessages.id,
         name: siteMessages.name,
@@ -513,18 +425,14 @@ export class WebRepository {
         updatedAt: siteMessages.updatedAt,
       })
       .from(siteMessages)
-      .where(
-        and(
-          eq(siteMessages.workspaceId, this.context.workspaceId),
-          ne(siteMessages.status, "archived"),
-        ),
-      )
+      .where(and(this.inWorkspace(siteMessages), ne(siteMessages.status, "archived")))
       .orderBy(desc(siteMessages.updatedAt));
+    return rows.map((row) => siteMessageSchema.parse(row));
   }
 
   public async createSiteMessage(input: SiteMessageWrite): Promise<{ id: string }> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(siteMessages).values({
       id,
       workspaceId: this.context.workspaceId,
@@ -556,31 +464,31 @@ export class WebRepository {
         pagePattern: input.pagePattern,
         startsAt: input.startsAt,
         endsAt: input.endsAt,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
       .where(
         and(
-          eq(siteMessages.workspaceId, this.context.workspaceId),
+          this.inWorkspace(siteMessages),
           eq(siteMessages.id, id),
           ne(siteMessages.status, "archived"),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   public async archiveSiteMessage(id: string): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .update(siteMessages)
       .set({ status: "archived", archivedAt: now, updatedAt: now })
       .where(
         and(
-          eq(siteMessages.workspaceId, this.context.workspaceId),
+          this.inWorkspace(siteMessages),
           eq(siteMessages.id, id),
           ne(siteMessages.status, "archived"),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   /** Used by the tracking beacon to attach a page view to a known contact. */
@@ -589,11 +497,7 @@ export class WebRepository {
       .select({ id: contacts.id })
       .from(contacts)
       .where(
-        and(
-          eq(contacts.workspaceId, this.context.workspaceId),
-          eq(contacts.email, email),
-          ne(contacts.status, "archived"),
-        ),
+        and(this.inWorkspace(contacts), eq(contacts.email, email), ne(contacts.status, "archived")),
       )
       .get();
     return row?.id ?? null;
@@ -606,7 +510,7 @@ export class WebRepository {
       .from(contactEvents)
       .where(
         and(
-          eq(contactEvents.workspaceId, this.context.workspaceId),
+          this.inWorkspace(contactEvents),
           eq(contactEvents.visitorId, visitorId),
           isNotNull(contactEvents.contactId),
         ),
@@ -639,7 +543,7 @@ export class WebRepository {
       .from(siteMessages)
       .where(
         and(
-          eq(siteMessages.workspaceId, this.context.workspaceId),
+          this.inWorkspace(siteMessages),
           eq(siteMessages.status, "published"),
           or(isNull(siteMessages.startsAt), lte(siteMessages.startsAt, now)),
           or(isNull(siteMessages.endsAt), gte(siteMessages.endsAt, now)),
@@ -655,7 +559,7 @@ export class WebRepository {
     counter: "impression" | "click",
   ): Promise<boolean> {
     const scope = and(
-      eq(siteMessages.workspaceId, this.context.workspaceId),
+      this.inWorkspace(siteMessages),
       eq(siteMessages.id, messageId),
       eq(siteMessages.status, "published"),
     );
@@ -669,7 +573,7 @@ export class WebRepository {
             .update(siteMessages)
             .set({ clickCount: sql`${siteMessages.clickCount} + 1` })
             .where(scope);
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   /** Direct timeline write, deliberately bypassing automation enrollment (unlike `recordContactEvent`). */
@@ -679,7 +583,7 @@ export class WebRepository {
     messageId: string;
     type: "impression" | "click";
   }): Promise<void> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(contactEvents).values({
       id: uuidv7(),
       workspaceId: this.context.workspaceId,
@@ -702,13 +606,7 @@ export class WebRepository {
  * from the public slug pair, and callers pass the resolved id to every call
  * after that.
  */
-export class PublicFormRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(database: DatabaseSource) {
-    this.database = createDatabase(database);
-  }
-
+export class PublicFormRepository extends DatabaseRepository {
   /** Resolves a published form from its public workspace-slug/form-slug pair. */
   public async findPublishedForm(
     workspaceSlug: string,
@@ -739,8 +637,8 @@ export class PublicFormRepository {
       id: row.id,
       workspaceId: row.workspaceId,
       name: row.name,
-      definition: decodeJson(row.definition, signupFormDefinitionSchema, "forms.definition"),
-      allowedDomains: decodeJson(row.allowedDomains, stringArraySchema, "forms.allowed_domains"),
+      definition: formDefinitionCodec.decode(row.definition),
+      allowedDomains: formAllowedDomainsCodec.decode(row.allowedDomains),
       turnstileEnabled: row.turnstileEnabled,
       successMessage: row.successMessage,
     };
@@ -766,7 +664,7 @@ export class PublicFormRepository {
         firstName: sql`coalesce(${input.firstName}, ${contacts.firstName})`,
         lastName: sql`coalesce(${input.lastName}, ${contacts.lastName})`,
         phone: sql`coalesce(${input.phone}, ${contacts.phone})`,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
       .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.id, contactId)));
   }
@@ -777,7 +675,7 @@ export class PublicFormRepository {
     email: string,
     input: { firstName: string | null; lastName: string | null; phone: string | null },
   ): Promise<void> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(contacts).values({
       id: contactId,
       workspaceId,
@@ -811,7 +709,7 @@ export class PublicFormRepository {
       idempotencyKey: input.idempotencyKey,
       payload: JSON.stringify(input.payload),
       ipHash: input.ipHash,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso(),
     });
   }
 }
@@ -828,13 +726,7 @@ export interface PublicAssetRecord {
 }
 
 /** Validated public reads shared by landing-page and tracking routes. */
-export class PublicWebRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(database: DatabaseSource) {
-    this.database = createDatabase(database);
-  }
-
+export class PublicWebRepository extends DatabaseRepository {
   public async findPublishedLandingPage(
     workspaceSlug: string,
     pageSlug: string,
@@ -864,11 +756,7 @@ export class PublicWebRepository {
     return row
       ? {
           workspaceName: row.workspaceName,
-          contentDocument: decodeJson(
-            row.contentDocument,
-            contentDocumentSchema,
-            "landing_page_versions.content_document",
-          ),
+          contentDocument: landingPageContentCodec.decode(row.contentDocument),
         }
       : null;
   }
@@ -883,14 +771,7 @@ export class PublicWebRepository {
       .where(and(eq(organization.slug, workspaceSlug), eq(siteTrackingSettings.enabled, true)))
       .get();
     return row
-      ? {
-          id: row.id,
-          allowedDomains: decodeJson(
-            row.allowedDomains,
-            stringArraySchema,
-            "site_tracking_settings.allowed_domains",
-          ),
-        }
+      ? { id: row.id, allowedDomains: trackingAllowedDomainsCodec.decode(row.allowedDomains) }
       : null;
   }
 }
@@ -902,13 +783,7 @@ export class PublicWebRepository {
  * three predicates below (workspace slug, public visibility, not archived) is
  * load-bearing, so the query is kept where it can be unit-tested directly.
  */
-export class PublicAssetRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(database: DatabaseSource) {
-    this.database = createDatabase(database);
-  }
-
+export class PublicAssetRepository extends DatabaseRepository {
   public async findPublicAsset(
     workspaceSlug: string,
     assetId: string,

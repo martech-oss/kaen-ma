@@ -11,6 +11,7 @@ import { contract } from "@openengage/orpc";
 
 import type { AppEnvironment } from "../env";
 import { logError } from "../observability";
+import { orpcRequestContext } from "./request-context";
 import { orpcRouter } from "./router";
 
 /**
@@ -32,14 +33,7 @@ export function createOpenApiRequestHandler() {
   return createMiddleware<AppEnvironment>(async (context, next) => {
     const { matched, response } = await handler.handle(context.req.raw, {
       prefix: "/api/v1",
-      context: {
-        database: context.get("database"),
-        requestId: context.get("requestId"),
-        env: context.env,
-        headers: context.req.raw.headers,
-        method: context.req.method,
-        executionContext: context.executionCtx,
-      },
+      context: orpcRequestContext(context),
     });
 
     if (matched) {

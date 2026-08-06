@@ -1,6 +1,7 @@
-import type { Asset, AssetVisibility } from "@openengage/orpc";
+import type { Asset } from "@openengage/core/assets";
+import type { AssetVisibility } from "@openengage/core/shared";
 
-export interface UploadOptions {
+interface UploadOptions {
   file: File;
   visibility?: AssetVisibility;
   onProgress?: (percent: number) => void;

@@ -1,12 +1,15 @@
 import { sql, type SQL } from "drizzle-orm";
 
+import type { ReportDateRange as CoreReportDateRange } from "@openengage/core/reports";
+
 import { user } from "../auth/schema";
 import { automationEnrollments, automations } from "../automations/schema";
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";
 import { dealStages, dealTasks, deals } from "../deals/schema";
 import { deliveries, deliveryEvents, emailTemplates } from "../messaging/schema";
 import { segmentMemberships, segments } from "../segments/schema";
+import { nowIso } from "../shared/database-utils";
+import { DatabaseRepository } from "../shared/repository-base";
 import { formSubmissions, forms, siteMessages } from "../web/schema";
 
 /**
@@ -73,9 +76,8 @@ import { formSubmissions, forms, siteMessages } from "../web/schema";
  */
 type ReportRow = Record<string, unknown>;
 
-export interface ReportDateRange {
-  from: string;
-  to: string;
+/** The core `{ from, to }` range, plus the timestamp bounds these SQL templates bind directly. */
+export interface ReportDateRange extends CoreReportDateRange {
   fromTimestamp: string;
   toExclusiveTimestamp: string;
 }
@@ -123,13 +125,7 @@ export interface DashboardSummaryData {
 }
 
 /** Cross-domain read-only aggregation queries backing `/reports/*` and `/dashboard`. */
-export class ReportsRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(database: DatabaseSource) {
-    this.database = createDatabase(database);
-  }
-
+export class ReportsRepository extends DatabaseRepository {
   /**
    * Runs several independent read-only queries concurrently. Generic over the
    * tuple of queries passed in so each destructured result is `ReportRow[]`
@@ -166,7 +162,7 @@ export class ReportsRepository {
     range: ReportDateRange,
     currency: string,
   ): Promise<DealsSummaryData> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const [summaryRows, trendRows, ownerRows, forecastRows, taskRows] = await this.runBatch(
       sql`
         SELECT

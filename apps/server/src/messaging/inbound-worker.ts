@@ -5,6 +5,7 @@ import { createDatabase, MessagingWorkerRepository, uuidv7 } from "@openengage/d
 import { enrollAutomationsForEvent } from "../automations/enrollment";
 import type { RuntimeEnv } from "../env";
 import { verifySignedToken } from "../platform/crypto";
+import { sanitizeFilename } from "../platform/values";
 
 const maximumInboundSize = 5 * 1024 * 1024;
 
@@ -94,8 +95,4 @@ export async function email(message: ForwardableEmailMessage, env: RuntimeEnv): 
     type: "email_replied",
     resourceId: delivery.id,
   });
-}
-
-function sanitizeFilename(value: string): string {
-  return value.replaceAll(/[^A-Za-z0-9._-]/g, "_").slice(0, 191);
 }

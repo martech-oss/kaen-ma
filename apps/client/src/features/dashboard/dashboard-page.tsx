@@ -1,24 +1,22 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { Activity, Gauge, Send, UsersRound } from "lucide-react";
 import type { ReactNode } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { PageLayout, SimpleEmpty } from "@/components/app-ui";
 import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  MetricCard,
+  MetricGrid,
+  PageLayout,
+  SimpleBarChart,
+  SimpleEmpty,
+} from "@/components/app-ui";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   dashboardQueryOptions,
   deliveryTrendQueryOptions,
   toDeliveryHealthTrend,
 } from "@/features/dashboard/dashboard-api";
-import { formatDateTime, formatShortDate } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import type { Dashboard as DashboardData } from "@openengage/core/reports";
 
 export type { DashboardData };
@@ -52,21 +50,11 @@ export function DashboardPage(): ReactNode {
 
   return (
     <PageLayout title="ダッシュボード">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <MetricGrid>
         {cards.map((card) => (
-          <Card key={card.label}>
-            <CardHeader>
-              <CardDescription>{card.label}</CardDescription>
-              <CardAction>
-                <div className="flex size-8 items-center justify-center rounded-lg bg-muted">
-                  <card.icon className="size-4" />
-                </div>
-              </CardAction>
-              <CardTitle className="text-3xl font-semibold tabular-nums">{card.value}</CardTitle>
-            </CardHeader>
-          </Card>
+          <MetricCard key={card.label} label={card.label} value={card.value} icon={<card.icon />} />
         ))}
-      </div>
+      </MetricGrid>
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <Card className="min-h-80">
           <CardHeader>
@@ -77,45 +65,16 @@ export function DashboardPage(): ReactNode {
             {deliveryHealth.every((point) => point.deliveryRate === 0) ? (
               <SimpleEmpty compact label="この期間の配信データはありません" />
             ) : (
-              <div className="h-44 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={deliveryHealth}
-                    margin={{ top: 8, right: 4, left: -20, bottom: 0 }}
-                  >
-                    <CartesianGrid stroke="var(--border)" vertical={false} />
-                    <XAxis
-                      dataKey="day"
-                      tickFormatter={(value: string) => formatShortDate(value)}
-                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                      tickLine={false}
-                      axisLine={{ stroke: "var(--border)" }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: "var(--muted-foreground)" }}
-                      tickLine={false}
-                      axisLine={false}
-                      width={36}
-                      unit="%"
-                      domain={[0, 100]}
-                    />
-                    <Tooltip
-                      cursor={{ fill: "var(--muted)" }}
-                      labelFormatter={(value) =>
-                        formatShortDate(typeof value === "string" ? value : "")
-                      }
-                      formatter={(value) => [`${Number(value)}%`, "配信到達率"]}
-                      contentStyle={{
-                        backgroundColor: "var(--popover)",
-                        borderColor: "var(--border)",
-                        borderRadius: "var(--radius)",
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar dataKey="deliveryRate" fill="var(--primary)" radius={[2, 2, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <SimpleBarChart
+                data={deliveryHealth.map((point) => ({
+                  day: point.day,
+                  deliveryRate: point.deliveryRate,
+                }))}
+                series={[{ key: "deliveryRate", label: "配信到達率", color: "var(--primary)" }]}
+                height={176}
+                yDomain={[0, 100]}
+                valueFormat={(value) => `${value}%`}
+              />
             )}
           </CardContent>
         </Card>

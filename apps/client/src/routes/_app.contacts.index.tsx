@@ -1,6 +1,6 @@
 import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
 
-import { RouteError, RoutePending } from "@/components/route-status";
+import { routeStatusComponents } from "@/components/route-status";
 import {
   contactOptionsQueryOptions,
   contactSearchDefaults,
@@ -22,8 +22,7 @@ export const Route = createFileRoute("/_app/contacts/")({
       context.queryClient.ensureQueryData(contactOptionsQueryOptions()),
     ]);
   },
-  pendingComponent: RoutePending,
-  errorComponent: RouteError,
+  ...routeStatusComponents,
   component: ContactsRoute,
 });
 

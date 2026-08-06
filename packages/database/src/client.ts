@@ -11,10 +11,10 @@ export type DatabaseSource = D1Database | OpenEngageDatabase;
  *
  * All access goes through `orm`: the Drizzle query builder, or `sql` tagged
  * templates with `${table.column}` interpolation for the handful of queries
- * the builder can't express (see packages/database/src/*​/repository.ts).
- * `all`/`first`/`run` accept a proper drizzle `SQL` object, never a string -
- * apps/server/src contains zero raw SQL (enforced by
- * apps/server/scripts/check-no-raw-sql.mjs).
+ * the builder can't express (see the repository classes under
+ * packages/database/src/*​/*.ts). `all`/`first`/`run` accept a proper drizzle
+ * `SQL` object, never a string - apps/server/src makes no raw `.prepare(`
+ * calls of its own (enforced by apps/server/scripts/check-no-raw-sql.mjs).
  */
 export class OpenEngageDatabase {
   public readonly orm: Database;

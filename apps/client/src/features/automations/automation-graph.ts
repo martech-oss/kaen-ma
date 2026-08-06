@@ -4,7 +4,7 @@ import {
   type AutomationDefinition,
   type AutomationEdge,
   type AutomationNode,
-} from "@openengage/orpc";
+} from "@openengage/core/automations";
 
 import { type EmailTemplateOption } from "./automation-types";
 

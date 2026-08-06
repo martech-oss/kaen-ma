@@ -47,15 +47,6 @@ export function SimpleEmpty({
   return <EmptyState title={label} compact={compact} />;
 }
 
-export function PageLoading({ label = "読み込み中…" }: { label?: string }): ReactNode {
-  return (
-    <div className="flex min-h-72 items-center justify-center gap-2 text-sm text-muted-foreground">
-      <Spinner />
-      {label}
-    </div>
-  );
-}
-
 export function ErrorAlert({ children }: { children: ReactNode }): ReactNode {
   return (
     <Alert variant="destructive">

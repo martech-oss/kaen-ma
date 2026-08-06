@@ -38,3 +38,12 @@ export function encodeJson<T>(value: unknown, schema: RuntimeSchema<T>, field: s
     throw new DatabaseDecodeError(field, { cause });
   }
 }
+
+/** Binds a schema to one `table.column` field, so call sites stop repeating the pair. */
+export function defineJsonCodec<T>(schema: RuntimeSchema<T>, field: string) {
+  return {
+    decode: (value: string): T => decodeJson(value, schema, field),
+    decodeNullable: (value: string | null): T | null => decodeNullableJson(value, schema, field),
+    encode: (value: unknown): string => encodeJson(value, schema, field),
+  };
+}

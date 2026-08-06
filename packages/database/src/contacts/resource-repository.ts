@@ -1,43 +1,26 @@
 import { and, asc, count, desc, eq, exists, inArray, ne, sql, type SQL } from "drizzle-orm";
 
+import { type ContactTimelineEvent } from "@openengage/core/contacts";
 import { segmentFilterSchema, type SegmentFilter } from "@openengage/core/segments";
-import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
+import { jsonRecordSchema } from "@openengage/core/shared";
 
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { deliveries } from "../messaging/schema";
 import { segmentMemberships, segments } from "../segments/schema";
+import { didChange, nowIso } from "../shared/database-utils";
 import { decodeJson, decodeNullableJson } from "../shared/json-codec";
+import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { companies, companyContacts, contactEvents, contacts, contactTags, tags } from "./schema";
 import { scoreEvents } from "./score-schema";
 
-export interface ContactEventRow {
-  id: string;
-  type: string;
-  resourceType: string | null;
-  resourceId: string | null;
-  properties: Record<string, unknown>;
-  occurredAt: string;
-}
+/** Cap on the score-event and timeline previews shown in the contact detail drawer. */
+const CONTACT_DETAIL_FEED_LIMIT = 100;
 
 /**
  * Queries for the resources hanging off a contact: tags, segments, accounts,
  * score events and the activity timeline.
- *
- * Scoped by workspace id only (not the full {@link WorkspaceContext}), because
- * the timeline and public event endpoints resolve just the workspace id.
- * A full context is assignable wherever this scope is expected.
  */
-export class ContactResourceRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: Pick<WorkspaceContext, "workspaceId">,
-  ) {
-    this.database = createDatabase(database);
-  }
-
+export class ContactResourceRepository extends WorkspaceRepository {
   /** Loads every filter option for the contact list page in one atomic batch. */
   public async getContactOptionRows() {
     const workspaceId = this.context.workspaceId;
@@ -184,8 +167,8 @@ export class ContactResourceRepository {
         .from(scoreEvents)
         .where(and(eq(scoreEvents.workspaceId, workspaceId), eq(scoreEvents.contactId, contactId)))
         .orderBy(desc(scoreEvents.createdAt))
-        .limit(100),
-      this.contactEventsQuery(contactId, 100),
+        .limit(CONTACT_DETAIL_FEED_LIMIT),
+      this.contactEventsQuery(contactId, CONTACT_DETAIL_FEED_LIMIT),
     ]);
     return {
       tags: tagRows,
@@ -197,7 +180,10 @@ export class ContactResourceRepository {
   }
 
   /** Newest-first activity feed for one contact. */
-  public async listContactEvents(contactId: string, limit: number): Promise<ContactEventRow[]> {
+  public async listContactEvents(
+    contactId: string,
+    limit: number,
+  ): Promise<ContactTimelineEvent[]> {
     const rows = await this.contactEventsQuery(contactId, limit);
     return rows.map(toContactEvent);
   }
@@ -256,7 +242,7 @@ export class ContactResourceRepository {
     const row = await this.database.orm
       .select({ id: contacts.id })
       .from(contacts)
-      .where(and(eq(contacts.workspaceId, this.context.workspaceId), eq(contacts.id, contactId)))
+      .where(and(this.inWorkspace(contacts), eq(contacts.id, contactId)))
       .get();
     return row !== undefined;
   }
@@ -267,7 +253,7 @@ export class ContactResourceRepository {
       .from(contacts)
       .where(
         and(
-          eq(contacts.workspaceId, this.context.workspaceId),
+          this.inWorkspace(contacts),
           eq(contacts.id, contactId),
           ne(contacts.status, "archived"),
         ),
@@ -289,7 +275,7 @@ export class ContactResourceRepository {
       name: input.name,
       slug: input.slug,
       color: input.color,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso(),
     });
   }
 
@@ -346,7 +332,7 @@ export class ContactResourceRepository {
     input: { delta: number; reason: string },
   ): Promise<boolean> {
     const workspaceId = this.context.workspaceId;
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     const contactFilter = and(
       eq(contacts.workspaceId, workspaceId),
@@ -373,13 +359,13 @@ export class ContactResourceRepository {
           .where(contactFilter),
       ),
     ]);
-    return updated.meta.changes > 0;
+    return didChange(updated);
   }
 
   /** Archives or restores many contacts at once, regardless of current status. */
   /** Archiving also scrubs the plaintext email off those contacts' email deliveries (see archiveContact). */
   public async bulkSetContactsArchived(contactIds: string[], archived: boolean): Promise<number> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     const contactsUpdate = orm
       .update(contacts)
@@ -388,9 +374,7 @@ export class ContactResourceRepository {
         archivedAt: archived ? now : null,
         updatedAt: now,
       })
-      .where(
-        and(eq(contacts.workspaceId, this.context.workspaceId), inArray(contacts.id, contactIds)),
-      );
+      .where(and(this.inWorkspace(contacts), inArray(contacts.id, contactIds)));
     if (!archived) {
       const result = await contactsUpdate;
       return result.meta.changes;
@@ -402,7 +386,7 @@ export class ContactResourceRepository {
         .set({ recipient: null })
         .where(
           and(
-            eq(deliveries.workspaceId, this.context.workspaceId),
+            this.inWorkspace(deliveries),
             inArray(deliveries.contactId, contactIds),
             eq(deliveries.channel, "email"),
           ),
@@ -422,12 +406,7 @@ export class ContactResourceRepository {
         occurredAt: contactEvents.occurredAt,
       })
       .from(contactEvents)
-      .where(
-        and(
-          eq(contactEvents.workspaceId, this.context.workspaceId),
-          eq(contactEvents.contactId, contactId),
-        ),
-      )
+      .where(and(this.inWorkspace(contactEvents), eq(contactEvents.contactId, contactId)))
       .orderBy(desc(contactEvents.occurredAt), desc(contactEvents.id))
       .limit(limit);
   }
@@ -437,7 +416,7 @@ export class ContactResourceRepository {
    * already exist. Returns the number of rows actually written.
    */
   private async insertTagMemberships(contactFilter: SQL, tagId: string): Promise<number> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .insert(contactTags)
       .select(
@@ -452,7 +431,7 @@ export class ContactResourceRepository {
           .innerJoin(tags, eq(tags.workspaceId, contacts.workspaceId))
           .where(
             and(
-              eq(contacts.workspaceId, this.context.workspaceId),
+              this.inWorkspace(contacts),
               contactFilter,
               ne(contacts.status, "archived"),
               eq(tags.id, tagId),
@@ -467,7 +446,7 @@ export class ContactResourceRepository {
   private async deleteTagMemberships(contactFilter: SQL, tagId: string): Promise<number> {
     const result = await this.database.orm.delete(contactTags).where(
       and(
-        eq(contactTags.workspaceId, this.context.workspaceId),
+        this.inWorkspace(contactTags),
         contactFilter,
         eq(contactTags.tagId, tagId),
         exists(
@@ -493,7 +472,7 @@ export class ContactResourceRepository {
    * Returns the number of rows actually written.
    */
   private async insertSegmentMemberships(contactFilter: SQL, segmentId: string): Promise<number> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .insert(segmentMemberships)
       .select(
@@ -509,7 +488,7 @@ export class ContactResourceRepository {
           .innerJoin(segments, eq(segments.workspaceId, contacts.workspaceId))
           .where(
             and(
-              eq(contacts.workspaceId, this.context.workspaceId),
+              this.inWorkspace(contacts),
               contactFilter,
               ne(contacts.status, "archived"),
               eq(segments.id, segmentId),
@@ -528,7 +507,7 @@ export class ContactResourceRepository {
   private async deleteSegmentMemberships(contactFilter: SQL, segmentId: string): Promise<number> {
     const result = await this.database.orm.delete(segmentMemberships).where(
       and(
-        eq(segmentMemberships.workspaceId, this.context.workspaceId),
+        this.inWorkspace(segmentMemberships),
         contactFilter,
         eq(segmentMemberships.segmentId, segmentId),
         eq(segmentMemberships.source, "static"),
@@ -550,9 +529,9 @@ export class ContactResourceRepository {
   }
 }
 
-type ContactEventQueryRow = Omit<ContactEventRow, "properties"> & { properties: string };
+type ContactEventQueryRow = Omit<ContactTimelineEvent, "properties"> & { properties: string };
 
-function toContactEvent(row: ContactEventQueryRow): ContactEventRow {
+function toContactEvent(row: ContactEventQueryRow): ContactTimelineEvent {
   return {
     ...row,
     properties: decodeJson(row.properties, jsonRecordSchema, "contact_events.properties"),

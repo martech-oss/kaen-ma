@@ -24,32 +24,18 @@ import {
 } from "@openengage/core/contacts";
 import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
 
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { deliveries } from "../messaging/schema";
 import { segmentMemberships } from "../segments/schema";
-import { escapeLike } from "../shared/database-utils";
+import { didChange, ensureLoaded, likeContains, nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
+import type { CursorPage } from "../shared/pagination";
+import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { companyContacts, contacts, contactTags } from "./schema";
 
-export interface CursorPage<T> {
-  items: T[];
-  total: number;
-  nextCursor?: string;
-}
-
 type ContactRow = typeof contacts.$inferSelect;
 
-export class ContactRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: WorkspaceContext,
-  ) {
-    this.database = createDatabase(database);
-  }
-
+export class ContactRepository extends WorkspaceRepository<WorkspaceContext> {
   public async listContacts(input: {
     cursor?: string | undefined;
     limit?: number | undefined;
@@ -65,7 +51,7 @@ export class ContactRepository {
     direction?: "asc" | "desc" | undefined;
   }): Promise<CursorPage<Contact>> {
     const limit = Math.min(Math.max(input.limit ?? 50, 1), 100);
-    const conditions: SQL[] = [eq(contacts.workspaceId, this.context.workspaceId)];
+    const conditions: SQL[] = [this.inWorkspace(contacts)];
     const ascending = input.direction === "asc";
     const sortColumn = {
       createdAt: contacts.createdAt,
@@ -75,14 +61,14 @@ export class ContactRepository {
       email: sql<string>`coalesce(${contacts.email}, '')`,
     }[input.sort ?? "updatedAt"];
     if (input.query) {
-      const query = `%${escapeLike(input.query)}%`;
+      const query = input.query;
       conditions.push(
         or(
-          escapedLike(contacts.email, query),
-          escapedLike(contacts.firstName, query),
-          escapedLike(contacts.lastName, query),
-          escapedLike(contacts.phone, query),
-          escapedLike(contacts.externalId, query),
+          likeContains(contacts.email, query),
+          likeContains(contacts.firstName, query),
+          likeContains(contacts.lastName, query),
+          likeContains(contacts.phone, query),
+          likeContains(contacts.externalId, query),
         )!,
       );
     }
@@ -156,9 +142,7 @@ export class ContactRepository {
       const [cursor] = await this.database.orm
         .select({ sortValue: sortColumn })
         .from(contacts)
-        .where(
-          and(eq(contacts.workspaceId, this.context.workspaceId), eq(contacts.id, input.cursor)),
-        )
+        .where(and(this.inWorkspace(contacts), eq(contacts.id, input.cursor)))
         .limit(1);
       if (cursor) {
         pageConditions.push(
@@ -191,14 +175,14 @@ export class ContactRepository {
 
   public async getContact(id: string): Promise<Contact | null> {
     const row = await this.database.orm.query.contacts.findFirst({
-      where: and(eq(contacts.workspaceId, this.context.workspaceId), eq(contacts.id, id)),
+      where: and(this.inWorkspace(contacts), eq(contacts.id, id)),
     });
     return row ? toContact(row) : null;
   }
 
   public async createContact(input: ContactCreate): Promise<Contact> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(contacts).values({
       id,
       workspaceId: this.context.workspaceId,
@@ -214,9 +198,7 @@ export class ContactRepository {
       createdAt: now,
       updatedAt: now,
     });
-    const contact = await this.getContact(id);
-    if (!contact) throw new Error("Created contact could not be loaded");
-    return contact;
+    return ensureLoaded(await this.getContact(id), "Created contact");
   }
 
   public async updateContact(id: string, input: ContactUpdate): Promise<Contact | null> {
@@ -241,9 +223,9 @@ export class ContactRepository {
         externalId: fields.externalId,
         stage: fields.stage,
         customFields: JSON.stringify(fields.customFields),
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
-      .where(and(eq(contacts.workspaceId, this.context.workspaceId), eq(contacts.id, id)));
+      .where(and(this.inWorkspace(contacts), eq(contacts.id, id)));
     return this.getContact(id);
   }
 
@@ -255,45 +237,35 @@ export class ContactRepository {
    * see the P9 notes on this.
    */
   public async archiveContact(id: string): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     const [updated] = await orm.batch([
       orm
         .update(contacts)
         .set({ status: "archived", archivedAt: now, updatedAt: now })
         .where(
-          and(
-            eq(contacts.workspaceId, this.context.workspaceId),
-            eq(contacts.id, id),
-            ne(contacts.status, "archived"),
-          ),
+          and(this.inWorkspace(contacts), eq(contacts.id, id), ne(contacts.status, "archived")),
         ),
       orm
         .update(deliveries)
         .set({ recipient: null })
         .where(
           and(
-            eq(deliveries.workspaceId, this.context.workspaceId),
+            this.inWorkspace(deliveries),
             eq(deliveries.contactId, id),
             eq(deliveries.channel, "email"),
           ),
         ),
     ]);
-    return updated.meta.changes > 0;
+    return didChange(updated);
   }
 
   public async restoreContact(id: string): Promise<boolean> {
     const result = await this.database.orm
       .update(contacts)
-      .set({ status: "active", archivedAt: null, updatedAt: new Date().toISOString() })
-      .where(
-        and(
-          eq(contacts.workspaceId, this.context.workspaceId),
-          eq(contacts.id, id),
-          eq(contacts.status, "archived"),
-        ),
-      );
-    return result.meta.changes > 0;
+      .set({ status: "active", archivedAt: null, updatedAt: nowIso() })
+      .where(and(this.inWorkspace(contacts), eq(contacts.id, id), eq(contacts.status, "archived")));
+    return didChange(result);
   }
 }
 
@@ -315,10 +287,6 @@ function toContact(row: ContactRow): Contact {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   });
-}
-
-function escapedLike(column: SQLWrapper, pattern: string): SQL {
-  return sql`${column} LIKE ${pattern} ESCAPE '\\'`;
 }
 
 function compare(column: SQLWrapper, value: string | number, ascending: boolean): SQL {

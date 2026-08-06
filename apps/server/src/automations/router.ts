@@ -1,9 +1,9 @@
-import { validateAutomation } from "@openengage/core";
+import { validateAutomation } from "@openengage/core/automations";
 import type { AutomationDefinition } from "@openengage/core/automations";
 import { AutomationRepository, uuidv7 } from "@openengage/database";
+import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
-import { isRecord } from "../platform/values";
 import { getAutomationAnalytics } from "./analytics-service";
 import { enrollContactManually } from "./enrollment";
 import { listAutomations, normalizeAutomationStatus } from "./list-service";
@@ -48,7 +48,7 @@ export const saveAutomationDraftProcedure = authed.automations.saveDraft.handler
       graph: definition,
     });
     if (!updated) throw errors.DRAFT_NOT_EDITABLE();
-    return { updated: true as const };
+    return ack;
   },
 );
 
@@ -154,6 +154,3 @@ export const automationProcedures = {
   enroll: enrollAutomationProcedure,
   analytics: automationAnalyticsProcedure,
 };
-
-// isRecord is re-exported for the client-side error shape check in tests.
-export { isRecord };

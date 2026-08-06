@@ -1,65 +1,81 @@
 import { implement } from "@orpc/server";
 
+import type { WorkspaceRole } from "@openengage/core/shared";
 import { contract } from "@openengage/orpc";
-import type { WorkspaceRole } from "@openengage/orpc";
 
 import {
   resolveSessionWorkspaceAccess,
   resolveWorkspaceAccess,
   WorkspaceAccessError,
+  type WorkspaceAccess,
 } from "../auth/access";
 import { hasWorkspaceRole } from "../auth/authorization";
 import type { OrpcInitialContext } from "./context";
 
 export const os = implement(contract).$context<OrpcInitialContext>();
 
-const requireWorkspace = os.middleware(async ({ context, next, errors }) => {
-  try {
-    const access = await resolveWorkspaceAccess({
-      database: context.database,
-      env: context.env,
-      headers: context.headers,
-      method: context.method,
-      executionContext: context.executionContext,
-    });
-    return next({ context: access });
-  } catch (error) {
-    if (!(error instanceof WorkspaceAccessError)) throw error;
-    switch (error.code) {
-      case "invalid_api_key":
-        throw errors.INVALID_API_KEY();
-      case "origin_mismatch":
-        throw errors.ORIGIN_MISMATCH();
-      case "workspace_required":
-        throw errors.WORKSPACE_REQUIRED();
-      case "unauthorized":
-        throw errors.UNAUTHORIZED();
+type AccessInput = Pick<
+  OrpcInitialContext,
+  "database" | "env" | "headers" | "method" | "executionContext"
+>;
+
+type AccessErrorKey = "INVALID_API_KEY" | "ORIGIN_MISMATCH" | "WORKSPACE_REQUIRED" | "UNAUTHORIZED";
+
+/**
+ * Builds an oRPC middleware around one of the `resolve*WorkspaceAccess`
+ * functions in `auth/access.ts`, mapping its `WorkspaceAccessError.code` to
+ * the contract error each auth mode wants to raise for it.
+ *
+ * `resolve` is deliberately typed concretely (not generic over its return
+ * type): oRPC's `os.middleware()` infers the downstream context shape from
+ * this callback's literal return type, and a generic here collapses that
+ * inference so `context.workspace` disappears in every router.
+ */
+function createAccessMiddleware(
+  resolve: (input: AccessInput) => Promise<WorkspaceAccess>,
+  mapCode: (code: WorkspaceAccessError["code"]) => AccessErrorKey,
+) {
+  return os.middleware(async ({ context, next, errors }) => {
+    try {
+      const access = await resolve({
+        database: context.database,
+        env: context.env,
+        headers: context.headers,
+        method: context.method,
+        executionContext: context.executionContext,
+      });
+      return next({ context: access });
+    } catch (error) {
+      if (!(error instanceof WorkspaceAccessError)) throw error;
+      throw errors[mapCode(error.code)]();
     }
+  });
+}
+
+const requireWorkspace = createAccessMiddleware(resolveWorkspaceAccess, (code) => {
+  switch (code) {
+    case "invalid_api_key":
+      return "INVALID_API_KEY";
+    case "origin_mismatch":
+      return "ORIGIN_MISMATCH";
+    case "workspace_required":
+      return "WORKSPACE_REQUIRED";
+    case "unauthorized":
+      return "UNAUTHORIZED";
   }
 });
 
 export const authed = os.use(requireWorkspace);
 
-const requireSessionWorkspace = os.middleware(async ({ context, next, errors }) => {
-  try {
-    const access = await resolveSessionWorkspaceAccess({
-      database: context.database,
-      env: context.env,
-      headers: context.headers,
-      method: context.method,
-    });
-    return next({ context: access });
-  } catch (error) {
-    if (!(error instanceof WorkspaceAccessError)) throw error;
-    switch (error.code) {
-      case "origin_mismatch":
-        throw errors.ORIGIN_MISMATCH();
-      case "workspace_required":
-        throw errors.WORKSPACE_REQUIRED();
-      case "unauthorized":
-      case "invalid_api_key":
-        throw errors.UNAUTHORIZED();
-    }
+const requireSessionWorkspace = createAccessMiddleware(resolveSessionWorkspaceAccess, (code) => {
+  switch (code) {
+    case "origin_mismatch":
+      return "ORIGIN_MISMATCH";
+    case "workspace_required":
+      return "WORKSPACE_REQUIRED";
+    case "unauthorized":
+    case "invalid_api_key":
+      return "UNAUTHORIZED";
   }
 });
 

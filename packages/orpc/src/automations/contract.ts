@@ -7,12 +7,8 @@ import {
   automationRowSchema,
 } from "@openengage/core/automations";
 
-import { workspaceErrors } from "../shared/errors";
-
-const forbidden = {
-  FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
-} as const;
-const base = { ...workspaceErrors, ...forbidden } as const;
+import { authedErrors, workspaceErrors } from "../shared/errors";
+import { ackSchema, idInput } from "../shared/schemas";
 
 export const automationsContract = {
   list: oc
@@ -21,7 +17,7 @@ export const automationsContract = {
     .output(z.array(automationRowSchema)),
   create: oc
     .route({ method: "POST", path: "/automations", successStatus: 201 })
-    .errors(base)
+    .errors(authedErrors)
     .input(automationDefinitionSchema)
     .output(z.object({ id: z.string(), draftVersionId: z.string() })),
   getDraft: oc
@@ -30,34 +26,34 @@ export const automationsContract = {
       ...workspaceErrors,
       AUTOMATION_NOT_FOUND: { status: 404, message: "オートメーションが見つかりません" },
     })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(automationDraftSchema),
   saveDraft: oc
     .route({ method: "PUT", path: "/automations/{id}/draft" })
     .errors({
-      ...base,
+      ...authedErrors,
       // Distinct from "automation not found": the automation exists but has
       // no editable draft, which is what the route reports here.
       DRAFT_NOT_EDITABLE: { status: 404, message: "編集可能な下書きが見つかりません" },
     })
     .input(automationDefinitionSchema.extend({ id: z.string().min(1) }))
-    .output(z.object({ updated: z.literal(true) })),
+    .output(ackSchema),
   publish: oc
     .route({ method: "POST", path: "/automations/{id}/publish" })
     .errors({
-      ...base,
+      ...authedErrors,
       DRAFT_NOT_FOUND: { status: 404, message: "下書きが見つかりません" },
       // Covers every publish-time rejection: an unpublishable graph, a missing
       // source node, or an email node pointing at an unsynced template. The
       // specific reason is supplied at throw time.
       INVALID_GRAPH: { status: 422, message: "公開できないグラフです" },
     })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(z.object({ publishedVersionId: z.string(), draftVersionId: z.string() })),
   setStatus: oc
     .route({ method: "POST", path: "/automations/{id}/status" })
     .errors({
-      ...base,
+      ...authedErrors,
       NOT_CHANGEABLE: { status: 409, message: "公開済みフローがありません" },
     })
     .input(z.object({ id: z.string().min(1), status: z.enum(["active", "paused"]) }))
@@ -65,7 +61,7 @@ export const automationsContract = {
   enroll: oc
     .route({ method: "POST", path: "/automations/{id}/enroll", successStatus: 202 })
     .errors({
-      ...base,
+      ...authedErrors,
       AUTOMATION_NOT_ACTIVE: { status: 404, message: "公開中のオートメーションがありません" },
       SOURCE_MISSING: { status: 422, message: "Sourceノードがありません" },
       ALREADY_ENROLLED: { status: 409, message: "このイベントでは既に参加済みです" },
@@ -81,7 +77,7 @@ export const automationsContract = {
   analytics: oc
     .route({ method: "GET", path: "/automations/{id}/analytics" })
     .errors(workspaceErrors)
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(
       z.object({
         enrollments: z.array(

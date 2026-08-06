@@ -1,20 +1,21 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { Code2, ExternalLink, Pencil, Plus, Rows3 } from "lucide-react";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { Code2, ExternalLink, Pencil, Rows3 } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
   ArchiveConfirm,
+  CopyButton,
   FormDialog,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
   FormTextarea,
-  PageLayout,
+  MetricCard,
+  MetricGrid,
 } from "@/components/app-ui";
-import { type DataTableColumn, DataTable } from "@/components/data-table";
+import { type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
@@ -27,38 +28,35 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
+import { WebsiteResourceListPage } from "@/features/website/resource-page";
 import {
   signupFormsQueryOptions,
   type SignupFormDefinition,
   type SignupFormRow,
+  useArchiveSignupForm,
+  useCreateSignupForm,
+  useUpdateSignupForm,
 } from "@/features/website/website-api";
-import { CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
-import { useFormSubmission } from "@/hooks/use-form-submission";
+import { PublishStatusBadge } from "@/features/website/website-shared";
+import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
+import { getFormString } from "@/lib/form-data";
 import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
-import { getFormString, slugify } from "@/lib/utils";
+import { slugify } from "@/lib/utils";
 
 export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
-  const queryClient = useQueryClient();
   const { data: items } = useSuspenseQuery(signupFormsQueryOptions());
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<SignupFormRow | null>(null);
+  const { dialogOpen, editing, openCreate, openEdit, close, onOpenChange } =
+    useResourceEditor<SignupFormRow>();
 
-  const archiveForm = useMutation(orpcQuery.website.archiveForm.mutationOptions());
-
-  async function refresh(): Promise<void> {
-    setDialogOpen(false);
-    setEditing(null);
-    await queryClient.invalidateQueries({ queryKey: orpcQuery.website.listForms.key() });
-  }
+  const archiveForm = useArchiveSignupForm();
 
   async function archive(item: SignupFormRow): Promise<void> {
     try {
       await archiveForm.mutateAsync({ id: item.id });
       toast.success("サインアップフォームをアーカイブしました");
-      await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "アーカイブできませんでした");
+      toast.error(getErrorMessage(error, "アーカイブできませんでした"));
     }
   }
 
@@ -127,10 +125,7 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
               size="sm"
               variant="ghost"
               aria-label={`${item.name}を編集`}
-              onClick={() => {
-                setEditing(item);
-                setDialogOpen(true);
-              }}
+              onClick={() => openEdit(item)}
             >
               <Pencil />
             </Button>
@@ -147,46 +142,29 @@ export function SignupFormsPage({ workspaceSlug }: { workspaceSlug: string }): R
   ];
 
   return (
-    <PageLayout
+    <WebsiteResourceListPage
       title="サインアップフォーム"
-      action={
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus data-icon="inline-start" />
-          フォームを作成
-        </Button>
+      createLabel="フォームを作成"
+      onCreateClick={openCreate}
+      summary={<FormSummary items={items} />}
+      listTitle="フォーム一覧"
+      listDescription="公開状態、フォーム形式、送信数を確認できます。"
+      columns={columns}
+      rows={items}
+      rowKey={(item) => item.id}
+      tableCaption="フォーム一覧"
+      emptyTitle="サインアップフォームがありません"
+      emptyDescription="最初のフォームを作成すると、公開URLから連絡先を獲得できます。"
+      editor={
+        <SignupFormEditor
+          key={editing?.id ?? "new"}
+          item={editing}
+          open={dialogOpen}
+          onOpenChange={onOpenChange}
+          onSaved={close}
+        />
       }
-    >
-      <FormSummary items={items} />
-      <Card>
-        <CardHeader>
-          <CardTitle>フォーム一覧</CardTitle>
-          <CardDescription>公開状態、フォーム形式、送信数を確認できます。</CardDescription>
-        </CardHeader>
-        <CardContent className="px-0">
-          <DataTable
-            columns={columns}
-            rows={items}
-            rowKey={(item) => item.id}
-            caption="フォーム一覧"
-            emptyTitle="サインアップフォームがありません"
-            emptyDescription="最初のフォームを作成すると、公開URLから連絡先を獲得できます。"
-          />
-        </CardContent>
-      </Card>
-
-      <SignupFormEditor
-        key={editing?.id ?? "new"}
-        item={editing}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSaved={refresh}
-      />
-    </PageLayout>
+    />
   );
 }
 
@@ -194,7 +172,7 @@ function FormSummary({ items }: { items: SignupFormRow[] }): ReactNode {
   const published = items.filter((item) => item.status === "published").length;
   const submissions = items.reduce((total, item) => total + item.submissionCount, 0);
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <MetricGrid className="sm:grid-cols-3">
       {[
         {
           label: "フォーム",
@@ -215,18 +193,19 @@ function FormSummary({ items }: { items: SignupFormRow[] }): ReactNode {
           icon: Code2,
         },
       ].map((item) => (
-        <Card key={item.label}>
-          <CardHeader>
-            <CardDescription>{item.label}</CardDescription>
-            <CardTitle className="text-2xl">{item.value.toLocaleString()}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-            <item.icon />
-            {item.description}
-          </CardContent>
-        </Card>
+        <MetricCard
+          key={item.label}
+          label={item.label}
+          value={item.value}
+          description={
+            <div className="flex items-center gap-2 text-sm">
+              <item.icon />
+              {item.description}
+            </div>
+          }
+        />
       ))}
-    </div>
+    </MetricGrid>
   );
 }
 
@@ -239,7 +218,7 @@ function SignupFormEditor({
   item: SignupFormRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }): ReactNode {
   const initialFields = useMemo(
     () => new Set(item?.definition.fields?.map((field) => field.key) ?? []),
@@ -255,8 +234,8 @@ function SignupFormEditor({
     ),
   );
 
-  const createForm = useMutation(orpcQuery.website.createForm.mutationOptions());
-  const updateForm = useMutation(orpcQuery.website.updateForm.mutationOptions());
+  const createForm = useCreateSignupForm();
+  const updateForm = useUpdateSignupForm();
 
   function toggleField(field: string, checked: boolean): void {
     setOptionalFields((current) => {
@@ -296,13 +275,17 @@ function SignupFormEditor({
       turnstileEnabled,
       successMessage: getFormString(formData, "successMessage"),
     } as const;
-    await run(async () => {
-      await (item
-        ? updateForm.mutateAsync({ id: item.id, ...payload })
-        : createForm.mutateAsync(payload));
-      toast.success(item ? "フォームを更新しました" : "フォームを作成しました");
-      await onSaved();
-    });
+    await run(() =>
+      saveResource({
+        editing: item,
+        payload,
+        create: (data) => createForm.mutateAsync(data),
+        update: (id, data) => updateForm.mutateAsync({ id, ...data }),
+        createdMessage: "フォームを作成しました",
+        updatedMessage: "フォームを更新しました",
+        onSaved,
+      }),
+    );
   }
 
   return (

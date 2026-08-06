@@ -8,12 +8,6 @@ import { contract } from "@openengage/orpc";
 
 import { seedWorkspace } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 function createClient(token?: string): ContractRouterClient<typeof contract> {
   const link = new RPCLink({
     url: "http://localhost:8787/api/rpc",

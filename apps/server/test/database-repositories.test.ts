@@ -15,25 +15,26 @@ import {
   contactTags,
   contacts,
   createDatabase,
+  IdempotencyRepository,
   member,
   organization,
-  reserveIdempotencyKey,
   resolveMemberContext,
   segmentMemberships,
   segments,
   tags,
-  user,
   uuidv7,
   writeAuditLog,
 } from "@openengage/database";
-import type { WorkspaceContext, WorkspaceRole } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/orpc";
+
+import { seedWorkspaceContext } from "./factory";
 
 const database = () => createDatabase(env.DB);
 
 describe("contact and account repositories", () => {
   it("keeps reads and writes scoped to the current workspace", async () => {
-    const first = await seedWorkspace("first");
-    const second = await seedWorkspace("second");
+    const first = await seedWorkspaceContext(env.DB, "first");
+    const second = await seedWorkspaceContext(env.DB, "second");
     const firstRepository = new ContactRepository(env.DB, first);
     const secondRepository = new ContactRepository(env.DB, second);
 
@@ -60,7 +61,7 @@ describe("contact and account repositories", () => {
   });
 
   it("paginates deterministically and treats LIKE wildcards as literals", async () => {
-    const context = await seedWorkspace("paging");
+    const context = await seedWorkspaceContext(env.DB, "paging");
     const repository = new ContactRepository(env.DB, context);
     const alpha = await repository.createContact({
       email: "alpha@example.com",
@@ -102,7 +103,7 @@ describe("contact and account repositories", () => {
   });
 
   it("filters through relationships and excludes archived contacts from account totals", async () => {
-    const context = await seedWorkspace("relations");
+    const context = await seedWorkspaceContext(env.DB, "relations");
     const contactRepository = new ContactRepository(env.DB, context);
     const accountRepository = new CompanyRepository(env.DB, context);
     const contact = await contactRepository.createContact({
@@ -180,7 +181,7 @@ describe("contact and account repositories", () => {
 
 describe("cross-cutting repositories", () => {
   it("resolves the requested membership without crossing organizations", async () => {
-    const first = await seedWorkspace("membership-first", "admin");
+    const first = await seedWorkspaceContext(env.DB, "membership-first", "admin");
     const secondOrganizationId = uuidv7();
     const now = new Date();
     await database()
@@ -202,39 +203,40 @@ describe("cross-cutting repositories", () => {
         createdAt: new Date(now.getTime() + 1_000),
       });
 
-    await expect(resolveMemberContext(env.DB, first.userId, null)).resolves.toEqual(first);
-    await expect(resolveMemberContext(env.DB, first.userId, secondOrganizationId)).resolves.toEqual(
-      {
-        workspaceId: secondOrganizationId,
-        userId: first.userId,
-        role: "viewer",
-      },
-    );
-    await expect(resolveMemberContext(env.DB, first.userId, uuidv7())).resolves.toBeNull();
+    await expect(resolveMemberContext(database(), first.userId, null)).resolves.toEqual(first);
+    await expect(
+      resolveMemberContext(database(), first.userId, secondOrganizationId),
+    ).resolves.toEqual({
+      workspaceId: secondOrganizationId,
+      userId: first.userId,
+      role: "viewer",
+    });
+    await expect(resolveMemberContext(database(), first.userId, uuidv7())).resolves.toBeNull();
   });
 
   it("reserves idempotency keys per workspace and scope", async () => {
-    const first = await seedWorkspace("idempotency-first");
-    const second = await seedWorkspace("idempotency-second");
+    const first = await seedWorkspaceContext(env.DB, "idempotency-first");
+    const second = await seedWorkspaceContext(env.DB, "idempotency-second");
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
+    const idempotency = new IdempotencyRepository(env.DB);
 
     await expect(
-      reserveIdempotencyKey(env.DB, first.workspaceId, "contacts", "same-key", expiresAt),
+      idempotency.reserve(first.workspaceId, "contacts", "same-key", expiresAt),
     ).resolves.toBe(true);
     await expect(
-      reserveIdempotencyKey(env.DB, first.workspaceId, "contacts", "same-key", expiresAt),
+      idempotency.reserve(first.workspaceId, "contacts", "same-key", expiresAt),
     ).resolves.toBe(false);
     await expect(
-      reserveIdempotencyKey(env.DB, first.workspaceId, "events", "same-key", expiresAt),
+      idempotency.reserve(first.workspaceId, "events", "same-key", expiresAt),
     ).resolves.toBe(true);
     await expect(
-      reserveIdempotencyKey(env.DB, second.workspaceId, "contacts", "same-key", expiresAt),
+      idempotency.reserve(second.workspaceId, "contacts", "same-key", expiresAt),
     ).resolves.toBe(true);
   });
 
   it("writes structured audit data for the acting workspace", async () => {
-    const context = await seedWorkspace("audit");
-    await writeAuditLog(env.DB, context, {
+    const context = await seedWorkspaceContext(env.DB, "audit");
+    await writeAuditLog(database(), context, {
       action: "contact.updated",
       resourceType: "contact",
       resourceId: "contact-id",
@@ -260,8 +262,8 @@ describe("cross-cutting repositories", () => {
   });
 
   it("claims only due, unleased automation jobs in the requested workspace", async () => {
-    const first = await seedWorkspace("jobs-first");
-    const second = await seedWorkspace("jobs-second");
+    const first = await seedWorkspaceContext(env.DB, "jobs-first");
+    const second = await seedWorkspaceContext(env.DB, "jobs-second");
     const due = "2026-08-01T00:00:00.000Z";
     const later = "2026-08-01T01:00:00.000Z";
     const firstDue = await seedAutomationJob(first, due);
@@ -288,44 +290,6 @@ describe("cross-cutting repositories", () => {
     });
   });
 });
-
-async function seedWorkspace(
-  label: string,
-  role: WorkspaceRole = "owner",
-): Promise<WorkspaceContext> {
-  const workspaceId = uuidv7();
-  const userId = uuidv7();
-  const now = new Date();
-  await database().orm.batch([
-    database()
-      .orm.insert(user)
-      .values({
-        id: userId,
-        name: `${label} User`,
-        email: `${label}-${userId}@example.com`,
-        emailVerified: true,
-        createdAt: now,
-        updatedAt: now,
-      }),
-    database()
-      .orm.insert(organization)
-      .values({
-        id: workspaceId,
-        name: `${label} Workspace`,
-        slug: `${label}-${workspaceId}`,
-        createdAt: now,
-        timezone: "UTC",
-      }),
-  ]);
-  await database().orm.insert(member).values({
-    id: uuidv7(),
-    organizationId: workspaceId,
-    userId,
-    role,
-    createdAt: now,
-  });
-  return { workspaceId, userId, role };
-}
 
 async function seedAutomationJob(
   context: WorkspaceContext,

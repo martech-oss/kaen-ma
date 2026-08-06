@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { RouteError, RoutePending } from "@/components/route-status";
+import { routeStatusComponents } from "@/components/route-status";
 import { CompanyDetailPage } from "@/features/companies/companies-page";
 import {
   companyContactOptionsQueryOptions,
@@ -13,8 +13,7 @@ export const Route = createFileRoute("/_app/contacts/companies/$id")({
       context.queryClient.ensureQueryData(companyQueryOptions(params.id)),
       context.queryClient.ensureQueryData(companyContactOptionsQueryOptions()),
     ]),
-  pendingComponent: RoutePending,
-  errorComponent: RouteError,
+  ...routeStatusComponents,
   component: CompanyDetailRoute,
 });
 

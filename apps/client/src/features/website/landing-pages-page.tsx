@@ -1,54 +1,55 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import { ExternalLink, FileStack, Globe2, Image as ImageIcon, Pencil, Plus } from "lucide-react";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { ExternalLink, FileStack, Globe2, Image as ImageIcon, Pencil } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
 import {
   ArchiveConfirm,
+  CopyButton,
   FormDialog,
   FormInput,
   FormNativeSelect,
   FormSelectOption,
-  PageLayout,
+  MetricCard,
+  MetricGrid,
 } from "@/components/app-ui";
-import { type DataTableColumn, DataTable } from "@/components/data-table";
+import { type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { AssetPickerDialog } from "@/features/assets/asset-picker";
 import {
   ContentDocumentEditor,
   defaultContentDocument,
 } from "@/features/content/content-document-editor";
-import { landingPagesQueryOptions, type LandingPageRow } from "@/features/website/website-api";
-import { CopyButton, PublishStatusBadge } from "@/features/website/website-shared";
-import { useFormSubmission } from "@/hooks/use-form-submission";
+import { WebsiteResourceListPage } from "@/features/website/resource-page";
+import {
+  landingPagesQueryOptions,
+  type LandingPageRow,
+  useArchiveLandingPage,
+  useCreateLandingPage,
+  useUpdateLandingPage,
+} from "@/features/website/website-api";
+import { PublishStatusBadge } from "@/features/website/website-shared";
+import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
+import { getFormString } from "@/lib/form-data";
 import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
-import { getFormString, slugify } from "@/lib/utils";
-import type { ContentDocument } from "@openengage/orpc";
+import { slugify } from "@/lib/utils";
+import type { ContentDocument } from "@openengage/core/web";
 
 export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): ReactNode {
-  const queryClient = useQueryClient();
   const { data: items } = useSuspenseQuery(landingPagesQueryOptions());
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<LandingPageRow | null>(null);
+  const { dialogOpen, editing, openCreate, openEdit, close, onOpenChange } =
+    useResourceEditor<LandingPageRow>();
 
-  const archivePage = useMutation(orpcQuery.website.archivePage.mutationOptions());
-
-  async function refresh(): Promise<void> {
-    setDialogOpen(false);
-    setEditing(null);
-    await queryClient.invalidateQueries({ queryKey: orpcQuery.website.listPages.key() });
-  }
+  const archivePage = useArchiveLandingPage();
 
   async function archive(item: LandingPageRow): Promise<void> {
     try {
       await archivePage.mutateAsync({ id: item.id });
       toast.success("ランディングページをアーカイブしました");
-      await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "アーカイブできませんでした");
+      toast.error(getErrorMessage(error, "アーカイブできませんでした"));
     }
   }
 
@@ -107,10 +108,7 @@ export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): 
               size="sm"
               variant="ghost"
               aria-label={`${item.name}を編集`}
-              onClick={() => {
-                setEditing(item);
-                setDialogOpen(true);
-              }}
+              onClick={() => openEdit(item)}
             >
               <Pencil />
             </Button>
@@ -127,46 +125,29 @@ export function LandingPagesPage({ workspaceSlug }: { workspaceSlug: string }): 
   ];
 
   return (
-    <PageLayout
+    <WebsiteResourceListPage
       title="ランディングページ"
-      action={
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus data-icon="inline-start" />
-          ページを作成
-        </Button>
+      createLabel="ページを作成"
+      onCreateClick={openCreate}
+      summary={<LandingSummary items={items} />}
+      listTitle="ページ一覧"
+      listDescription="公開URLと現在のバージョンを管理します。"
+      columns={columns}
+      rows={items}
+      rowKey={(item) => item.id}
+      tableCaption="ページ一覧"
+      emptyTitle="ランディングページがありません"
+      emptyDescription="見出し、本文、CTAを入力して最初のページを作成してください。"
+      editor={
+        <LandingPageEditor
+          key={editing?.id ?? "new"}
+          item={editing}
+          open={dialogOpen}
+          onOpenChange={onOpenChange}
+          onSaved={close}
+        />
       }
-    >
-      <LandingSummary items={items} />
-      <Card>
-        <CardHeader>
-          <CardTitle>ページ一覧</CardTitle>
-          <CardDescription>公開URLと現在のバージョンを管理します。</CardDescription>
-        </CardHeader>
-        <CardContent className="px-0">
-          <DataTable
-            columns={columns}
-            rows={items}
-            rowKey={(item) => item.id}
-            caption="ページ一覧"
-            emptyTitle="ランディングページがありません"
-            emptyDescription="見出し、本文、CTAを入力して最初のページを作成してください。"
-          />
-        </CardContent>
-      </Card>
-
-      <LandingPageEditor
-        key={editing?.id ?? "new"}
-        item={editing}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSaved={refresh}
-      />
-    </PageLayout>
+    />
   );
 }
 
@@ -174,7 +155,7 @@ function LandingSummary({ items }: { items: LandingPageRow[] }): ReactNode {
   const published = items.filter((item) => item.status === "published").length;
   const latestVersion = items.reduce((version, item) => Math.max(version, item.version ?? 0), 0);
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <MetricGrid className="sm:grid-cols-3">
       {[
         {
           label: "ページ",
@@ -195,18 +176,19 @@ function LandingSummary({ items }: { items: LandingPageRow[] }): ReactNode {
           icon: Pencil,
         },
       ].map((item) => (
-        <Card key={item.label}>
-          <CardHeader>
-            <CardDescription>{item.label}</CardDescription>
-            <CardTitle className="text-2xl">{item.value}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-            <item.icon />
-            {item.description}
-          </CardContent>
-        </Card>
+        <MetricCard
+          key={item.label}
+          label={item.label}
+          value={item.value}
+          description={
+            <div className="flex items-center gap-2 text-sm">
+              <item.icon />
+              {item.description}
+            </div>
+          }
+        />
       ))}
-    </div>
+    </MetricGrid>
   );
 }
 
@@ -219,7 +201,7 @@ function LandingPageEditor({
   item: LandingPageRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }): ReactNode {
   const { busy, error, run } = useFormSubmission("保存できませんでした");
   const [content, setContent] = useState<ContentDocument>(
@@ -227,8 +209,8 @@ function LandingPageEditor({
   );
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const createPage = useMutation(orpcQuery.website.createPage.mutationOptions());
-  const updatePage = useMutation(orpcQuery.website.updatePage.mutationOptions());
+  const createPage = useCreateLandingPage();
+  const updatePage = useUpdateLandingPage();
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -240,13 +222,17 @@ function LandingPageEditor({
       status: getFormString(formData, "status") === "published" ? "published" : "draft",
       content,
     } as const;
-    await run(async () => {
-      await (item
-        ? updatePage.mutateAsync({ id: item.id, ...payload })
-        : createPage.mutateAsync(payload));
-      toast.success(item ? "ページを更新しました" : "ページを作成しました");
-      await onSaved();
-    });
+    await run(() =>
+      saveResource({
+        editing: item,
+        payload,
+        create: (data) => createPage.mutateAsync(data),
+        update: (id, data) => updatePage.mutateAsync({ id, ...data }),
+        createdMessage: "ページを作成しました",
+        updatedMessage: "ページを更新しました",
+        onSaved,
+      }),
+    );
   }
 
   return (

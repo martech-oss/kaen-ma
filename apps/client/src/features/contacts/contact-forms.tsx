@@ -1,24 +1,19 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode } from "react";
 
-import {
-  FormDialog,
-  FormInput as InputField,
-  FormNativeSelect as SelectInput,
-} from "@/components/app-ui";
+import { FormDialog, FormInput, FormNativeSelect } from "@/components/app-ui";
 import { NativeSelectOption } from "@/components/ui/native-select";
+import { invalidateCompanyQueries } from "@/features/companies/company-api";
 import {
   assignInitialContactRelations,
+  useCreateContact,
   type ContactOptions,
 } from "@/features/contacts/contact-api";
-import { createDynamicSegment } from "@/features/segments/segment-api";
+import { createDynamicSegment, invalidateSegmentsList } from "@/features/segments/segment-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
-import { optionalString } from "@/lib/form-data";
-import { orpcQuery } from "@/lib/orpc";
-import { getFormString } from "@/lib/utils";
+import { getFormString, optionalString } from "@/lib/form-data";
+import { slugify } from "@/lib/utils";
 import { type SegmentFilter } from "@openengage/core/segments";
-
-import { slugify } from "./contact-bits";
 
 export function ContactCreateForm({
   open,
@@ -31,7 +26,7 @@ export function ContactCreateForm({
   options: ContactOptions;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const createContact = useMutation(orpcQuery.contacts.create.mutationOptions());
+  const createContact = useCreateContact();
   const queryClient = useQueryClient();
   const { busy, error, run } = useFormSubmission("保存できませんでした");
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -57,10 +52,7 @@ export function ContactCreateForm({
         ...(companyId ? { companyId } : {}),
       });
       if (companyId) {
-        await queryClient.invalidateQueries({
-          queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
-        });
-        await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
+        await invalidateCompanyQueries(queryClient, companyId);
       }
       await onSaved();
     });
@@ -79,33 +71,33 @@ export function ContactCreateForm({
     >
       <div className="flex max-h-[75vh] flex-col gap-5 overflow-y-auto pr-1">
         <div className="grid grid-cols-2 gap-3">
-          <InputField label="名" name="firstName" />
-          <InputField label="姓" name="lastName" />
+          <FormInput label="名" name="firstName" />
+          <FormInput label="姓" name="lastName" />
         </div>
-        <InputField label="メールアドレス" name="email" type="email" />
+        <FormInput label="メールアドレス" name="email" type="email" />
         <div className="grid grid-cols-2 gap-3">
-          <InputField label="電話番号" name="phone" />
-          <InputField label="外部ID" name="externalId" />
+          <FormInput label="電話番号" name="phone" />
+          <FormInput label="外部ID" name="externalId" />
         </div>
         <div className="grid gap-3 md:grid-cols-2">
-          <InputField label="ステージ" name="stage" defaultValue="lead" />
-          <SelectInput label="会社" name="companyId">
+          <FormInput label="ステージ" name="stage" defaultValue="lead" />
+          <FormNativeSelect label="会社" name="companyId">
             <NativeSelectOption value="">指定なし</NativeSelectOption>
             {options.companies.map((company) => (
               <NativeSelectOption key={company.id} value={company.id}>
                 {company.name}
               </NativeSelectOption>
             ))}
-          </SelectInput>
-          <SelectInput label="タグ" name="tagId">
+          </FormNativeSelect>
+          <FormNativeSelect label="タグ" name="tagId">
             <NativeSelectOption value="">指定なし</NativeSelectOption>
             {options.tags.map((tag) => (
               <NativeSelectOption key={tag.id} value={tag.id}>
                 {tag.name}
               </NativeSelectOption>
             ))}
-          </SelectInput>
-          <SelectInput label="セグメント" name="segmentId">
+          </FormNativeSelect>
+          <FormNativeSelect label="セグメント" name="segmentId">
             <NativeSelectOption value="">指定なし</NativeSelectOption>
             {options.segments
               .filter((segment) => segment.kind === "static")
@@ -114,7 +106,7 @@ export function ContactCreateForm({
                   {segment.name}
                 </NativeSelectOption>
               ))}
-          </SelectInput>
+          </FormNativeSelect>
         </div>
         <p className="text-xs text-muted-foreground">
           メールアドレスまたは外部IDのどちらかを入力してください。
@@ -144,10 +136,10 @@ export function SegmentSaveForm({
     await run(async () => {
       await createDynamicSegment({
         name,
-        slug: slugify(name),
+        slug: slugify(name, { maxLength: 100, fallback: "segment" }),
         filter,
       });
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });
+      await invalidateSegmentsList(queryClient);
       await onSaved();
     });
   }
@@ -162,7 +154,7 @@ export function SegmentSaveForm({
       error={error}
       submitLabel="保存"
     >
-      <InputField label="セグメント名" name="name" required />
+      <FormInput label="セグメント名" name="name" required />
       <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
         現在の検索条件を動的セグメントとして保存します。連絡先の状態が変わったら再評価できます。
       </p>

@@ -1,5 +1,9 @@
 import { useState } from "react";
 
+export function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 /**
  * Wraps a form's submit action with the busy/error state every dialog form in
  * this app already needed by hand. `run` swallows and stringifies the error so
@@ -16,7 +20,7 @@ export function useFormSubmission(defaultErrorMessage: string) {
       await action();
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : defaultErrorMessage);
+      setError(getErrorMessage(caught, defaultErrorMessage));
       return false;
     } finally {
       setBusy(false);

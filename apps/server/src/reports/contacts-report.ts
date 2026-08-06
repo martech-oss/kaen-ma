@@ -1,7 +1,7 @@
 import { ReportsRepository } from "@openengage/database";
 
-import { primitiveString } from "../platform/values";
-import { publicRange, type ReportDatabase, type ReportRange, toNumber } from "./shared";
+import { primitiveString, toFiniteNumber } from "../platform/values";
+import { publicRange, type ReportDatabase, type ReportRange } from "./shared";
 
 export async function contactReport(
   database: ReportDatabase,
@@ -14,29 +14,29 @@ export async function contactReport(
     category: "contacts" as const,
     range: publicRange(range),
     summary: {
-      totalContacts: toNumber(summary["total_contacts"]),
-      activeContacts: toNumber(summary["active_contacts"]),
-      inactiveContacts: toNumber(summary["inactive_contacts"]),
-      anonymousContacts: toNumber(summary["anonymous_contacts"]),
-      newContacts: toNumber(summary["new_contacts"]),
-      archivedContacts: toNumber(summary["archived_contacts"]),
+      totalContacts: toFiniteNumber(summary["total_contacts"]),
+      activeContacts: toFiniteNumber(summary["active_contacts"]),
+      inactiveContacts: toFiniteNumber(summary["inactive_contacts"]),
+      anonymousContacts: toFiniteNumber(summary["anonymous_contacts"]),
+      newContacts: toFiniteNumber(summary["new_contacts"]),
+      archivedContacts: toFiniteNumber(summary["archived_contacts"]),
     },
     trend: data.trend.map((row) => ({
       day: primitiveString(row["day"]),
-      added: toNumber(row["added"]),
-      archived: toNumber(row["archived"]),
+      added: toFiniteNumber(row["added"]),
+      archived: toFiniteNumber(row["archived"]),
     })),
     topTags: data.topTags.map((row) => ({
       id: primitiveString(row["id"]),
       name: primitiveString(row["name"]),
       color: primitiveString(row["color"]),
-      contactCount: toNumber(row["contact_count"]),
+      contactCount: toFiniteNumber(row["contact_count"]),
     })),
     topSegments: data.topSegments.map((row) => ({
       id: primitiveString(row["id"]),
       name: primitiveString(row["name"]),
       color: primitiveString(row["color"]),
-      contactCount: toNumber(row["contact_count"]),
+      contactCount: toFiniteNumber(row["contact_count"]),
     })),
   };
 }

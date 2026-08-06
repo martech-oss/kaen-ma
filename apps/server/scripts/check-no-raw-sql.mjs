@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// Guards the P5-P7 repository extraction: every raw SQL string that used to
-// live in apps/server now lives in packages/database repositories, built on
-// the Drizzle query builder or `sql` tagged templates with ${table.col}
-// interpolation. This keeps identifier renames (P8) compiler-driven instead
-// of grep-and-pray.
+// All SQL lives in packages/database repositories, built on the Drizzle query
+// builder or `sql` tagged templates with ${table.col} interpolation - never a
+// raw prepared string in apps/server. This keeps identifier renames
+// compiler-driven instead of grep-and-pray.
 //
 // This runs as a plain Node script (wired into `pnpm test`) rather than a
 // vitest test: apps/server's vitest.config.ts runs every test through

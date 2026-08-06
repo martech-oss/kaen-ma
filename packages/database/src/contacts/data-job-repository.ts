@@ -1,9 +1,11 @@
 import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
-import { jsonRecordSchema, type WorkspaceContext } from "@openengage/core/shared";
+import { jsonRecordSchema } from "@openengage/core/shared";
 
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
+import type { OpenEngageDatabase } from "../client";
+import { nowIso } from "../shared/database-utils";
 import { decodeJson } from "../shared/json-codec";
+import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { contacts, importJobs } from "./schema";
 
@@ -20,30 +22,15 @@ export interface ContactImportRow {
   customFields: Record<string, unknown>;
 }
 
-/**
- * Workspace-facing queries for import/export jobs.
- *
- * Scoped by workspace id only (not the full {@link WorkspaceContext}), because
- * the data-job endpoints authorize upstream and resolve just the workspace id.
- * A full context is assignable wherever this scope is expected.
- */
-export class DataJobRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: Pick<WorkspaceContext, "workspaceId">,
-  ) {
-    this.database = createDatabase(database);
-  }
-
+/** Workspace-facing queries for import/export jobs. */
+export class DataJobRepository extends WorkspaceRepository {
   public async createJob(input: {
     id: string;
     kind: DataJobKind;
     r2Key: string;
     cursor: Record<string, unknown>;
   }): Promise<void> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(importJobs).values({
       id: input.id,
       workspaceId: this.context.workspaceId,
@@ -74,7 +61,7 @@ export class DataJobRepository {
         updatedAt: importJobs.updatedAt,
       })
       .from(importJobs)
-      .where(and(eq(importJobs.workspaceId, this.context.workspaceId), eq(importJobs.id, jobId)))
+      .where(and(this.inWorkspace(importJobs), eq(importJobs.id, jobId)))
       .get();
     return row ?? null;
   }
@@ -85,7 +72,7 @@ export class DataJobRepository {
       .from(importJobs)
       .where(
         and(
-          eq(importJobs.workspaceId, this.context.workspaceId),
+          this.inWorkspace(importJobs),
           eq(importJobs.id, jobId),
           eq(importJobs.kind, "contact_export"),
         ),
@@ -100,13 +87,7 @@ export class DataJobRepository {
  * alone — the workspace comes from the job row itself — so this repository is
  * intentionally not workspace-scoped.
  */
-export class DataJobWorkerRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(database: DatabaseSource) {
-    this.database = createDatabase(database);
-  }
-
+export class DataJobWorkerRepository extends DatabaseRepository {
   public async claimImportJob(
     jobId: string,
   ): Promise<{ workspaceId: string; r2Key: string; status: string } | null> {
@@ -157,14 +138,14 @@ export class DataJobWorkerRepository {
   public async markProcessing(jobId: string): Promise<void> {
     await this.database.orm
       .update(importJobs)
-      .set({ status: "processing", updatedAt: new Date().toISOString() })
+      .set({ status: "processing", updatedAt: nowIso() })
       .where(eq(importJobs.id, jobId));
   }
 
   /** Inserts one import part atomically, skipping duplicate identifiers. */
   public async insertContacts(workspaceId: string, rows: ContactImportRow[]): Promise<void> {
     if (rows.length === 0) return;
-    const now = new Date().toISOString();
+    const now = nowIso();
     const [first, ...rest] = rows.map((row) =>
       this.database.orm
         .insert(contacts)
@@ -206,7 +187,7 @@ export class DataJobWorkerRepository {
         processed: sql`${importJobs.processed} + ${input.processed}`,
         succeeded: sql`${importJobs.succeeded} + ${input.succeeded}`,
         failed: sql`${importJobs.failed} + ${input.failed}`,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
       .where(eq(importJobs.id, jobId));
   }
@@ -249,7 +230,7 @@ export class DataJobWorkerRepository {
         cursor: JSON.stringify(input.cursor),
         processed: sql`${importJobs.processed} + ${input.count}`,
         succeeded: sql`${importJobs.succeeded} + ${input.count}`,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
       .where(eq(importJobs.id, jobId));
   }
@@ -262,7 +243,7 @@ export class DataJobWorkerRepository {
 async function completeJob(database: OpenEngageDatabase, jobId: string): Promise<void> {
   await database.orm
     .update(importJobs)
-    .set({ status: "completed", updatedAt: new Date().toISOString() })
+    .set({ status: "completed", updatedAt: nowIso() })
     .where(eq(importJobs.id, jobId));
 }
 

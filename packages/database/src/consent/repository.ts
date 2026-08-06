@@ -1,11 +1,12 @@
 import { and, asc, count, eq, inArray, or, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 
-import type { WorkspaceContext } from "@openengage/core/shared";
+import { subscriptionTopicRowSchema, type SubscriptionTopicRow } from "@openengage/core/consent";
 
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contacts } from "../contacts/schema";
 import { deliveries } from "../messaging/schema";
+import { nowIso } from "../shared/database-utils";
+import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { consentEvents, contactSubscriptions, subscriptionTopics, suppressions } from "./schema";
 
@@ -21,8 +22,6 @@ export interface PreferenceCenterState {
   globallySuppressed: boolean;
 }
 
-export type SubscriptionTopicRecord = typeof subscriptionTopics.$inferSelect;
-
 export type TopicCreateOutcome = { kind: "conflict" } | { kind: "created"; id: string };
 
 /** The raw reads behind the pre-send consent gate, one row (or count) each. */
@@ -33,29 +32,15 @@ export interface ConsentGateRows {
   marketingSentInWindow: number;
 }
 
-/**
- * Queries for subscription topics and consent state.
- *
- * Scoped by workspace id only (not the full {@link WorkspaceContext}), because
- * the delivery worker resolves just the workspace id from the delivery row.
- * A full context is assignable wherever this scope is expected.
- */
-export class ConsentRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: Pick<WorkspaceContext, "workspaceId">,
-  ) {
-    this.database = createDatabase(database);
-  }
-
-  public async listTopics(): Promise<SubscriptionTopicRecord[]> {
-    return await this.database.orm
+/** Queries for subscription topics and consent state. */
+export class ConsentRepository extends WorkspaceRepository {
+  public async listTopics(): Promise<SubscriptionTopicRow[]> {
+    const rows = await this.database.orm
       .select()
       .from(subscriptionTopics)
-      .where(eq(subscriptionTopics.workspaceId, this.context.workspaceId))
+      .where(this.inWorkspace(subscriptionTopics))
       .orderBy(asc(subscriptionTopics.name));
+    return rows.map((row) => subscriptionTopicRowSchema.parse(row));
   }
 
   public async createTopic(input: {
@@ -65,7 +50,7 @@ export class ConsentRepository {
     isDefault: boolean;
   }): Promise<TopicCreateOutcome> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     try {
       await this.database.orm.insert(subscriptionTopics).values({
         id,
@@ -135,7 +120,7 @@ export class ConsentRepository {
    */
   public async applyOneClickUnsubscribe(contactId: string): Promise<void> {
     const workspaceId = this.context.workspaceId;
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     await orm.batch([
       orm
@@ -170,7 +155,7 @@ export class ConsentRepository {
     globalStop: boolean;
   }): Promise<void> {
     const workspaceId = this.context.workspaceId;
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     const selected = new Set(input.selectedTopicIds);
     const topics = await this.listTopics();

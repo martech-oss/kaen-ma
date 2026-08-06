@@ -3,12 +3,12 @@ import type { Context, Hono } from "hono";
 import {
   ASSET_STREAM_MAX_BYTES,
   assetDimensionSchema,
-  assetVisibilitySchema,
   isBlockedAssetContentType,
   normalizeAssetContentType,
   type Asset,
-  type AssetVisibility,
-} from "@openengage/orpc";
+} from "@openengage/core/assets";
+import { assetVisibilitySchema, type AssetVisibility } from "@openengage/core/shared";
+import { forbiddenError, workspaceErrors } from "@openengage/orpc";
 
 import { apiError, resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import { hasWorkspaceRole } from "../auth/authorization";
@@ -23,6 +23,10 @@ import {
 } from "./asset-service";
 
 type RouteContext = Context<AppEnvironment>;
+
+function resolveAssetOrigin(context: RouteContext, workspaceId: string) {
+  return loadAssetOrigin(context.get("database"), workspaceId, context.env.APP_URL);
+}
 
 /**
  * Byte-moving routes that the oRPC contract cannot express: `z.file()` buffers
@@ -44,11 +48,7 @@ export function registerAssetRoutes(app: Hono<AppEnvironment>): void {
     const parsed = readStreamedBody(context, url, originalFilename);
     if (parsed instanceof Response) return parsed;
 
-    const origin = await loadAssetOrigin(
-      context.get("database"),
-      access.workspaceId,
-      context.env.APP_URL,
-    );
+    const origin = await resolveAssetOrigin(context, access.workspaceId);
     const outcome = await createStreamedAsset(
       context.get("database"),
       context.env.ASSETS_BUCKET,
@@ -79,11 +79,7 @@ export function registerAssetRoutes(app: Hono<AppEnvironment>): void {
     const parsed = readStreamedBody(context, url, fallbackName || existing.name);
     if (parsed instanceof Response) return parsed;
 
-    const origin = await loadAssetOrigin(
-      context.get("database"),
-      access.workspaceId,
-      context.env.APP_URL,
-    );
+    const origin = await resolveAssetOrigin(context, access.workspaceId);
     const outcome = await replaceAssetContent(
       context.get("database"),
       context.env.ASSETS_BUCKET,
@@ -147,7 +143,7 @@ async function authorizeAssetWrite(
   if (!usesBearer) {
     const origin = context.req.header("origin");
     if (!origin || origin !== new URL(context.env.APP_URL).origin) {
-      return apiError(context, 403, "origin_mismatch", "許可されていないOriginです");
+      return apiError(context, 403, "origin_mismatch", workspaceErrors.ORIGIN_MISMATCH.message);
     }
   }
   let access;
@@ -163,7 +159,7 @@ async function authorizeAssetWrite(
     return accessError(context, error);
   }
   if (!hasWorkspaceRole(access.workspace.role, "marketer")) {
-    return apiError(context, 403, "forbidden", "この操作を行う権限がありません");
+    return apiError(context, 403, "forbidden", forbiddenError.FORBIDDEN.message);
   }
   return access.workspace;
 }

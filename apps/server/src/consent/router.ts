@@ -1,14 +1,17 @@
+import { ConsentRepository } from "@openengage/database";
+
 import { authed, requireRole } from "../orpc/base";
-import { createSubscriptionTopic, listSubscriptionTopics } from "./service";
 
 export const listTopicsProcedure = authed.consent.listTopics.handler(({ context }) =>
-  listSubscriptionTopics(context.database, context.workspace),
+  new ConsentRepository(context.database, context.workspace).listTopics(),
 );
 
 export const createTopicProcedure = authed.consent.createTopic.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
-    const outcome = await createSubscriptionTopic(context.database, context.workspace, input);
+    const outcome = await new ConsentRepository(context.database, context.workspace).createTopic(
+      input,
+    );
     if (outcome.kind === "conflict") throw errors.TOPIC_CONFLICT();
     return { id: outcome.id };
   },

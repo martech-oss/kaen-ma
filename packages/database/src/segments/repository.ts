@@ -1,43 +1,35 @@
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 
-import { segmentFilterSchema, type SegmentFilter } from "@openengage/core/segments";
-import type { WorkspaceContext } from "@openengage/core/shared";
+import {
+  type CompiledSegment,
+  segmentFilterSchema,
+  type SegmentFilter,
+} from "@openengage/core/segments";
 
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
-import { decodeNullableJson, encodeJson } from "../shared/json-codec";
+import { nowIso } from "../shared/database-utils";
+import { defineJsonCodec } from "../shared/json-codec";
+import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
+import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { segmentMemberships, segments } from "./schema";
 
-/** Compiled segment filter as produced by `compileSegmentFilter` in @openengage/core. */
-export interface CompiledSegmentFilter {
-  sql: string;
-  params: Array<string | number | null>;
-}
+const filterAstCodec = defineJsonCodec(segmentFilterSchema, "segments.filter_ast");
 
 export type SegmentRecord = Omit<typeof segments.$inferSelect, "filterAst"> & {
   filterAst: SegmentFilter | null;
 };
 
-export class SegmentRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: WorkspaceContext,
-  ) {
-    this.database = createDatabase(database);
-  }
-
+export class SegmentRepository extends WorkspaceRepository {
   public async listSegments(): Promise<SegmentRecord[]> {
     const rows = await this.database.orm
       .select()
       .from(segments)
-      .where(eq(segments.workspaceId, this.context.workspaceId))
+      .where(this.inWorkspace(segments))
       .orderBy(desc(segments.updatedAt))
-      .limit(200);
+      .limit(UNPAGINATED_LIST_LIMIT);
     return rows.map((row) => ({
       ...row,
-      filterAst: decodeNullableJson(row.filterAst, segmentFilterSchema, "segments.filter_ast"),
+      filterAst: filterAstCodec.decodeNullable(row.filterAst),
     }));
   }
 
@@ -48,16 +40,14 @@ export class SegmentRepository {
     filter?: SegmentFilter | undefined;
   }): Promise<{ id: string; createdAt: string; updatedAt: string }> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(segments).values({
       id,
       workspaceId: this.context.workspaceId,
       name: input.name,
       slug: input.slug,
       kind: input.kind,
-      filterAst: input.filter
-        ? encodeJson(input.filter, segmentFilterSchema, "segments.filter_ast")
-        : null,
+      filterAst: input.filter ? filterAstCodec.encode(input.filter) : null,
       createdAt: now,
       updatedAt: now,
     });
@@ -74,22 +64,17 @@ export class SegmentRepository {
     const [row] = await this.database.orm
       .select({ kind: segments.kind, filterAst: segments.filterAst })
       .from(segments)
-      .where(and(eq(segments.workspaceId, this.context.workspaceId), eq(segments.id, id)))
+      .where(and(this.inWorkspace(segments), eq(segments.id, id)))
       .limit(1);
-    return row
-      ? {
-          ...row,
-          filterAst: decodeNullableJson(row.filterAst, segmentFilterSchema, "segments.filter_ast"),
-        }
-      : null;
+    return row ? { ...row, filterAst: filterAstCodec.decodeNullable(row.filterAst) } : null;
   }
 
   /** Recomputes the denormalized `member_count` of one segment. */
   public async updateMemberCount(segmentId: string): Promise<void> {
     await this.database.orm
       .update(segments)
-      .set({ memberCount: memberCountExpression(), updatedAt: new Date().toISOString() })
-      .where(and(eq(segments.workspaceId, this.context.workspaceId), eq(segments.id, segmentId)));
+      .set({ memberCount: memberCountExpression(), updatedAt: nowIso() })
+      .where(and(this.inWorkspace(segments), eq(segments.id, segmentId)));
   }
 
   /**
@@ -99,16 +84,16 @@ export class SegmentRepository {
    */
   public async replaceDynamicMemberships(
     segmentId: string,
-    compiled: CompiledSegmentFilter,
+    compiled: CompiledSegment,
   ): Promise<void> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     await orm.batch([
       orm
         .delete(segmentMemberships)
         .where(
           and(
-            eq(segmentMemberships.workspaceId, this.context.workspaceId),
+            this.inWorkspace(segmentMemberships),
             eq(segmentMemberships.segmentId, segmentId),
             eq(segmentMemberships.source, "dynamic"),
           ),
@@ -127,13 +112,13 @@ export class SegmentRepository {
       orm
         .update(segments)
         .set({ memberCount: memberCountExpression(), evaluatedAt: now, updatedAt: now })
-        .where(and(eq(segments.workspaceId, this.context.workspaceId), eq(segments.id, segmentId))),
+        .where(and(this.inWorkspace(segments), eq(segments.id, segmentId))),
     ]);
   }
 
   /** Runs the compiled filter and returns the matched contact rows, newest id first. */
   public async previewContacts(
-    compiled: CompiledSegmentFilter,
+    compiled: CompiledSegment,
     limit: number,
   ): Promise<Record<string, unknown>[]> {
     return await this.database.orm.all<Record<string, unknown>>(
@@ -155,7 +140,7 @@ function memberCountExpression(): SQL<number> {
  * allowlisted identifiers (never user text), so `sql.raw` is safe for these
  * chunks — and only for these chunks.
  */
-function compiledFilterSql(compiled: CompiledSegmentFilter): SQL {
+function compiledFilterSql(compiled: CompiledSegment): SQL {
   const parts = compiled.sql.split("?");
   if (parts.length !== compiled.params.length + 1) {
     throw new Error(

@@ -1,3 +1,4 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   BriefcaseBusiness,
@@ -10,29 +11,22 @@ import {
 } from "lucide-react";
 import { type FormEvent, type ReactNode } from "react";
 
-import { FormInput, PageLayout } from "@/components/app-ui";
+import { FormInput, MetricCard, MetricGrid, PageLayout } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   type AutomationsReport,
   type ContactsReport,
   type DealsReport,
   type EmailsReport,
+  reportWorkspaceQueryOptions,
   type ReportSearch,
   type ReportView,
-  type ReportWorkspace,
   type SiteReport,
 } from "@/features/reports/report-api";
 import { exportCsv } from "@/lib/csv";
+import { getFormString } from "@/lib/form-data";
 import { formatMoney, formatPercent } from "@/lib/format";
-import { getFormString } from "@/lib/utils";
 
 import { reportExport } from "./report-export";
 import {
@@ -57,13 +51,8 @@ const reportNavigation: Array<{
   { view: "site", label: "サイト", icon: Globe2 },
 ];
 
-export function ReportsPage({
-  data,
-  search,
-}: {
-  data: ReportWorkspace;
-  search: ReportSearch;
-}): ReactNode {
+export function ReportsPage({ search }: { search: ReportSearch }): ReactNode {
+  const { data } = useSuspenseQuery(reportWorkspaceQueryOptions(search));
   const exportAction = reportExport(data);
   return (
     <PageLayout
@@ -233,35 +222,31 @@ function ReportsOverview({
     <>
       <section>
         <h2 className="mb-3 font-heading text-lg font-medium">パフォーマンス概要</h2>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MetricGrid className="md:grid-cols-2 xl:grid-cols-5">
           {cards.map((card) => (
-            <Card key={card.view}>
-              <CardHeader>
-                <CardDescription>{card.title}</CardDescription>
-                <CardTitle className="text-2xl tabular-nums">{card.value}</CardTitle>
-                <CardAction>
-                  <span className="flex size-9 items-center justify-center rounded-lg bg-muted [&>svg]:size-4">
-                    <card.icon />
-                  </span>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
+            <MetricCard
+              key={card.view}
+              label={card.title}
+              value={card.value}
+              icon={<card.icon />}
+              description={
                 <div>
                   <p className="text-xs text-muted-foreground">{card.label}</p>
                   <p className="mt-1 text-sm">{card.detail}</p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  nativeButton={false}
-                  render={<Link to="/reports" search={{ ...search, view: card.view }} />}
-                >
-                  詳細を見る
-                </Button>
-              </CardContent>
-            </Card>
+              }
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link to="/reports" search={{ ...search, view: card.view }} />}
+              >
+                詳細を見る
+              </Button>
+            </MetricCard>
           ))}
-        </div>
+        </MetricGrid>
       </section>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>

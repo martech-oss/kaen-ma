@@ -6,7 +6,7 @@ import { FormInput, PageLayout, SuccessAlert } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { createWorkspaceApiKey } from "@/features/settings/settings-api";
-import { getFormString } from "@/lib/utils";
+import { getFormString } from "@/lib/form-data";
 import type { Workspace } from "@/lib/workspace";
 
 export function SettingsPage({ workspace }: { workspace: Workspace }): ReactNode {

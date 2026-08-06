@@ -1,9 +1,17 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Activity, ChartNoAxesCombined, ContactRound, Eye, Info } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { ErrorAlert, FormTextarea, LoadingButton, PageLayout } from "@/components/app-ui";
+import {
+  CopyButton,
+  ErrorAlert,
+  FormTextarea,
+  LoadingButton,
+  MetricCard,
+  MetricGrid,
+  PageLayout,
+} from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -24,34 +32,24 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   siteTrackingQueryOptions,
   type SiteTrackingData,
   type TrackingTopPage,
+  useUpdateSiteTracking,
 } from "@/features/website/website-api";
-import { CopyButton } from "@/features/website/website-shared";
 import { useFormSubmission } from "@/hooks/use-form-submission";
+import { getFormString } from "@/lib/form-data";
 import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
-import { getFormString } from "@/lib/utils";
 
 export function SiteTrackingPage(): ReactNode {
-  const queryClient = useQueryClient();
   const { data } = useSuspenseQuery(siteTrackingQueryOptions());
   const [enabled, setEnabled] = useState(data.enabled);
   const { busy, error, run } = useFormSubmission("設定を保存できませんでした");
   const trackingCode = buildTrackingCode(data.workspaceSlug);
 
-  const updateTracking = useMutation(orpcQuery.website.updateTracking.mutationOptions());
+  const updateTracking = useUpdateSiteTracking();
 
   async function save(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -63,7 +61,6 @@ export function SiteTrackingPage(): ReactNode {
     await run(async () => {
       await updateTracking.mutateAsync({ enabled, allowedDomains });
       toast.success("サイトトラッキング設定を保存しました");
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.website.getTracking.key() });
     });
   }
 
@@ -124,7 +121,7 @@ export function SiteTrackingPage(): ReactNode {
                   同意取得後、追跡するすべてのページで読み込んでください。
                 </CardDescription>
                 <CardAction>
-                  <CopyButton value={trackingCode} />
+                  <CopyButton value={trackingCode} label="コピー" />
                 </CardAction>
               </CardHeader>
               <CardContent>
@@ -183,22 +180,21 @@ function TrackingSummary({ data }: { data: SiteTrackingData }): ReactNode {
     },
   ];
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <MetricGrid>
       {cards.map((card) => (
-        <Card key={card.label}>
-          <CardHeader>
-            <CardDescription>{card.label}</CardDescription>
-            <CardTitle className="text-2xl">
-              {typeof card.value === "number" ? card.value.toLocaleString() : card.value}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-            <card.icon />
-            {card.description}
-          </CardContent>
-        </Card>
+        <MetricCard
+          key={card.label}
+          label={card.label}
+          value={card.value}
+          description={
+            <div className="flex items-center gap-2 text-sm">
+              <card.icon />
+              {card.description}
+            </div>
+          }
+        />
       ))}
-    </div>
+    </MetricGrid>
   );
 }
 
@@ -237,6 +233,27 @@ function TopPages({ items }: { items: SiteTrackingData["topPages"] }): ReactNode
 }
 
 function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): ReactNode {
+  const columns: DataTableColumn<SiteTrackingData["recentEvents"][number]>[] = [
+    {
+      key: "resourceId",
+      header: "訪問ページ",
+      cell: (item) => <span className="block max-w-64 truncate">{item.resourceId}</span>,
+    },
+    {
+      key: "contactId",
+      header: "訪問者",
+      cell: (item) => (
+        <Badge variant={item.contactId ? "default" : "secondary"}>
+          {item.contactId ? "識別済み" : "匿名"}
+        </Badge>
+      ),
+    },
+    {
+      key: "occurredAt",
+      header: "日時",
+      cell: (item) => formatDateTime(item.occurredAt),
+    },
+  ];
   return (
     <Card>
       <CardHeader>
@@ -244,38 +261,13 @@ function RecentEvents({ items }: { items: SiteTrackingData["recentEvents"] }): R
         <CardDescription>直近20件のページビューです。</CardDescription>
       </CardHeader>
       <CardContent className="px-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>訪問ページ</TableHead>
-              <TableHead>訪問者</TableHead>
-              <TableHead>日時</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.length > 0 ? (
-              items.map((item, index) => (
-                <TableRow key={`${item.visitorId}-${item.occurredAt}-${index}`}>
-                  <TableCell>
-                    <span className="block max-w-64 truncate">{item.resourceId}</span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={item.contactId ? "default" : "secondary"}>
-                      {item.contactId ? "識別済み" : "匿名"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{formatDateTime(item.occurredAt)}</TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={3} className="h-28 text-center text-muted-foreground">
-                  まだ訪問データがありません
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(item) => `${item.visitorId}-${item.occurredAt}-${items.indexOf(item)}`}
+          caption="最近の訪問"
+          emptyTitle="まだ訪問データがありません"
+        />
       </CardContent>
     </Card>
   );

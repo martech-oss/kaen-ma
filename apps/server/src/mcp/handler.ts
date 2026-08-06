@@ -1,5 +1,7 @@
 import type { Hono } from "hono";
 
+import { workspaceErrors } from "@openengage/orpc";
+
 import { apiError, resolveWorkspaceAccess, WorkspaceAccessError } from "../auth/access";
 import type { AppEnvironment } from "../env";
 import { handleMcpRequest } from "./server";
@@ -9,7 +11,7 @@ export function registerMcpRoutes(app: Hono<AppEnvironment>): void {
     const request = context.req.raw;
     const origin = request.headers.get("origin");
     if (origin && origin !== new URL(context.env.APP_URL).origin) {
-      return apiError(context, 403, "origin_mismatch", "許可されていないOriginです");
+      return apiError(context, 403, "origin_mismatch", workspaceErrors.ORIGIN_MISMATCH.message);
     }
     if (!request.headers.get("authorization")?.startsWith("Bearer ")) {
       return apiError(context, 401, "api_key_required", "Workspace APIキーが必要です");

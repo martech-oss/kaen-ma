@@ -3,7 +3,6 @@ import * as z from "zod";
 
 import { WebRepository } from "@openengage/database";
 
-import { apiError } from "../auth/access";
 import { recordContactEvent } from "../contacts/event-service";
 import type { AppEnvironment } from "../env";
 import { verifySignedToken } from "../platform/crypto";
@@ -46,8 +45,10 @@ export function registerPublicTrackingRoutes(publicApp: Hono<AppEnvironment>): v
       return context.json({ data: { accepted: false, identityIssued: false } }, 202);
     }
     const origin = context.req.header("origin");
+    // A distinguishable 403 here would let the embedding page fingerprint
+    // workspace/origin config from what is otherwise a silent beacon.
     if (origin && !originAllowed(origin, workspace.allowedDomains)) {
-      return apiError(context, 403, "tracking_origin_denied", "このドメインは許可されていません");
+      return context.json({ data: { accepted: false, identityIssued: false } }, 202);
     }
     const parsed = z
       .object({

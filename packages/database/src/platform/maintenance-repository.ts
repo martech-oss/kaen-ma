@@ -1,22 +1,20 @@
 import { and, asc, eq, isNull, lt, ne, sql } from "drizzle-orm";
 
-import { createDatabase, type DatabaseSource } from "../client";
 import { contactEvents, contacts } from "../contacts/schema";
 import { scoreEvents } from "../contacts/score-schema";
 import { deliveryEvents } from "../messaging/schema";
 import { dailyMetrics } from "../reports/schema";
+import { DatabaseRepository } from "../shared/repository-base";
 import { idempotencyKeys } from "./schema";
 
 /** Repository for the daily maintenance cron: event archival, metric rollup, key cleanup. */
-export class MaintenanceRepository {
-  public constructor(private readonly database: DatabaseSource) {}
-
+export class MaintenanceRepository extends DatabaseRepository {
   public async findEventsToArchive(
     cutoff: string,
     limit = 1000,
   ): Promise<Array<Record<string, unknown>>> {
-    const rows = await createDatabase(this.database)
-      .orm.select({
+    const rows = await this.database.orm
+      .select({
         id: contactEvents.id,
         workspaceId: contactEvents.workspaceId,
         contactId: contactEvents.contactId,
@@ -36,14 +34,13 @@ export class MaintenanceRepository {
 
   public async archiveEvents(eventIds: string[], now: string): Promise<void> {
     if (eventIds.length === 0) return;
-    const database = createDatabase(this.database);
     const [first, ...rest] = eventIds.map((id) =>
-      database.orm
+      this.database.orm
         .update(contactEvents)
         .set({ archivedAt: now })
         .where(and(eq(contactEvents.id, id), isNull(contactEvents.archivedAt))),
     );
-    await database.orm.batch([first!, ...rest]);
+    await this.database.orm.batch([first!, ...rest]);
   }
 
   /**
@@ -53,7 +50,7 @@ export class MaintenanceRepository {
    * query builder alone.
    */
   public async rollupDailyMetrics(day: string): Promise<void> {
-    await createDatabase(this.database).orm.run(sql`
+    await this.database.orm.run(sql`
       INSERT INTO ${dailyMetrics}
         (${dailyMetrics.workspaceId}, ${dailyMetrics.metricDate}, ${dailyMetrics.dimensionType},
          ${dailyMetrics.dimensionId}, ${dailyMetrics.accepted}, ${dailyMetrics.delivered},
@@ -78,9 +75,7 @@ export class MaintenanceRepository {
   }
 
   public async purgeExpiredIdempotencyKeys(now: string): Promise<void> {
-    await createDatabase(this.database)
-      .orm.delete(idempotencyKeys)
-      .where(lt(idempotencyKeys.expiresAt, now));
+    await this.database.orm.delete(idempotencyKeys).where(lt(idempotencyKeys.expiresAt, now));
   }
 
   /**
@@ -94,11 +89,10 @@ export class MaintenanceRepository {
    * default 0, so the drift comparison alone already skips them.
    */
   public async reconcileContactScores(now: string): Promise<number> {
-    const database = createDatabase(this.database);
     const total = sql<number>`(SELECT COALESCE(SUM(${scoreEvents.delta}), 0) FROM ${scoreEvents}
       WHERE ${scoreEvents.workspaceId} = ${contacts.workspaceId}
         AND ${scoreEvents.contactId} = ${contacts.id})`;
-    const result = await database.orm
+    const result = await this.database.orm
       .update(contacts)
       .set({ score: total, updatedAt: now })
       .where(ne(contacts.score, total));

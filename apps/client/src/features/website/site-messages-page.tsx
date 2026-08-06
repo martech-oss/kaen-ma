@@ -1,13 +1,6 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
-import {
-  Eye,
-  Link as LinkIcon,
-  MessageSquareText,
-  MousePointerClick,
-  Pencil,
-  Plus,
-} from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { Eye, Link as LinkIcon, MessageSquareText, MousePointerClick, Pencil } from "lucide-react";
+import { type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import {
@@ -17,40 +10,39 @@ import {
   FormNativeSelect,
   FormSelectOption,
   FormTextarea,
-  PageLayout,
+  MetricCard,
+  MetricGrid,
 } from "@/components/app-ui";
-import { type DataTableColumn, DataTable } from "@/components/data-table";
+import { type DataTableColumn } from "@/components/data-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { siteMessagesQueryOptions, type SiteMessageRow } from "@/features/website/website-api";
+import { WebsiteResourceListPage } from "@/features/website/resource-page";
+import {
+  siteMessagesQueryOptions,
+  type SiteMessageRow,
+  useArchiveSiteMessage,
+  useCreateSiteMessage,
+  useUpdateSiteMessage,
+} from "@/features/website/website-api";
 import { PublishStatusBadge } from "@/features/website/website-shared";
-import { useFormSubmission } from "@/hooks/use-form-submission";
-import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
-import { getFormString } from "@/lib/utils";
+import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { saveResource, useResourceEditor } from "@/hooks/use-resource-editor";
+import { getFormString } from "@/lib/form-data";
+import { formatDateTime, toDateTimeLocal } from "@/lib/format";
 
 export function SiteMessagesPage(): ReactNode {
-  const queryClient = useQueryClient();
   const { data: items } = useSuspenseQuery(siteMessagesQueryOptions());
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<SiteMessageRow | null>(null);
+  const { dialogOpen, editing, openCreate, openEdit, close, onOpenChange } =
+    useResourceEditor<SiteMessageRow>();
 
-  const archiveMessage = useMutation(orpcQuery.website.archiveMessage.mutationOptions());
-
-  async function refresh(): Promise<void> {
-    setDialogOpen(false);
-    setEditing(null);
-    await queryClient.invalidateQueries({ queryKey: orpcQuery.website.listMessages.key() });
-  }
+  const archiveMessage = useArchiveSiteMessage();
 
   async function archive(item: SiteMessageRow): Promise<void> {
     try {
       await archiveMessage.mutateAsync({ id: item.id });
       toast.success("サイトメッセージをアーカイブしました");
-      await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "アーカイブできませんでした");
+      toast.error(getErrorMessage(error, "アーカイブできませんでした"));
     }
   }
 
@@ -103,10 +95,7 @@ export function SiteMessagesPage(): ReactNode {
             size="sm"
             variant="ghost"
             aria-label={`${item.name}を編集`}
-            onClick={() => {
-              setEditing(item);
-              setDialogOpen(true);
-            }}
+            onClick={() => openEdit(item)}
           >
             <Pencil />
           </Button>
@@ -122,55 +111,38 @@ export function SiteMessagesPage(): ReactNode {
   ];
 
   return (
-    <PageLayout
+    <WebsiteResourceListPage
       title="サイトメッセージ"
-      action={
-        <Button
-          onClick={() => {
-            setEditing(null);
-            setDialogOpen(true);
-          }}
-        >
-          <Plus data-icon="inline-start" />
-          メッセージを作成
-        </Button>
+      createLabel="メッセージを作成"
+      onCreateClick={openCreate}
+      banner={
+        <Alert>
+          <LinkIcon />
+          <AlertTitle>サイトトラッキングと連動します</AlertTitle>
+          <AlertDescription>
+            許可ドメインで識別された連絡先にのみ表示します。匿名の訪問者には表示しません。
+          </AlertDescription>
+        </Alert>
       }
-    >
-      <Alert>
-        <LinkIcon />
-        <AlertTitle>サイトトラッキングと連動します</AlertTitle>
-        <AlertDescription>
-          許可ドメインで識別された連絡先にのみ表示します。匿名の訪問者には表示しません。
-        </AlertDescription>
-      </Alert>
-      <MessageSummary items={items} />
-      <Card>
-        <CardHeader>
-          <CardTitle>メッセージ一覧</CardTitle>
-          <CardDescription>
-            公開状態、ページ条件、表示・クリック実績を確認できます。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="px-0">
-          <DataTable
-            columns={columns}
-            rows={items}
-            rowKey={(item) => item.id}
-            caption="メッセージ一覧"
-            emptyTitle="サイトメッセージがありません"
-            emptyDescription="ページ条件と表示期間を指定して、最初のメッセージを作成してください。"
-          />
-        </CardContent>
-      </Card>
-
-      <SiteMessageEditor
-        key={editing?.id ?? "new"}
-        item={editing}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSaved={refresh}
-      />
-    </PageLayout>
+      summary={<MessageSummary items={items} />}
+      listTitle="メッセージ一覧"
+      listDescription="公開状態、ページ条件、表示・クリック実績を確認できます。"
+      columns={columns}
+      rows={items}
+      rowKey={(item) => item.id}
+      tableCaption="メッセージ一覧"
+      emptyTitle="サイトメッセージがありません"
+      emptyDescription="ページ条件と表示期間を指定して、最初のメッセージを作成してください。"
+      editor={
+        <SiteMessageEditor
+          key={editing?.id ?? "new"}
+          item={editing}
+          open={dialogOpen}
+          onOpenChange={onOpenChange}
+          onSaved={close}
+        />
+      }
+    />
   );
 }
 
@@ -179,7 +151,7 @@ function MessageSummary({ items }: { items: SiteMessageRow[] }): ReactNode {
   const clicks = items.reduce((total, item) => total + item.clickCount, 0);
   const clickRate = impressions > 0 ? (clicks / impressions) * 100 : 0;
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <MetricGrid>
       {[
         {
           label: "メッセージ",
@@ -206,18 +178,19 @@ function MessageSummary({ items }: { items: SiteMessageRow[] }): ReactNode {
           icon: MousePointerClick,
         },
       ].map((item) => (
-        <Card key={item.label}>
-          <CardHeader>
-            <CardDescription>{item.label}</CardDescription>
-            <CardTitle className="text-2xl">{item.value}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
-            <item.icon />
-            {item.description}
-          </CardContent>
-        </Card>
+        <MetricCard
+          key={item.label}
+          label={item.label}
+          value={item.value}
+          description={
+            <div className="flex items-center gap-2 text-sm">
+              <item.icon />
+              {item.description}
+            </div>
+          }
+        />
       ))}
-    </div>
+    </MetricGrid>
   );
 }
 
@@ -230,12 +203,12 @@ function SiteMessageEditor({
   item: SiteMessageRow | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => void;
 }): ReactNode {
   const { busy, error, run, setError } = useFormSubmission("保存できませんでした");
 
-  const createMessage = useMutation(orpcQuery.website.createMessage.mutationOptions());
-  const updateMessage = useMutation(orpcQuery.website.updateMessage.mutationOptions());
+  const createMessage = useCreateSiteMessage();
+  const updateMessage = useUpdateSiteMessage();
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -258,13 +231,17 @@ function SiteMessageEditor({
       startsAt,
       endsAt,
     } as const;
-    await run(async () => {
-      await (item
-        ? updateMessage.mutateAsync({ id: item.id, ...payload })
-        : createMessage.mutateAsync(payload));
-      toast.success(item ? "サイトメッセージを更新しました" : "サイトメッセージを作成しました");
-      await onSaved();
-    });
+    await run(() =>
+      saveResource({
+        editing: item,
+        payload,
+        create: (data) => createMessage.mutateAsync(data),
+        update: (id, data) => updateMessage.mutateAsync({ id, ...data }),
+        createdMessage: "サイトメッセージを作成しました",
+        updatedMessage: "サイトメッセージを更新しました",
+        onSaved,
+      }),
+    );
   }
 
   return (
@@ -328,13 +305,13 @@ function SiteMessageEditor({
           label="表示開始"
           name="startsAt"
           type="datetime-local"
-          defaultValue={toLocalDateTime(item?.startsAt)}
+          defaultValue={toDateTimeLocal(item?.startsAt)}
         />
         <FormInput
           label="表示終了"
           name="endsAt"
           type="datetime-local"
-          defaultValue={toLocalDateTime(item?.endsAt)}
+          defaultValue={toDateTimeLocal(item?.endsAt)}
         />
       </div>
     </FormDialog>
@@ -344,11 +321,4 @@ function SiteMessageEditor({
 function dateTimeValue(value: FormDataEntryValue | null): string | null {
   const raw = typeof value === "string" ? value.trim() : "";
   return raw ? new Date(raw).toISOString() : null;
-}
-
-function toLocalDateTime(value: string | null | undefined): string {
-  if (!value) return "";
-  const date = new Date(value);
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }

@@ -5,7 +5,7 @@ import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { type AutomationNode } from "@openengage/orpc";
+import { type AutomationNode } from "@openengage/core/automations";
 
 import { nodeLabel, nodeTypeLabel } from "./automation-labels";
 

@@ -5,17 +5,16 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function getFormString(formData: FormData, name: string): string {
-  const value = formData.get(name);
-  return typeof value === "string" ? value : "";
-}
-
-export function slugify(value: string): string {
+export function slugify(
+  value: string,
+  options?: { maxLength?: number; fallback?: string },
+): string {
   const normalized = value
     .normalize("NFKD")
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-|-$/g, "");
+    .replaceAll(/^-+|-+$/g, "");
+  const trimmed = options?.maxLength ? normalized.slice(0, options.maxLength) : normalized;
 
-  return normalized || `resource-${Date.now()}`;
+  return trimmed || `${options?.fallback ?? "resource"}-${Date.now()}`;
 }

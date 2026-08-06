@@ -1,4 +1,4 @@
-import { retryDelaySeconds } from "@openengage/core";
+import { retryDelaySeconds } from "@openengage/core/platform";
 import {
   AutomationEngineRepository,
   claimDueJobs,

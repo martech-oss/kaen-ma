@@ -6,12 +6,6 @@ import type { WorkspaceRole } from "@openengage/orpc";
 
 import { seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 /** Seeds a workspace with an API key at the given role and returns a client for it. */
 function seedWorkspace(role: WorkspaceRole = "owner") {
   return seedWorkspaceClient(env.DB, { role, timezone: "Asia/Tokyo" });
@@ -69,7 +63,7 @@ describe("accounts over oRPC", () => {
         title: "CTO",
         isPrimary: true,
       }),
-    ).resolves.toEqual({ assigned: true });
+    ).resolves.toEqual({ ok: true });
 
     const detail = await client.companies.get({ id: account.id });
     expect(detail.contacts).toEqual([
@@ -88,7 +82,7 @@ describe("accounts over oRPC", () => {
 
     await expect(
       client.companies.removeContact({ id: account.id, contactId: contact.id }),
-    ).resolves.toEqual({ removed: true });
+    ).resolves.toEqual({ ok: true });
     await expect(client.companies.get({ id: account.id })).resolves.toMatchObject({ contacts: [] });
   });
 

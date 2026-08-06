@@ -1,6 +1,6 @@
 import { writeAuditLog } from "@openengage/database";
 import { ContactRepository } from "@openengage/database";
-import { CSV_MAX_BYTES } from "@openengage/orpc";
+import { ack, CSV_MAX_BYTES } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import {
@@ -93,7 +93,7 @@ export const archiveContactProcedure = authed.contacts.archive.handler(
       context.workspace,
     ).archiveContact(input.id);
     if (!archived) throw errors.CONTACT_NOT_FOUND();
-    return { archived: true as const };
+    return ack;
   },
 );
 

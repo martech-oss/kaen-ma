@@ -6,12 +6,6 @@ import type { Asset } from "@openengage/orpc";
 
 import { seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 const APP_ORIGIN = new URL(env.APP_URL).origin;
 
 function call(path: string, init?: RequestInit): Promise<Response> {

@@ -10,13 +10,10 @@ import {
   siteReportSchema,
 } from "@openengage/core/reports";
 
-import { workspaceErrors } from "../shared/errors";
+import { authedErrors } from "../shared/errors";
 
 /** Reports are analyst-and-above; the range is validated by the shared schema. */
-const analystErrors = {
-  ...workspaceErrors,
-  FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
-} as const;
+const analystErrors = authedErrors;
 
 const rangeInput = reportDateRangeSchema;
 const dealsInput = z.object({

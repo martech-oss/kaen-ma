@@ -3,12 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 describe("Website center", () => {
   it("manages and publishes forms, pages, site messages, and site tracking", async () => {
     const { client, slug: workspaceSlug } = await seedWorkspaceClient(env.DB);
@@ -31,7 +25,7 @@ describe("Website center", () => {
         enabled: true,
         allowedDomains: ["https://example.com/path", "campaign.example.com"],
       }),
-    ).resolves.toEqual({ saved: true });
+    ).resolves.toEqual({ ok: true });
     const trackingSettings = await client.website.getTracking();
     expect(trackingSettings).toMatchObject({
       enabled: true,

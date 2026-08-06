@@ -94,6 +94,54 @@ export function FormDialog({
   );
 }
 
+/** Generic destructive-action confirmation. `ArchiveConfirm`/`AssetDeleteConfirm` are thin presets of this. */
+export function ConfirmDialog({
+  title,
+  description,
+  confirmLabel,
+  cancelLabel = "キャンセル",
+  icon,
+  triggerLabel,
+  trigger,
+  triggerContent,
+  onConfirm,
+}: {
+  title: string;
+  description?: string;
+  confirmLabel: string;
+  cancelLabel?: string;
+  icon?: ReactElement;
+  triggerLabel?: string;
+  trigger?: ReactElement;
+  triggerContent?: ReactNode;
+  onConfirm: () => void | Promise<void>;
+}): ReactNode {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          trigger ?? <Button size="sm" variant="ghost" aria-label={triggerLabel ?? confirmLabel} />
+        }
+      >
+        {triggerContent ?? icon}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          {icon ? <AlertDialogMedia>{icon}</AlertDialogMedia> : null}
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          {description ? <AlertDialogDescription>{description}</AlertDialogDescription> : null}
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => void onConfirm()}>
+            {confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 export function ArchiveConfirm({
   label,
   title = "アーカイブしますか？",
@@ -114,33 +162,15 @@ export function ArchiveConfirm({
   onConfirm: () => void | Promise<void>;
 }): ReactNode {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger
-        render={
-          trigger ?? (
-            <Button size="sm" variant="ghost" aria-label={triggerLabel ?? `${label}をアーカイブ`} />
-          )
-        }
-      >
-        {triggerContent ?? <ArchiveIcon />}
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogMedia>
-            <ArchiveIcon />
-          </AlertDialogMedia>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {description ?? `「${label}」を通常の一覧から非表示にします。`}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>キャンセル</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => void onConfirm()}>
-            {confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      title={title}
+      description={description ?? `「${label}」を通常の一覧から非表示にします。`}
+      confirmLabel={confirmLabel}
+      icon={<ArchiveIcon />}
+      triggerLabel={triggerLabel ?? `${label}をアーカイブ`}
+      {...(trigger !== undefined ? { trigger } : {})}
+      {...(triggerContent !== undefined ? { triggerContent } : {})}
+      onConfirm={onConfirm}
+    />
   );
 }

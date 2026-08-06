@@ -11,14 +11,16 @@ import {
   subscriptionTopicOptionSchema,
 } from "@openengage/core/messaging";
 
-import { workspaceErrors } from "../shared/errors";
+import { authedErrors, workspaceErrors } from "../shared/errors";
+import { ackSchema, idInput, notFoundError } from "../shared/schemas";
 
-const forbidden = {
-  FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
-} as const;
-const base = { ...workspaceErrors, ...forbidden } as const;
+const base = authedErrors;
 const archivedInput = z.object({ archived: z.boolean().default(false) });
-const idInput = z.object({ id: z.string().min(1) });
+const templateNotFound = notFoundError("TEMPLATE_NOT_FOUND", "メールテンプレートが見つかりません");
+const variableNotFound = notFoundError(
+  "MESSAGE_VARIABLE_NOT_FOUND",
+  "メッセージ変数が見つかりません",
+);
 
 export const emailsContract = {
   listTemplates: oc
@@ -33,9 +35,9 @@ export const emailsContract = {
     .output(z.object({ id: z.string() })),
   updateTemplate: oc
     .route({ method: "PATCH", path: "/emails/templates/{id}" })
-    .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })
+    .errors({ ...base, ...templateNotFound })
     .input(emailTemplateWriteSchema.extend({ id: z.string().min(1) }))
-    .output(z.object({ updated: z.literal(true) })),
+    .output(ackSchema),
   previewTemplate: oc
     .route({ method: "POST", path: "/emails/templates/preview" })
     .errors(base)
@@ -43,14 +45,14 @@ export const emailsContract = {
     .output(emailTemplatePreviewSchema),
   publishTemplate: oc
     .route({ method: "POST", path: "/emails/templates/{id}/publish" })
-    .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })
+    .errors({ ...base, ...templateNotFound })
     .input(idInput)
-    .output(z.object({ published: z.literal(true) })),
+    .output(ackSchema),
   archiveTemplate: oc
     .route({ method: "POST", path: "/emails/templates/{id}/archive" })
-    .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })
+    .errors({ ...base, ...templateNotFound })
     .input(idInput)
-    .output(z.object({ archived: z.literal(true) })),
+    .output(ackSchema),
 
   listVariables: oc
     .route({ method: "GET", path: "/emails/variables" })
@@ -66,16 +68,16 @@ export const emailsContract = {
     .route({ method: "PATCH", path: "/emails/variables/{id}" })
     .errors({
       ...base,
-      NOT_FOUND: { status: 404, message: "メッセージ変数が見つかりません" },
+      ...variableNotFound,
       VARIABLE_CONFLICT: { status: 409, message: "同じキーが既に存在します" },
     })
     .input(messageVariableWriteSchema.extend({ id: z.string().min(1) }))
-    .output(z.object({ updated: z.literal(true) })),
+    .output(ackSchema),
   archiveVariable: oc
     .route({ method: "POST", path: "/emails/variables/{id}/archive" })
-    .errors({ ...base, NOT_FOUND: { status: 404, message: "メッセージ変数が見つかりません" } })
+    .errors({ ...base, ...variableNotFound })
     .input(idInput)
-    .output(z.object({ archived: z.literal(true) })),
+    .output(ackSchema),
 
   // Admin-UI option lists. Distinct REST paths so they never collide with the
   // canonical /segments and /subscription-topics resources when both are

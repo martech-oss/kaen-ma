@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { AutomationDefinition, AutomationEdge, AutomationNode } from "@openengage/orpc";
+import type {
+  AutomationDefinition,
+  AutomationEdge,
+  AutomationNode,
+} from "@openengage/core/automations";
 
 import {
   chainEdges,

@@ -1,6 +1,6 @@
 import { Activity, Clock3, Sparkles, UserPlus } from "lucide-react";
 
-import { type AutomationDefinition } from "@openengage/orpc";
+import { type AutomationDefinition } from "@openengage/core/automations";
 
 import { chainEdges, delayNode, emailNode, sourceNode } from "./automation-graph";
 import { type EmailTemplateOption } from "./automation-types";

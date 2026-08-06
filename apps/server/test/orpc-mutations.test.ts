@@ -7,22 +7,11 @@ import { contract } from "@openengage/orpc";
 
 import { createFixtureClient, seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 type Client = ContractRouterClient<typeof contract>;
 
-async function createWorkspaceClient(): Promise<{ client: Client; workspaceId: string }> {
-  const { client, workspaceId } = await seedWorkspaceClient(env.DB);
-  return { client, workspaceId };
-}
-
-describe("oRPC contract completion (P2)", () => {
+describe("oRPC mutations", () => {
   it("manages subscription topics", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     const created = await client.consent.createTopic({
       name: "Newsletter",
       slug: "newsletter",
@@ -44,7 +33,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("manages projects and project items", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     const { id } = await client.projects.create({
       name: "Spring launch",
       description: "",
@@ -70,7 +59,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("manages webhook endpoints with URL safety checks", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     const created = await client.workspace.createWebhookEndpoint({
       name: "CRM sync",
       url: "https://hooks.example.com/openengage",
@@ -95,7 +84,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("reads a contact, its timeline, and records custom events", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     const contact = await client.contacts.create({
       email: "timeline@example.com",
       customFields: {},
@@ -121,7 +110,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("previews a segment filter without persisting it", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     await client.contacts.create({ email: "match@acme.dev", customFields: {} });
     await client.contacts.create({ email: "other@different.io", customFields: {} });
     const preview = await client.segments.preview({
@@ -133,7 +122,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("creates an API key whose token authenticates with its prefix", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     const created = await client.workspace.createApiKey({ name: "CI key", role: "analyst" });
     expect(created.token.startsWith(`openengage_${created.prefix}_`)).toBe(true);
     const analystClient: Client = createFixtureClient({ token: created.token });
@@ -150,7 +139,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("starts a contact export and reports its data job", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     const { jobId } = await client.contacts.startExport();
     const job = await client.contacts.getDataJob({ id: jobId });
     expect(job).toMatchObject({ id: jobId, kind: "contact_export", status: "pending" });
@@ -160,7 +149,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("accepts a CSV import file and rejects one without identifiers", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     const csv = "email,first_name\nimport-a@example.com,Ay\nimport-b@example.com,Bee\n";
     const started = await client.contacts.startImport({
       file: new File([csv], "contacts.csv", { type: "text/csv" }),
@@ -174,7 +163,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("uploads and downloads an asset through R2", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     const uploaded = await client.assets.upload({
       name: "logo.png",
       file: new File(["openengage"], "logo.png", { type: "image/png" }),
@@ -194,7 +183,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("refuses to store content types the delivery routes would execute", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     await expect(
       client.assets.upload({
         name: "logo.svg",
@@ -204,7 +193,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("lists dead letters and rejects replaying unknown entries", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     await expect(client.platform.listDeadLetters()).resolves.toEqual([]);
     await expect(client.platform.replayDeadLetter({ id: uuidv7() })).rejects.toMatchObject({
       code: "DEAD_LETTER_NOT_FOUND",
@@ -212,7 +201,7 @@ describe("oRPC contract completion (P2)", () => {
   });
 
   it("guards manual enrollment and serves per-automation analytics", async () => {
-    const { client } = await createWorkspaceClient();
+    const { client } = await seedWorkspaceClient(env.DB);
     await expect(
       client.automations.enroll({ id: uuidv7(), contactId: uuidv7() }),
     ).rejects.toMatchObject({ code: "AUTOMATION_NOT_ACTIVE" });

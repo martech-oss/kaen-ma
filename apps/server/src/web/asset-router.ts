@@ -1,4 +1,7 @@
+import { ack } from "@openengage/orpc";
+
 import { authed, requireRole } from "../orpc/base";
+import type { OrpcContext } from "../orpc/context";
 import {
   AssetContentTypeBlockedError,
   archiveAsset,
@@ -12,21 +15,17 @@ import {
   uploadAsset,
 } from "./asset-service";
 
+function resolveAssetOrigin(context: OrpcContext) {
+  return loadAssetOrigin(context.database, context.workspace.workspaceId, context.env.APP_URL);
+}
+
 export const listAssetsProcedure = authed.assets.list.handler(async ({ context, input }) => {
-  const origin = await loadAssetOrigin(
-    context.database,
-    context.workspace.workspaceId,
-    context.env.APP_URL,
-  );
+  const origin = await resolveAssetOrigin(context);
   return listAssets(context.database, context.workspace.workspaceId, input, origin);
 });
 
 export const getAssetProcedure = authed.assets.get.handler(async ({ context, input, errors }) => {
-  const origin = await loadAssetOrigin(
-    context.database,
-    context.workspace.workspaceId,
-    context.env.APP_URL,
-  );
+  const origin = await resolveAssetOrigin(context);
   const asset = await getAsset(context.database, context.workspace.workspaceId, input.id, origin);
   if (!asset) throw errors.ASSET_NOT_FOUND();
   return asset;
@@ -35,11 +34,7 @@ export const getAssetProcedure = authed.assets.get.handler(async ({ context, inp
 export const uploadAssetProcedure = authed.assets.upload.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const origin = await loadAssetOrigin(
-      context.database,
-      context.workspace.workspaceId,
-      context.env.APP_URL,
-    );
+    const origin = await resolveAssetOrigin(context);
     const body = await input.file.arrayBuffer();
     try {
       return await uploadAsset(
@@ -80,11 +75,7 @@ export const downloadAssetProcedure = authed.assets.download.handler(
 export const updateAssetProcedure = authed.assets.update.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    const origin = await loadAssetOrigin(
-      context.database,
-      context.workspace.workspaceId,
-      context.env.APP_URL,
-    );
+    const origin = await resolveAssetOrigin(context);
     const outcome = await updateAsset(
       context.database,
       context.workspace,
@@ -100,7 +91,7 @@ export const updateAssetProcedure = authed.assets.update.handler(
 
 export const archiveAssetProcedure = authed.assets.archive.handler(
   async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     const archived = await archiveAsset(
       context.database,
       context.workspace,
@@ -108,13 +99,13 @@ export const archiveAssetProcedure = authed.assets.archive.handler(
       context.executionContext,
     );
     if (!archived) throw errors.ASSET_NOT_FOUND();
-    return { archived: true as const };
+    return ack;
   },
 );
 
 export const restoreAssetProcedure = authed.assets.restore.handler(
   async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     const restored = await restoreAsset(
       context.database,
       context.workspace,
@@ -122,7 +113,7 @@ export const restoreAssetProcedure = authed.assets.restore.handler(
       context.executionContext,
     );
     if (!restored) throw errors.ASSET_NOT_ARCHIVED();
-    return { restored: true as const };
+    return ack;
   },
 );
 
@@ -137,7 +128,7 @@ export const deleteAssetProcedure = authed.assets.delete.handler(
       context.executionContext,
     );
     if (!deleted) throw errors.ASSET_NOT_FOUND();
-    return { deleted: true as const };
+    return ack;
   },
 );
 

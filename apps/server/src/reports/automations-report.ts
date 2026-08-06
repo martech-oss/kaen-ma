@@ -1,7 +1,7 @@
 import { ReportsRepository } from "@openengage/database";
 
-import { primitiveString } from "../platform/values";
-import { publicRange, rate, type ReportDatabase, type ReportRange, toNumber } from "./shared";
+import { primitiveString, toFiniteNumber } from "../platform/values";
+import { publicRange, rate, type ReportDatabase, type ReportRange } from "./shared";
 
 export async function automationReport(
   database: ReportDatabase,
@@ -13,12 +13,12 @@ export async function automationReport(
     id: primitiveString(row["id"]),
     name: primitiveString(row["name"]),
     status: primitiveString(row["status"]),
-    entries: toNumber(row["entries"]),
-    completions: toNumber(row["completions"]),
-    activeContacts: toNumber(row["active_contacts"]),
-    sends: toNumber(row["sends"]),
-    opens: toNumber(row["opens"]),
-    clicks: toNumber(row["clicks"]),
+    entries: toFiniteNumber(row["entries"]),
+    completions: toFiniteNumber(row["completions"]),
+    activeContacts: toFiniteNumber(row["active_contacts"]),
+    sends: toFiniteNumber(row["sends"]),
+    opens: toFiniteNumber(row["opens"]),
+    clicks: toFiniteNumber(row["clicks"]),
   }));
   const totals = automations.reduce(
     (total, automation) => ({
@@ -43,8 +43,8 @@ export async function automationReport(
     },
     trend: data.trend.map((row) => ({
       day: primitiveString(row["day"]),
-      entries: toNumber(row["entries"]),
-      completions: toNumber(row["completions"]),
+      entries: toFiniteNumber(row["entries"]),
+      completions: toFiniteNumber(row["completions"]),
     })),
     automations,
   };

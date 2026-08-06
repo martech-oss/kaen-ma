@@ -1,4 +1,4 @@
-import { type AutomationEdge, type AutomationNode } from "@openengage/orpc";
+import { type AutomationEdge, type AutomationNode } from "@openengage/core/automations";
 
 export function nodeLabel(node: AutomationNode): string {
   if (node.type === "source") return triggerLabel(node.config.source);

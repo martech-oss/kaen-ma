@@ -18,15 +18,15 @@ export const workspaceRoleSchema = z.enum(WORKSPACE_ROLES);
 export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
 
 export const MESSAGE_PURPOSES = ["transactional", "marketing"] as const;
-export const messagePurposeSchema = z.enum(MESSAGE_PURPOSES);
+const messagePurposeSchema = z.enum(MESSAGE_PURPOSES);
 export type MessagePurpose = z.infer<typeof messagePurposeSchema>;
 
 export const CHANNELS = ["email", "webhook"] as const;
-export const channelSchema = z.enum(CHANNELS);
+const channelSchema = z.enum(CHANNELS);
 export type Channel = z.infer<typeof channelSchema>;
 
 export const PROVIDERS = ["cloudflare", "webhook"] as const;
-export const providerSchema = z.enum(PROVIDERS);
+const providerSchema = z.enum(PROVIDERS);
 export type Provider = z.infer<typeof providerSchema>;
 
 /** Coarse facet derived from an asset's content type - drives the library filter tabs. */
@@ -59,7 +59,7 @@ export const DELIVERY_EVENT_TYPES = [
   "failed",
   "rejected",
 ] as const;
-export const deliveryEventTypeSchema = z.enum(DELIVERY_EVENT_TYPES);
+const deliveryEventTypeSchema = z.enum(DELIVERY_EVENT_TYPES);
 export type DeliveryEventType = z.infer<typeof deliveryEventTypeSchema>;
 
 export interface WorkspaceContext {

@@ -1,12 +1,7 @@
 import { Mail, Phone, UsersRound } from "lucide-react";
 import { type ReactNode } from "react";
 
-import {
-  type DealOptions,
-  type DealStatus,
-  type DealSummary,
-  type DealTaskType,
-} from "@/features/deals/deal-api";
+import { type DealStatus, type DealSummary, type DealTaskType } from "@/features/deals/deal-api";
 
 export function statusLabel(status: DealStatus): string {
   return status === "won" ? "獲得" : status === "lost" ? "失注" : "進行中";
@@ -38,13 +33,6 @@ export function taskTypeLabel(type: DealTaskType): ReactNode {
     );
   }
   return "タスク";
-}
-
-export function contactOptionLabel(contact: DealOptions["contacts"][number]): string {
-  const name = [contact.lastName, contact.firstName].filter(Boolean).join(" ");
-  return name
-    ? `${name}${contact.email ? `（${contact.email}）` : ""}`
-    : (contact.email ?? "名前未設定");
 }
 
 export function contactLabel(deal: DealSummary): string {

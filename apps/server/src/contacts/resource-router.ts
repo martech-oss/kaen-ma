@@ -1,3 +1,5 @@
+import { ack } from "@openengage/orpc";
+
 import { authed, requireRole } from "../orpc/base";
 import {
   addContactSegment,
@@ -43,7 +45,7 @@ export const addTagProcedure = authed.contacts.assignTag.handler(
     if (!(await addContactTag(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
-    return { assigned: true as const };
+    return ack;
   },
 );
 
@@ -53,7 +55,7 @@ export const removeTagProcedure = authed.contacts.removeTag.handler(
     if (!(await removeContactTag(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
-    return { removed: true as const };
+    return ack;
   },
 );
 
@@ -63,7 +65,7 @@ export const addSegmentProcedure = authed.contacts.addToSegment.handler(
     if (!(await addContactSegment(context.database, context.workspace, input))) {
       throw errors.RELATION_REJECTED();
     }
-    return { assigned: true as const };
+    return ack;
   },
 );
 
@@ -72,7 +74,7 @@ export const removeSegmentProcedure = authed.contacts.removeFromSegment.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     await removeContactSegment(context.database, context.workspace, input);
-    return { removed: true as const };
+    return ack;
   },
 );
 
@@ -97,7 +99,7 @@ export const restoreContactProcedure = authed.contacts.restore.handler(
     if (!(await restoreContact(context.database, context.workspace, input.id))) {
       throw errors.CONTACT_NOT_ARCHIVED();
     }
-    return { restored: true as const };
+    return ack;
   },
 );
 

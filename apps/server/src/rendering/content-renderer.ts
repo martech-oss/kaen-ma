@@ -1,4 +1,7 @@
+import type { EmailTemplateWrite } from "@openengage/core/messaging";
 import type { ContentDocument, EmailBlock } from "@openengage/core/web";
+
+import { escapeHtml } from "../public/html";
 
 export interface RenderContext {
   contact: Record<string, unknown>;
@@ -41,6 +44,28 @@ export function renderSubject(template: string, context: RenderContext): string 
     .trim();
 }
 
+const PREVIEW_CONTEXT: RenderContext = {
+  contact: {
+    email: "taro@example.com",
+    first_name: "太郎",
+    last_name: "山田",
+    stage: "lead",
+    score: 10,
+  },
+  workspace: { name: "OpenEngage Workspace" },
+  message: { brand: "OpenEngage" },
+};
+
+/** Renders a template draft against fixture contact/workspace data, for the editor's live preview. */
+export function previewEmailTemplate(
+  input: Pick<EmailTemplateWrite, "subject" | "content">,
+): RenderedContent & { subject: string } {
+  return {
+    subject: renderSubject(input.subject, PREVIEW_CONTEXT),
+    ...renderContent(input.content, PREVIEW_CONTEXT),
+  };
+}
+
 export function interpolate(template: string, context: RenderContext, escape = true): string {
   return template.replace(
     /\{\{\s*(contact|workspace|message)\.([A-Za-z0-9_.-]{1,191})\s*\}\}/g,
@@ -53,15 +78,6 @@ export function interpolate(template: string, context: RenderContext, escape = t
       return escape ? escapeHtml(rendered) : rendered;
     },
   );
-}
-
-export function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 function renderBlock(block: EmailBlock, context: RenderContext): string {

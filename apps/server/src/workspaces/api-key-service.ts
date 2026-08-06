@@ -1,5 +1,5 @@
+import type { WorkspaceContext, WorkspaceRole } from "@openengage/core/shared";
 import { ApiKeyRepository, uuidv7, type OpenEngageDatabase } from "@openengage/database";
-import type { WorkspaceContext, WorkspaceRole } from "@openengage/orpc";
 
 import { randomIdentifier, randomString, sha256Hex } from "../platform/crypto";
 

@@ -1,4 +1,9 @@
-import { keepPreviousData } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  keepPreviousData,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
 import { type Asset, type AssetListInput, type AssetSummary } from "@openengage/core/assets";
@@ -79,8 +84,57 @@ export function assetQueryOptions(id: string) {
   return orpcQuery.assets.get.queryOptions({ input: { id } });
 }
 
+/** Feeds the embed picker: public images only, since a private `publicUrl` is null. */
+export function publicImageAssetsQueryOptions() {
+  return orpcQuery.assets.list.queryOptions({
+    input: { kind: "image", visibility: "public", status: "active", limit: 60 },
+  });
+}
+
 export function loadAsset(id: string): Promise<Asset> {
   return orpc.assets.get({ id });
+}
+
+export function invalidateAssetsList(queryClient: QueryClient): Promise<void> {
+  return queryClient.invalidateQueries({ queryKey: orpcQuery.assets.list.key() });
+}
+
+export function useUpdateAsset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.assets.update.mutationOptions(),
+    onSuccess: (_data, variables) =>
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: orpcQuery.assets.get.key({ input: { id: variables.id } }),
+        }),
+        invalidateAssetsList(queryClient),
+      ]),
+  });
+}
+
+export function useArchiveAsset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.assets.archive.mutationOptions(),
+    onSuccess: () => invalidateAssetsList(queryClient),
+  });
+}
+
+export function useRestoreAsset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.assets.restore.mutationOptions(),
+    onSuccess: () => invalidateAssetsList(queryClient),
+  });
+}
+
+export function useDeleteAsset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.assets.delete.mutationOptions(),
+    onSuccess: () => invalidateAssetsList(queryClient),
+  });
 }
 
 /**

@@ -1,8 +1,9 @@
 import { createMiddleware } from "hono/factory";
 
+import type { WorkspaceContext } from "@openengage/core/shared";
 import { ApiKeyRepository, createDatabase, resolveMemberContext } from "@openengage/database";
 import type { OpenEngageDatabase } from "@openengage/database";
-import type { WorkspaceContext } from "@openengage/orpc";
+import { workspaceErrors } from "@openengage/orpc";
 
 import { timingSafeEqual } from "../channels";
 import type { AppEnvironment, SessionValue } from "../env";
@@ -69,7 +70,11 @@ export async function resolveWorkspaceAccess({
   if (bearer?.startsWith("Bearer ")) {
     const apiContext = await resolveApiKey(database, bearer.slice(7));
     if (!apiContext) {
-      throw new WorkspaceAccessError(401, "invalid_api_key", "APIキーが無効です");
+      throw new WorkspaceAccessError(
+        401,
+        "invalid_api_key",
+        workspaceErrors.INVALID_API_KEY.message,
+      );
     }
     executionContext.waitUntil(
       new ApiKeyRepository(database).touchLastUsed(apiContext.apiKeyId, new Date().toISOString()),
@@ -96,13 +101,17 @@ export async function resolveSessionWorkspaceAccess({
     headers,
   })) as SessionValue | null;
   if (!session) {
-    throw new WorkspaceAccessError(401, "unauthorized", "ログインが必要です");
+    throw new WorkspaceAccessError(401, "unauthorized", workspaceErrors.UNAUTHORIZED.message);
   }
 
   if (isMutation(method)) {
     const origin = headers.get("origin");
     if (origin && origin !== new URL(env.APP_URL).origin) {
-      throw new WorkspaceAccessError(403, "origin_mismatch", "許可されていないOriginです");
+      throw new WorkspaceAccessError(
+        403,
+        "origin_mismatch",
+        workspaceErrors.ORIGIN_MISMATCH.message,
+      );
     }
   }
 
@@ -113,7 +122,7 @@ export async function resolveSessionWorkspaceAccess({
     throw new WorkspaceAccessError(
       403,
       "workspace_required",
-      "利用可能なワークスペースがありません",
+      workspaceErrors.WORKSPACE_REQUIRED.message,
     );
   }
   return { workspace, session };

@@ -1,9 +1,3 @@
-import {
-  ContactRepository,
-  ContactResourceRepository,
-  uuidv7,
-  type OpenEngageDatabase,
-} from "@openengage/database";
 import type {
   Contact,
   ContactBulkAction,
@@ -11,8 +5,14 @@ import type {
   ContactProfile,
   ContactScoreAdjust,
   TagCreate,
-  WorkspaceContext,
-} from "@openengage/orpc";
+} from "@openengage/core/contacts";
+import type { WorkspaceContext } from "@openengage/core/shared";
+import {
+  ContactRepository,
+  ContactResourceRepository,
+  uuidv7,
+  type OpenEngageDatabase,
+} from "@openengage/database";
 
 import { recordContactEvent } from "../contacts/event-service";
 import { resourceSlug } from "../platform/values";

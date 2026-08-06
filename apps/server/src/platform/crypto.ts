@@ -73,7 +73,11 @@ export async function decryptCredentials<T extends Record<string, unknown>>(
 
 export async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return bytesToHex(digest);
+}
+
+export function bytesToHex(value: ArrayBuffer): string {
+  return [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function base64UrlEncode(value: Uint8Array): string {
@@ -100,18 +104,21 @@ async function importAesKey(masterKey: string): Promise<CryptoKey> {
 
 export async function sha256HexFromBytes(value: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", value);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return bytesToHex(digest);
+}
+
+const IDENTIFIER_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+function randomFromAlphabet(length: number, alphabet: string): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(length));
+  return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
 }
 
 export function randomString(length: number): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-";
-  const bytes = crypto.getRandomValues(new Uint8Array(length));
-  return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
+  return randomFromAlphabet(length, `${IDENTIFIER_ALPHABET}-`);
 }
 
 /** API key prefixes must satisfy the `[A-Za-z0-9]` auth pattern, so no dashes. */
 export function randomIdentifier(length: number): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  const bytes = crypto.getRandomValues(new Uint8Array(length));
-  return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
+  return randomFromAlphabet(length, IDENTIFIER_ALPHABET);
 }

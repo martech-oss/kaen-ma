@@ -1,3 +1,5 @@
+import { ack } from "@openengage/orpc";
+
 import { authed, requireRole } from "../orpc/base";
 import {
   archiveDeal,
@@ -80,13 +82,13 @@ export const moveDealProcedure = authed.deals.move.handler(async ({ context, inp
 
 export const archiveDealProcedure = authed.deals.archive.handler(
   async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     if (
       !(await archiveDeal(context.database, context.workspace, input.id, context.executionContext))
     ) {
       throw errors.DEAL_NOT_FOUND();
     }
-    return { archived: true as const };
+    return ack;
   },
 );
 
@@ -124,7 +126,7 @@ export const deleteDealTaskProcedure = authed.deals.deleteTask.handler(
     if (!(await deleteDealTask(context.database, context.workspace, input.dealId, input.taskId))) {
       throw errors.DEAL_TASK_NOT_FOUND();
     }
-    return { removed: true as const };
+    return ack;
   },
 );
 

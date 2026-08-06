@@ -1,4 +1,4 @@
-import type { AutomationDefinition, AutomationEdge, AutomationNode } from "./automations/schema.js";
+import type { AutomationDefinition, AutomationEdge, AutomationNode } from "./schema.js";
 
 export interface AutomationValidationIssue {
   code:

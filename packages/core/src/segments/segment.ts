@@ -1,5 +1,5 @@
-import { isSegmentOperatorAllowed } from "./segments/fields.js";
-import type { SegmentCondition, SegmentFilter } from "./segments/schema.js";
+import { isSegmentOperatorAllowed } from "./fields.js";
+import type { SegmentCondition, SegmentFilter } from "./schema.js";
 
 export interface CompiledSegment {
   sql: string;
@@ -157,6 +157,8 @@ function normalizeValue(
   throw new Error("Array value is only valid for the in operator");
 }
 
+// Mirrors packages/database/src/shared/database-utils.ts's escapeLike (core
+// cannot depend on database, so this stays a local copy — keep them in sync).
 function escapeLike(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_");
 }

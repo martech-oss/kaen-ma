@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull, like, min, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, min, ne, or, sql, type SQL } from "drizzle-orm";
 
 import {
   dealSummarySchema,
@@ -10,13 +10,16 @@ import {
   type DealTaskStatus,
   type DealTaskType,
 } from "@openengage/core/deals";
-import type { WorkspaceContext } from "@openengage/core/shared";
 
 import { member, user } from "../auth/schema";
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { companies, contacts } from "../contacts/schema";
+import { didChange, ensureLoaded, likeContains, nowIso } from "../shared/database-utils";
+import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { dealPipelines, dealStages, deals, dealTasks } from "./schema";
+
+/** Cap on the contact/company option lists offered when assigning a deal. */
+const DEAL_OPTION_LIST_LIMIT = 500;
 
 /** Seed stages for a workspace's first (default) pipeline. */
 const DEFAULT_STAGES = [
@@ -93,16 +96,7 @@ export interface DealOptionRows {
  * some call sites only resolve a workspace id. A full context is assignable
  * wherever this scope is expected.
  */
-export class DealRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: WorkspaceContext | Pick<WorkspaceContext, "workspaceId">,
-  ) {
-    this.database = createDatabase(database);
-  }
-
+export class DealRepository extends WorkspaceRepository {
   /**
    * Returns the id of the workspace's default pipeline, creating it (with its
    * five seed stages) in one atomic batch if none exists yet. Tolerant of a
@@ -115,7 +109,7 @@ export class DealRepository {
     if (existing) return existing.id;
 
     const pipelineId = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     const statements = [
       orm.insert(dealPipelines).values({
@@ -219,7 +213,7 @@ export class DealRepository {
       .from(dealPipelines)
       .where(
         and(
-          eq(dealPipelines.workspaceId, this.context.workspaceId),
+          this.inWorkspace(dealPipelines),
           eq(dealPipelines.id, pipelineId),
           isNull(dealPipelines.archivedAt),
         ),
@@ -232,13 +226,7 @@ export class DealRepository {
     const row = await this.database.orm
       .select({ id: deals.id })
       .from(deals)
-      .where(
-        and(
-          eq(deals.workspaceId, this.context.workspaceId),
-          eq(deals.id, dealId),
-          isNull(deals.archivedAt),
-        ),
-      )
+      .where(and(this.inWorkspace(deals), eq(deals.id, dealId), isNull(deals.archivedAt)))
       .get();
     return row !== undefined;
   }
@@ -292,13 +280,13 @@ export class DealRepository {
             sql`coalesce(${contacts.lastName}, ${contacts.firstName}, ${contacts.email}, ${contacts.id})`,
           ),
         )
-        .limit(500),
+        .limit(DEAL_OPTION_LIST_LIMIT),
       orm
         .select({ id: companies.id, name: companies.name, domain: companies.domain })
         .from(companies)
         .where(eq(companies.workspaceId, workspaceId))
         .orderBy(asc(companies.name))
-        .limit(500),
+        .limit(DEAL_OPTION_LIST_LIMIT),
       orm
         .select({ id: user.id, name: user.name, email: user.email })
         .from(member)
@@ -317,13 +305,7 @@ export class DealRepository {
 
   public async getDeal(id: string): Promise<DealRow | null> {
     const row = await this.dealQuery()
-      .where(
-        and(
-          eq(deals.workspaceId, this.context.workspaceId),
-          eq(deals.id, id),
-          isNull(deals.archivedAt),
-        ),
-      )
+      .where(and(this.inWorkspace(deals), eq(deals.id, id), isNull(deals.archivedAt)))
       .get();
     return row ? dealSummarySchema.parse(row) : null;
   }
@@ -346,14 +328,14 @@ export class DealRepository {
     ];
     if (input.status !== "all") conditions.push(eq(deals.status, input.status));
     if (input.q) {
-      const pattern = `%${input.q}%`;
+      const q = input.q;
       conditions.push(
         or(
-          like(deals.name, pattern),
-          like(contacts.email, pattern),
-          like(contacts.firstName, pattern),
-          like(contacts.lastName, pattern),
-          like(companies.name, pattern),
+          likeContains(deals.name, q),
+          likeContains(contacts.email, q),
+          likeContains(contacts.firstName, q),
+          likeContains(contacts.lastName, q),
+          likeContains(companies.name, q),
         )!,
       );
     }
@@ -397,7 +379,7 @@ export class DealRepository {
 
   public async listDealTasks(dealId: string): Promise<DealTaskRow[]> {
     const rows = await this.taskQuery()
-      .where(and(eq(dealTasks.workspaceId, this.context.workspaceId), eq(dealTasks.dealId, dealId)))
+      .where(and(this.inWorkspace(dealTasks), eq(dealTasks.dealId, dealId)))
       .orderBy(
         sql`case when ${dealTasks.status} = 'open' then 0 else 1 end`,
         sql`case when ${dealTasks.dueAt} is null then 1 else 0 end`,
@@ -410,7 +392,7 @@ export class DealRepository {
   /** Inserts a deal (caller has already validated its references) and returns the joined row. */
   public async createDeal(input: DealCreate): Promise<DealRow> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(deals).values({
       id,
       workspaceId: this.context.workspaceId,
@@ -430,9 +412,7 @@ export class DealRepository {
       createdAt: now,
       updatedAt: now,
     });
-    const deal = await this.getDeal(id);
-    if (!deal) throw new Error("Created deal could not be loaded");
-    return deal;
+    return ensureLoaded(await this.getDeal(id), "Created deal");
   }
 
   /** Overwrites every mutable deal column (caller resolves patch/merge semantics) and returns the fresh row. */
@@ -458,13 +438,7 @@ export class DealRepository {
         lostAt: input.lostAt,
         updatedAt: input.updatedAt,
       })
-      .where(
-        and(
-          eq(deals.workspaceId, this.context.workspaceId),
-          eq(deals.id, id),
-          isNull(deals.archivedAt),
-        ),
-      );
+      .where(and(this.inWorkspace(deals), eq(deals.id, id), isNull(deals.archivedAt)));
     return this.getDeal(id);
   }
 
@@ -475,7 +449,7 @@ export class DealRepository {
       .from(dealStages)
       .where(
         and(
-          eq(dealStages.workspaceId, this.context.workspaceId),
+          this.inWorkspace(dealStages),
           eq(dealStages.pipelineId, pipelineId),
           eq(dealStages.id, stageId),
         ),
@@ -487,40 +461,24 @@ export class DealRepository {
   public async moveDeal(id: string, stageId: string): Promise<DealRow | null> {
     await this.database.orm
       .update(deals)
-      .set({ stageId, updatedAt: new Date().toISOString() })
-      .where(
-        and(
-          eq(deals.workspaceId, this.context.workspaceId),
-          eq(deals.id, id),
-          isNull(deals.archivedAt),
-        ),
-      );
+      .set({ stageId, updatedAt: nowIso() })
+      .where(and(this.inWorkspace(deals), eq(deals.id, id), isNull(deals.archivedAt)));
     return this.getDeal(id);
   }
 
   public async archiveDeal(id: string): Promise<boolean> {
-    const now = new Date().toISOString();
+    const now = nowIso();
     const result = await this.database.orm
       .update(deals)
       .set({ archivedAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(deals.workspaceId, this.context.workspaceId),
-          eq(deals.id, id),
-          isNull(deals.archivedAt),
-        ),
-      );
-    return result.meta.changes > 0;
+      .where(and(this.inWorkspace(deals), eq(deals.id, id), isNull(deals.archivedAt)));
+    return didChange(result);
   }
 
   public async getTask(dealId: string, taskId: string): Promise<DealTaskRow | null> {
     const row = await this.taskQuery()
       .where(
-        and(
-          eq(dealTasks.workspaceId, this.context.workspaceId),
-          eq(dealTasks.dealId, dealId),
-          eq(dealTasks.id, taskId),
-        ),
+        and(this.inWorkspace(dealTasks), eq(dealTasks.dealId, dealId), eq(dealTasks.id, taskId)),
       )
       .get();
     return row ? dealTaskSchema.parse(row) : null;
@@ -529,7 +487,7 @@ export class DealRepository {
   /** Inserts a deal task (caller has already validated the deal/assignee) and returns the joined row. */
   public async createDealTask(dealId: string, input: DealTaskCreate): Promise<DealTaskRow> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(dealTasks).values({
       id,
       workspaceId: this.context.workspaceId,
@@ -543,9 +501,7 @@ export class DealRepository {
       createdAt: now,
       updatedAt: now,
     });
-    const task = await this.getTask(dealId, id);
-    if (!task) throw new Error("Created deal task could not be loaded");
-    return task;
+    return ensureLoaded(await this.getTask(dealId, id), "Created deal task");
   }
 
   /** Overwrites every mutable task column (caller resolves patch semantics) and returns the fresh row. */
@@ -576,11 +532,7 @@ export class DealRepository {
         updatedAt: input.updatedAt,
       })
       .where(
-        and(
-          eq(dealTasks.workspaceId, this.context.workspaceId),
-          eq(dealTasks.dealId, dealId),
-          eq(dealTasks.id, taskId),
-        ),
+        and(this.inWorkspace(dealTasks), eq(dealTasks.dealId, dealId), eq(dealTasks.id, taskId)),
       );
     return this.getTask(dealId, taskId);
   }
@@ -589,25 +541,16 @@ export class DealRepository {
     const result = await this.database.orm
       .delete(dealTasks)
       .where(
-        and(
-          eq(dealTasks.workspaceId, this.context.workspaceId),
-          eq(dealTasks.dealId, dealId),
-          eq(dealTasks.id, taskId),
-        ),
+        and(this.inWorkspace(dealTasks), eq(dealTasks.dealId, dealId), eq(dealTasks.id, taskId)),
       );
-    return result.meta.changes > 0;
+    return didChange(result);
   }
 
   private async findDefaultPipeline(): Promise<{ id: string } | null> {
     const row = await this.database.orm
       .select({ id: dealPipelines.id })
       .from(dealPipelines)
-      .where(
-        and(
-          eq(dealPipelines.workspaceId, this.context.workspaceId),
-          isNull(dealPipelines.archivedAt),
-        ),
-      )
+      .where(and(this.inWorkspace(dealPipelines), isNull(dealPipelines.archivedAt)))
       .orderBy(desc(dealPipelines.isDefault), asc(dealPipelines.createdAt))
       .limit(1)
       .get();

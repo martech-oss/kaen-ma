@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
@@ -26,6 +26,7 @@ import {
   FormNativeSelect,
   FormSelectOption,
   LoadingButton,
+  MetricCard,
   PageLayout,
 } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
@@ -43,21 +44,28 @@ import {
   dealDetailQueryOptions,
   dealOptionsQueryOptions,
   dealsQueryOptions,
+  useArchiveDeal,
+  useCreateDeal,
+  useCreateDealTask,
+  useDeleteDealTask,
+  useMoveDeal,
+  useUpdateDeal,
+  useUpdateDealTask,
   type DealSearch,
   type DealStatus,
   type DealTask,
 } from "@/features/deals/deal-api";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDate, formatMoney, formatMonthDayTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
 
 import { DealBoard } from "./deal-board";
 import { DealForm, DealTaskForm, TaskRow } from "./deal-forms";
 import { contactLabel, statusLabel } from "./deal-labels";
-import { DealStatusBadge, DetailItem, MetricCard } from "./deal-widgets";
+import { DealStatusBadge, DetailItem } from "./deal-widgets";
 
 export function DealsPage({ search }: { search: DealSearch }): ReactNode {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { data: options } = useSuspenseQuery(dealOptionsQueryOptions());
   const { data: deals } = useSuspenseQuery(dealsQueryOptions(search));
   const [query, setQuery] = useState(search.q);
@@ -68,32 +76,27 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
     options.pipelines.find((pipeline) => pipeline.isDefault) ??
     options.pipelines[0];
 
-  const createDeal = useMutation(orpcQuery.deals.create.mutationOptions());
-  const moveDeal = useMutation(orpcQuery.deals.move.mutationOptions());
+  const createDeal = useCreateDeal();
+  const moveDeal = useMoveDeal();
 
   useEffect(() => {
     setQuery(search.q);
   }, [search.q]);
 
-  useEffect(() => {
-    if (query === search.q) return;
-    const timer = window.setTimeout(() => {
-      void navigate({
-        to: "/deals",
-        search: { ...search, q: query },
-        replace: true,
-      });
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [navigate, query, search]);
+  useDebouncedSearch({
+    value: query,
+    onCommit: (value) => {
+      if (value === search.q) return;
+      void navigate({ to: "/deals", search: { ...search, q: value }, replace: true });
+    },
+  });
 
   async function move(dealId: string, stageId: string): Promise<void> {
     setMovingId(dealId);
     try {
       await moveDeal.mutateAsync({ id: dealId, stageId });
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() });
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "ステージを変更できませんでした");
+      toast.error(getErrorMessage(caught, "ステージを変更できませんでした"));
     } finally {
       setMovingId(null);
     }
@@ -113,25 +116,25 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
         <MetricCard
           label="進行中の商談"
           value={`${deals.summary.openCount.toLocaleString()}件`}
-          detail={formatMoney(deals.summary.openValue, "JPY")}
+          description={formatMoney(deals.summary.openValue, "JPY")}
           icon={<BriefcaseBusiness />}
         />
         <MetricCard
           label="獲得済み"
           value={`${deals.summary.wonCount.toLocaleString()}件`}
-          detail={formatMoney(deals.summary.wonValue, "JPY")}
+          description={formatMoney(deals.summary.wonValue, "JPY")}
           icon={<CircleDollarSign />}
         />
         <MetricCard
           label="失注"
           value={`${deals.summary.lostCount.toLocaleString()}件`}
-          detail="パイプライン累計"
+          description="パイプライン累計"
           icon={<CircleX />}
         />
         <MetricCard
           label="パイプライン"
           value={activePipeline?.name ?? "未設定"}
-          detail={`${activePipeline?.stages.length ?? 0}ステージ`}
+          description={`${activePipeline?.stages.length ?? 0}ステージ`}
           icon={<UsersRound />}
         />
       </div>
@@ -226,7 +229,6 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
             submitLabel="商談を作成"
             onSubmit={async (values) => {
               const deal = await createDeal.mutateAsync(values);
-              await queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() });
               toast.success("商談を作成しました");
               setShowCreate(false);
               await navigate({ to: "/deals/$id", params: { id: deal.id } });
@@ -240,7 +242,6 @@ export function DealsPage({ search }: { search: DealSearch }): ReactNode {
 
 export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { data: detail } = useSuspenseQuery(dealDetailQueryOptions(dealId));
   const { data: options } = useSuspenseQuery(dealOptionsQueryOptions());
   const [showEdit, setShowEdit] = useState(false);
@@ -249,18 +250,11 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const { deal, tasks } = detail;
 
-  const updateDeal = useMutation(orpcQuery.deals.update.mutationOptions());
-  const archiveDeal = useMutation(orpcQuery.deals.archive.mutationOptions());
-  const createDealTask = useMutation(orpcQuery.deals.createTask.mutationOptions());
-  const updateDealTask = useMutation(orpcQuery.deals.updateTask.mutationOptions());
-  const deleteDealTask = useMutation(orpcQuery.deals.deleteTask.mutationOptions());
-
-  async function refresh(): Promise<void> {
-    await queryClient.invalidateQueries({
-      queryKey: orpcQuery.deals.get.key({ input: { id: dealId } }),
-    });
-    await queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() });
-  }
+  const updateDeal = useUpdateDeal();
+  const archiveDeal = useArchiveDeal();
+  const createDealTask = useCreateDealTask();
+  const updateDealTask = useUpdateDealTask();
+  const deleteDealTask = useDeleteDealTask();
 
   async function changeStatus(status: DealStatus): Promise<void> {
     setBusyAction(status);
@@ -273,22 +267,19 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
             ? "商談を失注にしました"
             : "商談を再開しました",
       );
-      await refresh();
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "ステータスを変更できませんでした");
+      toast.error(getErrorMessage(caught, "ステータスを変更できませんでした"));
     } finally {
       setBusyAction(null);
     }
   }
 
   async function removeTask(task: DealTask): Promise<void> {
-    if (!window.confirm(`「${task.title}」を削除しますか？`)) return;
     try {
       await deleteDealTask.mutateAsync({ dealId: deal.id, taskId: task.id });
       toast.success("タスクを削除しました");
-      await refresh();
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "タスクを削除できませんでした");
+      toast.error(getErrorMessage(caught, "タスクを削除できませんでした"));
     }
   }
 
@@ -353,25 +344,25 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
         <MetricCard
           label="商談金額"
           value={formatMoney(deal.value, deal.currency)}
-          detail={`成約確度 ${deal.stageProbability}%`}
+          description={`成約確度 ${deal.stageProbability}%`}
           icon={<CircleDollarSign />}
         />
         <MetricCard
           label="完了予定日"
           value={deal.expectedCloseDate ? formatDate(deal.expectedCloseDate) : "未設定"}
-          detail={deal.status === "open" ? "進行中" : statusLabel(deal.status)}
+          description={deal.status === "open" ? "進行中" : statusLabel(deal.status)}
           icon={<CalendarClock />}
         />
         <MetricCard
           label="担当者"
           value={deal.ownerName ?? "未設定"}
-          detail={deal.ownerEmail ?? "担当者を設定してください"}
+          description={deal.ownerEmail ?? "担当者を設定してください"}
           icon={<UserRound />}
         />
         <MetricCard
           label="未完了タスク"
           value={`${deal.openTaskCount.toLocaleString()}件`}
-          detail={deal.nextTaskAt ? `次回 ${formatMonthDayTime(deal.nextTaskAt)}` : "予定なし"}
+          description={deal.nextTaskAt ? `次回 ${formatMonthDayTime(deal.nextTaskAt)}` : "予定なし"}
           icon={<Clock3 />}
         />
       </div>
@@ -401,11 +392,8 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
                       taskId: task.id,
                       status: task.status === "open" ? "completed" : "open",
                     });
-                    await refresh();
                   } catch (caught) {
-                    toast.error(
-                      caught instanceof Error ? caught.message : "タスクを更新できませんでした",
-                    );
+                    toast.error(getErrorMessage(caught, "タスクを更新できませんでした"));
                   }
                 }}
                 onDelete={() => void removeTask(task)}
@@ -466,13 +454,10 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
                 .mutateAsync({ id: deal.id })
                 .then(async () => {
                   toast.success("商談をアーカイブしました");
-                  await queryClient.invalidateQueries({ queryKey: orpcQuery.deals.list.key() });
                   await navigate({ to: "/deals" });
                 })
                 .catch((caught: unknown) => {
-                  toast.error(
-                    caught instanceof Error ? caught.message : "商談をアーカイブできませんでした",
-                  );
+                  toast.error(getErrorMessage(caught, "商談をアーカイブできませんでした"));
                 })
             }
           />
@@ -494,7 +479,6 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
             await updateDeal.mutateAsync({ id: deal.id, ...values });
             toast.success("商談を更新しました");
             setShowEdit(false);
-            await refresh();
           }}
         />
       </AppDialog>
@@ -512,7 +496,6 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
             await createDealTask.mutateAsync({ dealId, ...values });
             toast.success("タスクを追加しました");
             setShowTask(false);
-            await refresh();
           }}
         />
       </AppDialog>
@@ -533,7 +516,6 @@ export function DealDetailPage({ dealId }: { dealId: string }): ReactNode {
               await updateDealTask.mutateAsync({ dealId, taskId: editingTask.id, ...values });
               toast.success("タスクを更新しました");
               setEditingTask(null);
-              await refresh();
             }}
           />
         ) : null}

@@ -10,18 +10,10 @@ import {
 } from "lucide-react";
 import { type ReactNode } from "react";
 
-import { FormNativeSelect, FormSelectOption } from "@/components/app-ui";
+import { FormNativeSelect, FormSelectOption, MetricCard, MetricGrid } from "@/components/app-ui";
+import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   type AutomationsReport,
   type ContactsReport,
@@ -33,10 +25,7 @@ import {
 import { formatMoney, formatPercent, rate } from "@/lib/format";
 
 import {
-  Metric,
-  MetricGrid,
   NoReportData,
-  NumberCell,
   ProgressRow,
   RankingCard,
   ReportStatusBadge,
@@ -48,11 +37,11 @@ import {
 export function ContactsReportView({ report }: { report: ContactsReport }): ReactNode {
   return (
     <>
-      <MetricGrid>
-        <Metric label="総連絡先" value={report.summary.totalContacts} icon={<UsersRound />} />
-        <Metric label="アクティブ" value={report.summary.activeContacts} icon={<UserCheck />} />
-        <Metric label="期間内の新規" value={report.summary.newContacts} icon={<TrendingUp />} />
-        <Metric
+      <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <MetricCard label="総連絡先" value={report.summary.totalContacts} icon={<UsersRound />} />
+        <MetricCard label="アクティブ" value={report.summary.activeContacts} icon={<UserCheck />} />
+        <MetricCard label="期間内の新規" value={report.summary.newContacts} icon={<TrendingUp />} />
+        <MetricCard
           label="期間内のアーカイブ"
           value={report.summary.archivedContacts}
           icon={<Activity />}
@@ -84,19 +73,79 @@ export function ContactsReportView({ report }: { report: ContactsReport }): Reac
 }
 
 export function AutomationsReportView({ report }: { report: AutomationsReport }): ReactNode {
+  const automationColumns: DataTableColumn<AutomationsReport["automations"][number]>[] = [
+    {
+      key: "name",
+      header: "オートメーション",
+      cell: (automation) => (
+        <Link to="/automations/$id" params={{ id: automation.id }} className="hover:underline">
+          {automation.name}
+        </Link>
+      ),
+      headClassName: "px-4",
+      cellClassName: "px-4 font-medium",
+    },
+    {
+      key: "status",
+      header: "状態",
+      cell: (automation) => <ReportStatusBadge status={automation.status} />,
+    },
+    {
+      key: "entries",
+      header: "参加",
+      cell: (automation) => automation.entries.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "completions",
+      header: "完了",
+      cell: (automation) => automation.completions.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "activeContacts",
+      header: "進行中",
+      cell: (automation) => automation.activeContacts.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "sends",
+      header: "送信",
+      cell: (automation) => automation.sends.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "openRate",
+      header: "開封率",
+      cell: (automation) => formatPercent(rate(automation.opens, automation.sends)),
+      headClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "clickRate",
+      header: "クリック率",
+      cell: (automation) => formatPercent(rate(automation.clicks, automation.sends)),
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right",
+    },
+  ];
   return (
     <>
-      <MetricGrid>
-        <Metric label="オートメーション" value={report.summary.automationCount} />
-        <Metric label="参加" value={report.summary.entries} />
-        <Metric
+      <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <MetricCard label="オートメーション" value={report.summary.automationCount} />
+        <MetricCard label="参加" value={report.summary.entries} />
+        <MetricCard
           label="完了率"
           value={formatPercent(report.summary.completionRate)}
           icon={<TrendingUp />}
         />
-        <Metric label="現在進行中" value={report.summary.activeContacts} icon={<Activity />} />
-        <Metric label="メール開封率" value={formatPercent(report.summary.openRate)} />
-        <Metric label="メールクリック率" value={formatPercent(report.summary.clickRate)} />
+        <MetricCard label="現在進行中" value={report.summary.activeContacts} icon={<Activity />} />
+        <MetricCard label="メール開封率" value={formatPercent(report.summary.openRate)} />
+        <MetricCard label="メールクリック率" value={formatPercent(report.summary.clickRate)} />
       </MetricGrid>
       <TrendCard
         title="参加と完了の推移"
@@ -108,65 +157,85 @@ export function AutomationsReportView({ report }: { report: AutomationsReport })
         ]}
       />
       <ReportTableCard title="オートメーション別パフォーマンス">
-        <Table>
-          <TableCaption className="sr-only">オートメーション別レポート</TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="px-4">オートメーション</TableHead>
-              <TableHead>状態</TableHead>
-              <TableHead className="text-right">参加</TableHead>
-              <TableHead className="text-right">完了</TableHead>
-              <TableHead className="text-right">進行中</TableHead>
-              <TableHead className="text-right">送信</TableHead>
-              <TableHead className="text-right">開封率</TableHead>
-              <TableHead className="px-4 text-right">クリック率</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {report.automations.map((automation) => (
-              <TableRow key={automation.id}>
-                <TableCell className="px-4 font-medium">
-                  <Link
-                    to="/automations/$id"
-                    params={{ id: automation.id }}
-                    className="hover:underline"
-                  >
-                    {automation.name}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <ReportStatusBadge status={automation.status} />
-                </TableCell>
-                <NumberCell value={automation.entries} />
-                <NumberCell value={automation.completions} />
-                <NumberCell value={automation.activeContacts} />
-                <NumberCell value={automation.sends} />
-                <TableCell className="text-right">
-                  {formatPercent(rate(automation.opens, automation.sends))}
-                </TableCell>
-                <TableCell className="px-4 text-right">
-                  {formatPercent(rate(automation.clicks, automation.sends))}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {report.automations.length === 0 ? <NoReportData /> : null}
+        <DataTable
+          columns={automationColumns}
+          rows={report.automations}
+          rowKey={(automation) => automation.id}
+          caption="オートメーション別レポート"
+          emptyTitle="この期間のデータはありません"
+          emptyDescription="期間を変更するか、データが蓄積されてから確認してください。"
+        />
       </ReportTableCard>
     </>
   );
 }
 
 export function EmailsReportView({ report }: { report: EmailsReport }): ReactNode {
+  const emailSourceColumns: DataTableColumn<EmailsReport["sources"][number]>[] = [
+    {
+      key: "name",
+      header: "配信元",
+      cell: (source) => source.name,
+      headClassName: "px-4",
+      cellClassName: "px-4 font-medium",
+    },
+    {
+      key: "type",
+      header: "種別",
+      cell: (source) => <Badge variant="outline">{sourceTypeLabel(source.type)}</Badge>,
+    },
+    {
+      key: "sends",
+      header: "送信",
+      cell: (source) => source.sends.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "delivered",
+      header: "到達",
+      cell: (source) => source.delivered.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "openRate",
+      header: "開封率",
+      cell: (source) => formatPercent(source.openRate),
+      headClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "clickRate",
+      header: "クリック率",
+      cell: (source) => formatPercent(source.clickRate),
+      headClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "bounces",
+      header: "バウンス",
+      cell: (source) => source.bounces.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "unsubscribes",
+      header: "配信停止",
+      cell: (source) => source.unsubscribes.toLocaleString(),
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right tabular-nums",
+    },
+  ];
   return (
     <>
-      <MetricGrid>
-        <Metric label="送信" value={report.summary.sends} icon={<Send />} />
-        <Metric label="到達率" value={formatPercent(report.summary.deliveryRate)} />
-        <Metric label="開封率" value={formatPercent(report.summary.openRate)} />
-        <Metric label="クリック率" value={formatPercent(report.summary.clickRate)} />
-        <Metric label="CTOR" value={formatPercent(report.summary.clickToOpenRate)} />
-        <Metric label="バウンス率" value={formatPercent(report.summary.bounceRate)} />
+      <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <MetricCard label="送信" value={report.summary.sends} icon={<Send />} />
+        <MetricCard label="到達率" value={formatPercent(report.summary.deliveryRate)} />
+        <MetricCard label="開封率" value={formatPercent(report.summary.openRate)} />
+        <MetricCard label="クリック率" value={formatPercent(report.summary.clickRate)} />
+        <MetricCard label="CTOR" value={formatPercent(report.summary.clickToOpenRate)} />
+        <MetricCard label="バウンス率" value={formatPercent(report.summary.bounceRate)} />
       </MetricGrid>
       <TrendCard
         title="メールパフォーマンス"
@@ -180,40 +249,14 @@ export function EmailsReportView({ report }: { report: EmailsReport }): ReactNod
         ]}
       />
       <ReportTableCard title="キャンペーン／オートメーション別">
-        <Table>
-          <TableCaption className="sr-only">メール配信元別レポート</TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="px-4">配信元</TableHead>
-              <TableHead>種別</TableHead>
-              <TableHead className="text-right">送信</TableHead>
-              <TableHead className="text-right">到達</TableHead>
-              <TableHead className="text-right">開封率</TableHead>
-              <TableHead className="text-right">クリック率</TableHead>
-              <TableHead className="text-right">バウンス</TableHead>
-              <TableHead className="px-4 text-right">配信停止</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {report.sources.map((source) => (
-              <TableRow key={`${source.type}-${source.id}`}>
-                <TableCell className="px-4 font-medium">{source.name}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">{sourceTypeLabel(source.type)}</Badge>
-                </TableCell>
-                <NumberCell value={source.sends} />
-                <NumberCell value={source.delivered} />
-                <TableCell className="text-right">{formatPercent(source.openRate)}</TableCell>
-                <TableCell className="text-right">{formatPercent(source.clickRate)}</TableCell>
-                <NumberCell value={source.bounces} />
-                <TableCell className="px-4 text-right tabular-nums">
-                  {source.unsubscribes.toLocaleString()}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {report.sources.length === 0 ? <NoReportData /> : null}
+        <DataTable
+          columns={emailSourceColumns}
+          rows={report.sources}
+          rowKey={(source) => `${source.type}-${source.id}`}
+          caption="メール配信元別レポート"
+          emptyTitle="この期間のデータはありません"
+          emptyDescription="期間を変更するか、データが蓄積されてから確認してください。"
+        />
       </ReportTableCard>
     </>
   );
@@ -227,6 +270,50 @@ export function DealsReportView({
   search: ReportSearch;
 }): ReactNode {
   const navigate = useNavigate();
+  const ownerColumns: DataTableColumn<DealsReport["owners"][number]>[] = [
+    {
+      key: "name",
+      header: "担当者",
+      cell: (owner) => owner.name,
+      headClassName: "px-4",
+      cellClassName: "px-4 font-medium",
+    },
+    {
+      key: "created",
+      header: "作成",
+      cell: (owner) => owner.created.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "won",
+      header: "獲得",
+      cell: (owner) => owner.won.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "lost",
+      header: "失注",
+      cell: (owner) => owner.lost.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "openCount",
+      header: "進行中",
+      cell: (owner) => owner.openCount.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "wonValue",
+      header: "獲得金額",
+      cell: (owner) => formatMoney(owner.wonValue, report.currency),
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right tabular-nums",
+    },
+  ];
   return (
     <>
       <div className="max-w-52">
@@ -248,17 +335,20 @@ export function DealsReportView({
           ))}
         </FormNativeSelect>
       </div>
-      <MetricGrid>
-        <Metric label="作成" value={report.summary.created} />
-        <Metric label="獲得" value={report.summary.won} />
-        <Metric label="失注" value={report.summary.lost} />
-        <Metric label="勝率" value={formatPercent(report.summary.winRate)} />
-        <Metric
+      <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <MetricCard label="作成" value={report.summary.created} />
+        <MetricCard label="獲得" value={report.summary.won} />
+        <MetricCard label="失注" value={report.summary.lost} />
+        <MetricCard label="勝率" value={formatPercent(report.summary.winRate)} />
+        <MetricCard
           label="獲得金額"
           value={formatMoney(report.summary.wonValue, report.currency)}
           icon={<CircleDollarSign />}
         />
-        <Metric label="進行中金額" value={formatMoney(report.summary.openValue, report.currency)} />
+        <MetricCard
+          label="進行中金額"
+          value={formatMoney(report.summary.openValue, report.currency)}
+        />
       </MetricGrid>
       <TrendCard
         title="商談の推移"
@@ -272,34 +362,14 @@ export function DealsReportView({
       />
       <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
         <ReportTableCard title="担当者別セールスパフォーマンス">
-          <Table>
-            <TableCaption className="sr-only">担当者別商談レポート</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-4">担当者</TableHead>
-                <TableHead className="text-right">作成</TableHead>
-                <TableHead className="text-right">獲得</TableHead>
-                <TableHead className="text-right">失注</TableHead>
-                <TableHead className="text-right">進行中</TableHead>
-                <TableHead className="px-4 text-right">獲得金額</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {report.owners.map((owner) => (
-                <TableRow key={owner.id}>
-                  <TableCell className="px-4 font-medium">{owner.name}</TableCell>
-                  <NumberCell value={owner.created} />
-                  <NumberCell value={owner.won} />
-                  <NumberCell value={owner.lost} />
-                  <NumberCell value={owner.openCount} />
-                  <TableCell className="px-4 text-right tabular-nums">
-                    {formatMoney(owner.wonValue, report.currency)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {report.owners.length === 0 ? <NoReportData /> : null}
+          <DataTable
+            columns={ownerColumns}
+            rows={report.owners}
+            rowKey={(owner) => owner.id}
+            caption="担当者別商談レポート"
+            emptyTitle="この期間のデータはありません"
+            emptyDescription="期間を変更するか、データが蓄積されてから確認してください。"
+          />
         </ReportTableCard>
         <Card>
           <CardHeader>
@@ -364,19 +434,116 @@ export function DealsReportView({
 }
 
 export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
+  const topPageColumns: DataTableColumn<SiteReport["topPages"][number]>[] = [
+    {
+      key: "url",
+      header: "URL",
+      cell: (page) => (
+        <span className="block max-w-72 truncate" title={page.url}>
+          {page.url}
+        </span>
+      ),
+      headClassName: "px-4",
+      cellClassName: "px-4 font-medium",
+    },
+    {
+      key: "views",
+      header: "PV",
+      cell: (page) => page.views.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "uniqueVisitors",
+      header: "訪問者",
+      cell: (page) => page.uniqueVisitors.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "identifiedContacts",
+      header: "特定済み",
+      cell: (page) => page.identifiedContacts.toLocaleString(),
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right tabular-nums",
+    },
+  ];
+  const formColumns: DataTableColumn<SiteReport["forms"][number]>[] = [
+    {
+      key: "name",
+      header: "フォーム",
+      cell: (form) => form.name,
+      headClassName: "px-4",
+      cellClassName: "px-4 font-medium",
+    },
+    {
+      key: "status",
+      header: "状態",
+      cell: (form) => <ReportStatusBadge status={form.status} />,
+    },
+    {
+      key: "submissions",
+      header: "送信",
+      cell: (form) => form.submissions.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "contacts",
+      header: "連絡先",
+      cell: (form) => form.contacts.toLocaleString(),
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right tabular-nums",
+    },
+  ];
+  const messageColumns: DataTableColumn<SiteReport["messages"][number]>[] = [
+    {
+      key: "name",
+      header: "メッセージ",
+      cell: (message) => message.name,
+      headClassName: "px-4",
+      cellClassName: "px-4 font-medium",
+    },
+    {
+      key: "status",
+      header: "状態",
+      cell: (message) => <ReportStatusBadge status={message.status} />,
+    },
+    {
+      key: "impressions",
+      header: "表示",
+      cell: (message) => message.impressions.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "clicks",
+      header: "クリック",
+      cell: (message) => message.clicks.toLocaleString(),
+      headClassName: "text-right",
+      cellClassName: "text-right tabular-nums",
+    },
+    {
+      key: "clickRate",
+      header: "クリック率",
+      cell: (message) => formatPercent(message.clickRate),
+      headClassName: "px-4 text-right",
+      cellClassName: "px-4 text-right",
+    },
+  ];
   return (
     <>
-      <MetricGrid>
-        <Metric label="ページビュー" value={report.summary.pageViews} icon={<Globe2 />} />
-        <Metric label="ユニーク訪問者" value={report.summary.uniqueVisitors} />
-        <Metric
+      <MetricGrid className="sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <MetricCard label="ページビュー" value={report.summary.pageViews} icon={<Globe2 />} />
+        <MetricCard label="ユニーク訪問者" value={report.summary.uniqueVisitors} />
+        <MetricCard
           label="特定済み率"
           value={formatPercent(report.summary.identificationRate)}
           icon={<UserCheck />}
         />
-        <Metric label="フォーム送信" value={report.summary.submissions} />
-        <Metric label="メッセージ表示" value={report.summary.messageImpressions} />
-        <Metric label="メッセージクリック" value={report.summary.messageClicks} />
+        <MetricCard label="フォーム送信" value={report.summary.submissions} />
+        <MetricCard label="メッセージ表示" value={report.summary.messageImpressions} />
+        <MetricCard label="メッセージクリック" value={report.summary.messageClicks} />
       </MetricGrid>
       <TrendCard
         title="サイトアクティビティ"
@@ -389,91 +556,35 @@ export function SiteReportView({ report }: { report: SiteReport }): ReactNode {
       />
       <div className="grid gap-4 xl:grid-cols-2">
         <ReportTableCard title="上位ページ">
-          <Table>
-            <TableCaption className="sr-only">ページ別サイトレポート</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-4">URL</TableHead>
-                <TableHead className="text-right">PV</TableHead>
-                <TableHead className="text-right">訪問者</TableHead>
-                <TableHead className="px-4 text-right">特定済み</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {report.topPages.map((page) => (
-                <TableRow key={page.url}>
-                  <TableCell className="max-w-72 truncate px-4 font-medium" title={page.url}>
-                    {page.url}
-                  </TableCell>
-                  <NumberCell value={page.views} />
-                  <NumberCell value={page.uniqueVisitors} />
-                  <TableCell className="px-4 text-right tabular-nums">
-                    {page.identifiedContacts.toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {report.topPages.length === 0 ? <NoReportData /> : null}
+          <DataTable
+            columns={topPageColumns}
+            rows={report.topPages}
+            rowKey={(page) => page.url}
+            caption="ページ別サイトレポート"
+            emptyTitle="この期間のデータはありません"
+            emptyDescription="期間を変更するか、データが蓄積されてから確認してください。"
+          />
         </ReportTableCard>
         <ReportTableCard title="フォームパフォーマンス">
-          <Table>
-            <TableCaption className="sr-only">フォーム別レポート</TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="px-4">フォーム</TableHead>
-                <TableHead>状態</TableHead>
-                <TableHead className="text-right">送信</TableHead>
-                <TableHead className="px-4 text-right">連絡先</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {report.forms.map((form) => (
-                <TableRow key={form.id}>
-                  <TableCell className="px-4 font-medium">{form.name}</TableCell>
-                  <TableCell>
-                    <ReportStatusBadge status={form.status} />
-                  </TableCell>
-                  <NumberCell value={form.submissions} />
-                  <TableCell className="px-4 text-right tabular-nums">
-                    {form.contacts.toLocaleString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {report.forms.length === 0 ? <NoReportData /> : null}
+          <DataTable
+            columns={formColumns}
+            rows={report.forms}
+            rowKey={(form) => form.id}
+            caption="フォーム別レポート"
+            emptyTitle="この期間のデータはありません"
+            emptyDescription="期間を変更するか、データが蓄積されてから確認してください。"
+          />
         </ReportTableCard>
       </div>
       <ReportTableCard title="サイトメッセージ（累計）">
-        <Table>
-          <TableCaption className="sr-only">サイトメッセージ別レポート</TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="px-4">メッセージ</TableHead>
-              <TableHead>状態</TableHead>
-              <TableHead className="text-right">表示</TableHead>
-              <TableHead className="text-right">クリック</TableHead>
-              <TableHead className="px-4 text-right">クリック率</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {report.messages.map((message) => (
-              <TableRow key={message.id}>
-                <TableCell className="px-4 font-medium">{message.name}</TableCell>
-                <TableCell>
-                  <ReportStatusBadge status={message.status} />
-                </TableCell>
-                <NumberCell value={message.impressions} />
-                <NumberCell value={message.clicks} />
-                <TableCell className="px-4 text-right">
-                  {formatPercent(message.clickRate)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {report.messages.length === 0 ? <NoReportData /> : null}
+        <DataTable
+          columns={messageColumns}
+          rows={report.messages}
+          rowKey={(message) => message.id}
+          caption="サイトメッセージ別レポート"
+          emptyTitle="この期間のデータはありません"
+          emptyDescription="期間を変更するか、データが蓄積されてから確認してください。"
+        />
       </ReportTableCard>
     </>
   );

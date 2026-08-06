@@ -1,20 +1,8 @@
-import type { OpenEngageDatabase } from "@openengage/database";
+import type { OpenEngageDatabase, ReportDateRange } from "@openengage/database";
 
 export type ReportDatabase = OpenEngageDatabase;
 
-export interface ReportRange {
-  from: string;
-  to: string;
-  fromTimestamp: string;
-  toExclusiveTimestamp: string;
-}
-
-export function defaultRange(): { from: string; to: string } {
-  const to = new Date();
-  const from = new Date(to);
-  from.setUTCDate(from.getUTCDate() - 29);
-  return { from: isoDate(from), to: isoDate(to) };
-}
+export type ReportRange = ReportDateRange;
 
 export function toReportRange(from: string, to: string): ReportRange {
   const toExclusive = new Date(`${to}T00:00:00.000Z`);
@@ -33,10 +21,6 @@ export function publicRange(range: ReportRange) {
 
 export function isoDate(value: Date): string {
   return value.toISOString().slice(0, 10);
-}
-
-export function toNumber(value: unknown): number {
-  return typeof value === "number" ? value : Number(value ?? 0);
 }
 
 export function rate(numerator: number, denominator: number): number {

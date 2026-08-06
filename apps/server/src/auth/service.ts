@@ -7,6 +7,7 @@ import { authSchema, createDatabase } from "@openengage/database";
 
 import type { RuntimeEnv } from "../env";
 import { CloudflareEmailAdapter } from "../messaging/cloudflare-email";
+import { bytesToHex } from "../platform/crypto";
 import { renderSystemEmail, type SystemEmailInput } from "./email-templates";
 
 export function createAuth(env: RuntimeEnv, requestOrigin?: string) {
@@ -148,8 +149,5 @@ async function authEmailKey(recipient: string, subject: string): Promise<string>
     "SHA-256",
     new TextEncoder().encode(JSON.stringify([recipient, subject])),
   );
-  return [...new Uint8Array(digest)]
-    .slice(0, 16)
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return bytesToHex(digest.slice(0, 16));
 }

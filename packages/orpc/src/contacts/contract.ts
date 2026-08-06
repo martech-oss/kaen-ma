@@ -10,7 +10,8 @@ import {
   contactUpdateSchema,
 } from "@openengage/core/contacts";
 
-import { workspaceErrors } from "../shared/errors";
+import { authedErrors, workspaceErrors } from "../shared/errors";
+import { ackSchema, idInput } from "../shared/schemas";
 
 const contactNotFound = {
   CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
@@ -25,18 +26,17 @@ export const contactsContract = {
   get: oc
     .route({ method: "GET", path: "/contacts/{id}" })
     .errors({ ...workspaceErrors, ...contactNotFound })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(contactSchema),
   timeline: oc
     .route({ method: "GET", path: "/contacts/{id}/timeline" })
     .errors({ ...workspaceErrors, ...contactNotFound })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(z.array(contactTimelineEventSchema)),
   recordEvent: oc
     .route({ method: "POST", path: "/contacts/{id}/events", successStatus: 202 })
     .errors({
-      ...workspaceErrors,
-      FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
+      ...authedErrors,
       ...contactNotFound,
     })
     .input(
@@ -52,11 +52,7 @@ export const contactsContract = {
   create: oc
     .route({ method: "POST", path: "/contacts", successStatus: 201 })
     .errors({
-      ...workspaceErrors,
-      FORBIDDEN: {
-        status: 403,
-        message: "この操作を行う権限がありません",
-      },
+      ...authedErrors,
       CONTACT_CONFLICT: {
         status: 409,
         message: "同じメールアドレスまたは外部IDの連絡先が既に存在します",
@@ -67,8 +63,7 @@ export const contactsContract = {
   update: oc
     .route({ method: "PATCH", path: "/contacts/{id}" })
     .errors({
-      ...workspaceErrors,
-      FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
+      ...authedErrors,
       CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
       CONTACT_ARCHIVED: {
         status: 409,
@@ -80,10 +75,9 @@ export const contactsContract = {
   archive: oc
     .route({ method: "POST", path: "/contacts/{id}/archive" })
     .errors({
-      ...workspaceErrors,
-      FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
+      ...authedErrors,
       CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
     })
-    .input(z.object({ id: z.string().min(1) }))
-    .output(z.object({ archived: z.literal(true) })),
+    .input(idInput)
+    .output(ackSchema),
 };

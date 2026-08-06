@@ -12,6 +12,7 @@ import {
 import { assetVisibilitySchema } from "@openengage/core/shared";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
+import { ackSchema } from "../shared/schemas";
 
 const notFound = {
   ASSET_NOT_FOUND: { status: 404, message: "アセットが見つかりません" },
@@ -74,7 +75,7 @@ export const assetsContract = {
     .route({ method: "POST", path: "/assets/{id}/archive" })
     .errors({ ...authedErrors, ...notFound })
     .input(assetIdInputSchema)
-    .output(z.object({ archived: z.literal(true) })),
+    .output(ackSchema),
   restore: oc
     .route({ method: "POST", path: "/assets/{id}/restore" })
     .errors({
@@ -82,10 +83,10 @@ export const assetsContract = {
       ASSET_NOT_ARCHIVED: { status: 404, message: "復元できるアセットが見つかりません" },
     })
     .input(assetIdInputSchema)
-    .output(z.object({ restored: z.literal(true) })),
+    .output(ackSchema),
   delete: oc
     .route({ method: "DELETE", path: "/assets/{id}" })
     .errors({ ...authedErrors, ...notFound })
     .input(assetIdInputSchema)
-    .output(z.object({ deleted: z.literal(true) })),
+    .output(ackSchema),
 };

@@ -7,11 +7,12 @@ import {
 } from "@openengage/core/shared";
 
 import { member } from "../auth/schema";
-import { createDatabase, type DatabaseSource } from "../client";
+import type { OpenEngageDatabase } from "../client";
+import { DatabaseRepository } from "../shared/repository-base";
 import { apiKeys } from "./schema";
 
 export async function resolveMemberContext(
-  database: DatabaseSource,
+  database: OpenEngageDatabase,
   userId: string,
   requestedOrganizationId: string | null,
 ): Promise<WorkspaceContext | null> {
@@ -19,8 +20,8 @@ export async function resolveMemberContext(
   if (requestedOrganizationId) {
     conditions.push(eq(member.organizationId, requestedOrganizationId));
   }
-  const [row] = await createDatabase(database)
-    .orm.select({ organizationId: member.organizationId, role: member.role })
+  const [row] = await database.orm
+    .select({ organizationId: member.organizationId, role: member.role })
     .from(member)
     .where(and(...conditions))
     .orderBy(asc(member.createdAt))
@@ -42,12 +43,10 @@ export interface ApiKeyAuthRow {
 }
 
 /** Repository for the api_keys table: auth-boundary lookups and admin CRUD. */
-export class ApiKeyRepository {
-  public constructor(private readonly database: DatabaseSource) {}
-
+export class ApiKeyRepository extends DatabaseRepository {
   public async findActiveByPrefix(prefix: string, now: string): Promise<ApiKeyAuthRow | null> {
-    const [row] = await createDatabase(this.database)
-      .orm.select({
+    const [row] = await this.database.orm
+      .select({
         id: apiKeys.id,
         workspaceId: apiKeys.workspaceId,
         createdByUserId: apiKeys.createdByUserId,
@@ -67,8 +66,8 @@ export class ApiKeyRepository {
   }
 
   public async touchLastUsed(apiKeyId: string, now: string): Promise<void> {
-    await createDatabase(this.database)
-      .orm.update(apiKeys)
+    await this.database.orm
+      .update(apiKeys)
       .set({ lastUsedAt: now })
       .where(eq(apiKeys.id, apiKeyId));
   }
@@ -84,6 +83,6 @@ export class ApiKeyRepository {
     expiresAt: string | null;
     createdAt: string;
   }): Promise<void> {
-    await createDatabase(this.database).orm.insert(apiKeys).values(input);
+    await this.database.orm.insert(apiKeys).values(input);
   }
 }

@@ -1,11 +1,12 @@
 import type { WorkspaceContext } from "@openengage/core/shared";
 
-import { createDatabase, type DatabaseSource } from "../client";
+import type { OpenEngageDatabase } from "../client";
+import { nowIso } from "../shared/database-utils";
 import { uuidv7 } from "../shared/uuid";
 import { auditLogs } from "./schema";
 
 export async function writeAuditLog(
-  database: DatabaseSource,
+  database: OpenEngageDatabase,
   context: WorkspaceContext,
   input: {
     action: string;
@@ -15,18 +16,16 @@ export async function writeAuditLog(
     ipAddress?: string;
   },
 ): Promise<void> {
-  await createDatabase(database)
-    .orm.insert(auditLogs)
-    .values({
-      id: uuidv7(),
-      workspaceId: context.workspaceId,
-      actorUserId: context.userId,
-      apiKeyId: context.apiKeyId ?? null,
-      action: input.action,
-      resourceType: input.resourceType,
-      resourceId: input.resourceId ?? null,
-      metadata: JSON.stringify(input.metadata ?? {}),
-      ipAddress: input.ipAddress ?? null,
-      createdAt: new Date().toISOString(),
-    });
+  await database.orm.insert(auditLogs).values({
+    id: uuidv7(),
+    workspaceId: context.workspaceId,
+    actorUserId: context.userId,
+    apiKeyId: context.apiKeyId ?? null,
+    action: input.action,
+    resourceType: input.resourceType,
+    resourceId: input.resourceId ?? null,
+    metadata: JSON.stringify(input.metadata ?? {}),
+    ipAddress: input.ipAddress ?? null,
+    createdAt: nowIso(),
+  });
 }

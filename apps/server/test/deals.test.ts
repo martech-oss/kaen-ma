@@ -5,12 +5,6 @@ import { uuidv7 } from "@openengage/database";
 
 import { seedMember, seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 describe("Deals CRM", () => {
   it("manages a deal through its pipeline and task lifecycle", async () => {
     const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB, {
@@ -98,10 +92,61 @@ describe("Deals CRM", () => {
 
     const detail = await client.deals.get({ id: created.id });
     expect(detail.tasks).toEqual([expect.objectContaining({ id: task.id, status: "completed" })]);
-    await expect(client.deals.archive({ id: created.id })).resolves.toEqual({ archived: true });
+    await expect(client.deals.archive({ id: created.id })).resolves.toEqual({ ok: true });
     await expect(client.deals.get({ id: created.id })).rejects.toMatchObject({
       code: "DEAL_NOT_FOUND",
       status: 404,
+    });
+  });
+
+  it("treats `_` in a deal search query as a literal character, not a wildcard", async () => {
+    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB, {
+      timezone: "Asia/Tokyo",
+    });
+    await seedMember(env.DB, { workspaceId, userId });
+    const options = await client.deals.options();
+    const pipeline = options.pipelines[0]!;
+    const stageId = pipeline.stages[0]!.id;
+
+    const underscored = await client.deals.create({
+      name: "foo_bar",
+      pipelineId: pipeline.id,
+      stageId,
+      value: 0,
+      currency: "JPY",
+    });
+    await client.deals.create({
+      name: "foobar",
+      pipelineId: pipeline.id,
+      stageId,
+      value: 0,
+      currency: "JPY",
+    });
+
+    // An unescaped `_` is a single-character wildcard and would match both
+    // "foo_bar" and "foobar"; escaped, it must match only the former.
+    const list = await client.deals.list({ pipelineId: pipeline.id, status: "all", q: "foo_bar" });
+    expect(list.items).toEqual([expect.objectContaining({ id: underscored.id })]);
+  });
+
+  it("requires admin to archive a deal even though marketer can create one", async () => {
+    const { client, workspaceId, userId } = await seedWorkspaceClient(env.DB, {
+      role: "marketer",
+    });
+    await seedMember(env.DB, { workspaceId, userId });
+    const options = await client.deals.options();
+    const pipeline = options.pipelines[0]!;
+
+    const deal = await client.deals.create({
+      name: "Marketer's deal",
+      pipelineId: pipeline.id,
+      stageId: pipeline.stages[0]!.id,
+      value: 0,
+      currency: "JPY",
+    });
+
+    await expect(client.deals.archive({ id: deal.id })).rejects.toMatchObject({
+      code: "FORBIDDEN",
     });
   });
 });

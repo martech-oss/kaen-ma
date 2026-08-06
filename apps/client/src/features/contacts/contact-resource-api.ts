@@ -1,18 +1,16 @@
-import { orpc } from "@/lib/orpc";
-import type { ContactOptions, Tag, TagCreate } from "@openengage/core/contacts";
+import { orpc, orpcQuery } from "@/lib/orpc";
+import type { Tag, TagCreate } from "@openengage/core/contacts";
 
-export type TagResource = Tag;
+type TagResource = Tag;
 
 export interface ContactResources {
   tags: TagResource[];
 }
 
-export async function loadContactResources(signal?: AbortSignal): Promise<ContactResources> {
-  const options: ContactOptions = await orpc.contacts.options(
-    undefined,
-    signal ? { signal } : undefined,
-  );
-  return { tags: options.tags };
+export function contactResourcesQueryOptions() {
+  return orpcQuery.contacts.options.queryOptions({
+    select: (options): ContactResources => ({ tags: options.tags }),
+  });
 }
 
 export function createContactTag(input: TagCreate) {

@@ -69,7 +69,7 @@ export const messageVariableWriteSchema = z.object({
 });
 export type MessageVariableWrite = z.infer<typeof messageVariableWriteSchema>;
 
-export const renderedEmailMessageSchema = z.object({
+const renderedEmailMessageSchema = z.object({
   kind: z.literal("email"),
   idempotencyKey: z.string(),
   workspaceId: z.string().optional(),
@@ -85,7 +85,7 @@ export const renderedEmailMessageSchema = z.object({
 });
 export type RenderedEmailMessage = z.infer<typeof renderedEmailMessageSchema>;
 
-export const webhookChannelMessageSchema = z.object({
+const webhookChannelMessageSchema = z.object({
   kind: z.literal("webhook"),
   idempotencyKey: z.string(),
   workspaceId: z.string(),

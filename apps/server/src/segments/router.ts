@@ -1,4 +1,5 @@
 import { SegmentRepository } from "@openengage/database";
+import { ack } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { listSegments, previewSegment } from "./list-service";
@@ -37,7 +38,7 @@ export const refreshSegmentProcedure = authed.segments.refresh.handler(
       input.id,
     );
     if (!refreshed) throw errors.SEGMENT_NOT_FOUND();
-    return { refreshed: true as const };
+    return ack;
   },
 );
 

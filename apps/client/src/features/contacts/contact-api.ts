@@ -1,4 +1,4 @@
-import { keepPreviousData, queryOptions } from "@tanstack/react-query";
+import { type QueryClient, keepPreviousData, useMutation } from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
 import type {
@@ -6,7 +6,6 @@ import type {
   ContactBulkAction,
   ContactListInput,
   ContactOptions,
-  ContactProfile,
   ContactScoreAdjust,
   ContactUpdate,
   SegmentOption,
@@ -14,8 +13,6 @@ import type {
 } from "@openengage/core/contacts";
 
 export type { CompanyOption, ContactOptions, SegmentOption, TagOption };
-
-export const contactOptionsQueryKey = ["contacts", "options"] as const;
 
 export type ContactStatus = "active" | "archived" | "anonymous" | "all";
 export type ContactSort = "updatedAt" | "createdAt" | "score" | "name" | "email";
@@ -108,18 +105,29 @@ export function contactsQueryOptions(search: ContactSearch, cursor?: string) {
 }
 
 export function contactOptionsQueryOptions() {
-  return queryOptions({
-    queryKey: contactOptionsQueryKey,
-    queryFn: ({ signal }) => loadContactOptions(signal),
+  return orpcQuery.contacts.options.queryOptions();
+}
+
+export function invalidateContactsList(queryClient: QueryClient): Promise<void> {
+  return queryClient.invalidateQueries({
+    queryKey: orpcQuery.contacts.list.key({ type: "query" }),
   });
 }
 
-export async function loadContactOptions(signal?: AbortSignal): Promise<ContactOptions> {
-  return orpc.contacts.options(undefined, signal ? { signal } : undefined);
+export function invalidateContactOptions(queryClient: QueryClient): Promise<void> {
+  return queryClient.invalidateQueries({ queryKey: orpcQuery.contacts.options.key() });
 }
 
-export function loadContactProfile(contactId: string): Promise<ContactProfile> {
-  return orpc.contacts.profile({ contactId });
+/**
+ * No built-in invalidation: creating a contact is one step of a form that also
+ * assigns tags/segment/company, so the caller invalidates once everything settles.
+ */
+export function useCreateContact() {
+  return useMutation(orpcQuery.contacts.create.mutationOptions());
+}
+
+export function contactProfileQueryOptions(contactId: string) {
+  return orpcQuery.contacts.profile.queryOptions({ input: { contactId } });
 }
 
 export function archiveContact(contactId: string) {

@@ -18,7 +18,7 @@ export function deliveryTrendQueryOptions() {
   return orpcQuery.reports.emails.queryOptions({ input: lastSevenDaysRange() });
 }
 
-export interface DeliveryHealthPoint {
+interface DeliveryHealthPoint {
   day: string;
   deliveryRate: number;
 }

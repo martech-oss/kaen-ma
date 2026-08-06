@@ -1,28 +1,26 @@
+import { MessagingRepository } from "@openengage/database";
+import { ack } from "@openengage/orpc";
+
 import { authed, requireRole } from "../orpc/base";
+import { previewEmailTemplate } from "../rendering/content-renderer";
 import {
-  archiveEmailTemplate,
   archiveMessageVariable,
-  createEmailTemplate,
   createMessageVariable,
   listEmailSegmentOptions,
-  listEmailTemplates,
   listMessageVariables,
   listSubscriptionTopicOptions,
-  previewEmailTemplate,
-  publishEmailTemplate,
-  updateEmailTemplate,
   updateMessageVariable,
   VariableConflictError,
 } from "./service";
 
 export const listTemplatesProcedure = authed.emails.listTemplates.handler(({ context, input }) =>
-  listEmailTemplates(context.database, context.workspace, input.archived),
+  new MessagingRepository(context.database, context.workspace).listEmailTemplates(input.archived),
 );
 
 export const createTemplateProcedure = authed.emails.createTemplate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    return await createEmailTemplate(context.database, context.workspace, input);
+    return new MessagingRepository(context.database, context.workspace).createEmailTemplate(input);
   },
 );
 
@@ -30,10 +28,11 @@ export const updateTemplateProcedure = authed.emails.updateTemplate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { id, ...changes } = input;
-    if (!(await updateEmailTemplate(context.database, context.workspace, id, changes))) {
-      throw errors.NOT_FOUND();
+    const repository = new MessagingRepository(context.database, context.workspace);
+    if (!(await repository.updateEmailTemplate(id, changes))) {
+      throw errors.TEMPLATE_NOT_FOUND();
     }
-    return { updated: true as const };
+    return ack;
   },
 );
 
@@ -47,20 +46,22 @@ export const previewTemplateProcedure = authed.emails.previewTemplate.handler(
 export const publishTemplateProcedure = authed.emails.publishTemplate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    if (!(await publishEmailTemplate(context.database, context.workspace, input.id))) {
-      throw errors.NOT_FOUND();
+    const repository = new MessagingRepository(context.database, context.workspace);
+    if (!(await repository.publishEmailTemplate(input.id))) {
+      throw errors.TEMPLATE_NOT_FOUND();
     }
-    return { published: true as const };
+    return ack;
   },
 );
 
 export const archiveTemplateProcedure = authed.emails.archiveTemplate.handler(
   async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    if (!(await archiveEmailTemplate(context.database, context.workspace, input.id))) {
-      throw errors.NOT_FOUND();
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
+    const repository = new MessagingRepository(context.database, context.workspace);
+    if (!(await repository.archiveEmailTemplate(input.id))) {
+      throw errors.TEMPLATE_NOT_FOUND();
     }
-    return { archived: true as const };
+    return ack;
   },
 );
 
@@ -86,23 +87,23 @@ export const updateVariableProcedure = authed.emails.updateVariable.handler(
     const { id, ...changes } = input;
     try {
       if (!(await updateMessageVariable(context.database, context.workspace, id, changes))) {
-        throw errors.NOT_FOUND();
+        throw errors.MESSAGE_VARIABLE_NOT_FOUND();
       }
     } catch (error) {
       if (error instanceof VariableConflictError) throw errors.VARIABLE_CONFLICT();
       throw error;
     }
-    return { updated: true as const };
+    return ack;
   },
 );
 
 export const archiveVariableProcedure = authed.emails.archiveVariable.handler(
   async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
+    requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
     if (!(await archiveMessageVariable(context.database, context.workspace, input.id))) {
-      throw errors.NOT_FOUND();
+      throw errors.MESSAGE_VARIABLE_NOT_FOUND();
     }
-    return { archived: true as const };
+    return ack;
   },
 );
 

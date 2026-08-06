@@ -1,9 +1,10 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 import { orpcQuery } from "@/lib/orpc";
 import type {
   EmailSegmentOption,
   EmailTemplate,
   MessageVariable,
-  SubscriptionTopicOption,
 } from "@openengage/core/messaging";
 
 export type { EmailTemplate, MessageVariable };
@@ -12,7 +13,6 @@ export type { EmailTemplate, MessageVariable };
 export type EmailTemplateRow = EmailTemplate;
 export type MessageVariableRow = MessageVariable;
 export type SegmentOption = EmailSegmentOption;
-export type TopicOption = SubscriptionTopicOption;
 
 export function emailArchivedTemplatesQueryOptions() {
   return orpcQuery.emails.listTemplates.queryOptions({ input: { archived: true } });
@@ -22,6 +22,75 @@ export function emailVariablesListQueryOptions() {
   return orpcQuery.emails.listVariables.queryOptions({ input: { archived: false } });
 }
 
-export function emailTopicOptionsQueryOptions() {
-  return orpcQuery.emails.listTopicOptions.queryOptions();
+/** The editor filters this list to published Transactional templates. */
+export function emailTemplateOptionsQueryOptions() {
+  return orpcQuery.emails.listTemplates.queryOptions({ input: { archived: false } });
+}
+
+export function useCreateEmailTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.emails.createTemplate.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() }),
+  });
+}
+
+export function useUpdateEmailTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.emails.updateTemplate.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() }),
+  });
+}
+
+/** No built-in invalidation: rendering a preview doesn't write to any stored template. */
+export function usePreviewEmailTemplate() {
+  return useMutation(orpcQuery.emails.previewTemplate.mutationOptions());
+}
+
+export function usePublishEmailTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.emails.publishTemplate.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() }),
+  });
+}
+
+export function useArchiveEmailTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.emails.archiveTemplate.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listTemplates.key() }),
+  });
+}
+
+export function useCreateEmailVariable() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.emails.createVariable.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listVariables.key() }),
+  });
+}
+
+export function useUpdateEmailVariable() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.emails.updateVariable.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listVariables.key() }),
+  });
+}
+
+export function useArchiveEmailVariable() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    ...orpcQuery.emails.archiveVariable.mutationOptions(),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: orpcQuery.emails.listVariables.key() }),
+  });
 }

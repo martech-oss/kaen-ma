@@ -1,5 +1,7 @@
 import * as z from "zod";
 
+import { contactSchema } from "./contact-schema";
+
 export const contactDataJobSchema = z.object({
   id: z.string(),
   kind: z.enum(["contact_import", "contact_export", "event_archive"]),
@@ -23,20 +25,18 @@ export const contactTimelineEventSchema = z.object({
 });
 export type ContactTimelineEvent = z.infer<typeof contactTimelineEventSchema>;
 
-import { contactSchema } from "./contact-schema";
-
 /**
  * Chip shape embedded in contact summaries. The management-row variant with
  * a count lives in resource-schema.ts (tagSchema).
  */
-export const contactTagSchema = z.object({
+const contactTagSchema = z.object({
   id: z.string(),
   name: z.string(),
   slug: z.string(),
   color: z.string(),
 });
 
-export const contactCompanySchema = z.object({
+const contactCompanySchema = z.object({
   id: z.string(),
   name: z.string(),
   domain: z.string().nullable(),
@@ -44,7 +44,7 @@ export const contactCompanySchema = z.object({
   is_primary: z.boolean(),
 });
 
-export const contactSummarySchema = contactSchema.extend({
+const contactSummarySchema = contactSchema.extend({
   tags: z.array(contactTagSchema),
   companies: z.array(contactCompanySchema),
 });

@@ -1,11 +1,14 @@
-import { evaluateSendEligibility, retryDelaySeconds } from "@openengage/core";
 import type { AutomationNode } from "@openengage/core/automations";
+import { evaluateSendEligibility } from "@openengage/core/consent";
+import { retryDelaySeconds } from "@openengage/core/platform";
 import {
   ConsentRepository,
+  createDatabase,
   MessagingWorkerRepository,
   uuidv7,
   type AutomationJobRow,
   type DeliveryClaimRecord,
+  type OpenEngageDatabase,
 } from "@openengage/database";
 
 import {
@@ -29,9 +32,10 @@ export async function createEmailDelivery(
   },
   job: AutomationJobRow,
   env: RuntimeEnv,
+  database: OpenEngageDatabase,
 ): Promise<void> {
   if (!job.contactEmail) throw new PermanentChannelError("Contact does not have an email");
-  const repository = new MessagingWorkerRepository(env.DB);
+  const repository = new MessagingWorkerRepository(database);
   const template = await repository.findSendableTemplate(job.workspaceId, action.templateId);
   if (!template) throw new PermanentChannelError("Email template is missing");
   const message = await repository.readMessageVariables(job.workspaceId);
@@ -88,8 +92,9 @@ export async function createWebhookDelivery(
   endpointId: string,
   job: AutomationJobRow,
   env: RuntimeEnv,
+  database: OpenEngageDatabase,
 ): Promise<void> {
-  const repository = new MessagingWorkerRepository(env.DB);
+  const repository = new MessagingWorkerRepository(database);
   const endpoint = await repository.findEnabledWebhookEndpoint(job.workspaceId, endpointId);
   if (!endpoint) throw new PermanentChannelError("Webhook endpoint is missing");
   const deliveryId = uuidv7();
@@ -121,7 +126,8 @@ export async function createWebhookDelivery(
 }
 
 export async function processDelivery(deliveryId: string, env: RuntimeEnv): Promise<void> {
-  const repository = new MessagingWorkerRepository(env.DB);
+  const database = createDatabase(env.DB);
+  const repository = new MessagingWorkerRepository(database);
   const delivery = await repository.findDeliveryForProcessing(deliveryId);
   if (!delivery || !["queued", "failed"].includes(delivery.status)) return;
 
@@ -130,7 +136,7 @@ export async function processDelivery(deliveryId: string, env: RuntimeEnv): Prom
 
   try {
     if (delivery.contactId) {
-      const gate = await readConsentGate(delivery, env);
+      const gate = await readConsentGate(delivery, database);
       const decision = evaluateSendEligibility(delivery.purpose, gate);
       if (!decision.allowed) {
         await repository.markDeliverySuppressed(delivery.id, decision.reason);
@@ -139,7 +145,7 @@ export async function processDelivery(deliveryId: string, env: RuntimeEnv): Prom
     }
     const endpointId =
       delivery.payload.kind === "webhook" ? delivery.payload.endpointId : undefined;
-    const adapter = await deliveryAdapter(delivery, endpointId, env);
+    const adapter = await deliveryAdapter(delivery, endpointId, env, database);
     const result = await adapter.send(delivery.payload);
     await repository.markDeliveryAccepted({
       deliveryId: delivery.id,
@@ -169,6 +175,7 @@ export async function deliveryAdapter(
   delivery: DeliveryRow,
   endpointId: string | undefined,
   env: RuntimeEnv,
+  database: OpenEngageDatabase,
 ) {
   if (delivery.provider === "cloudflare") {
     if (delivery.purpose !== "transactional") {
@@ -177,10 +184,9 @@ export async function deliveryAdapter(
     return new CloudflareEmailAdapter(env.EMAIL);
   }
   if (!endpointId) throw new PermanentChannelError("Webhook endpoint is missing");
-  const endpoint = await new MessagingWorkerRepository(env.DB).findEnabledWebhookEndpointWithSecret(
-    delivery.workspaceId,
-    endpointId,
-  );
+  const endpoint = await new MessagingWorkerRepository(
+    database,
+  ).findEnabledWebhookEndpointWithSecret(delivery.workspaceId, endpointId);
   if (!endpoint) throw new PermanentChannelError("Webhook endpoint is disabled or missing");
   const secret = await decryptCredentials<{ secret: string }>(
     env.CREDENTIAL_ENCRYPTION_KEY,
@@ -197,8 +203,8 @@ export function senderForPurpose(
   return { email: env.TRANSACTIONAL_FROM_EMAIL, name: env.TRANSACTIONAL_FROM_NAME };
 }
 
-export async function readConsentGate(delivery: DeliveryRow, env: RuntimeEnv) {
-  const rows = await new ConsentRepository(env.DB, {
+export async function readConsentGate(delivery: DeliveryRow, database: OpenEngageDatabase) {
+  const rows = await new ConsentRepository(database, {
     workspaceId: delivery.workspaceId,
   }).readConsentGateRows({
     contactId: delivery.contactId,

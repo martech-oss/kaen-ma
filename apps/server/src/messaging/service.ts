@@ -4,15 +4,13 @@ import type {
   MessageVariableWrite,
   SubscriptionTopicOption,
 } from "@openengage/core/messaging";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   ConsentRepository,
   MessagingRepository,
   SegmentRepository,
   type OpenEngageDatabase,
 } from "@openengage/database";
-import type { WorkspaceContext } from "@openengage/orpc";
-
-export * from "./template-service";
 
 export function listMessageVariables(
   database: OpenEngageDatabase,

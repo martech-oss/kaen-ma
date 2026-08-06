@@ -19,8 +19,8 @@ export function primitiveString(value: unknown, fallback = ""): string {
 }
 
 /** Coerces values returned by aggregate SQL expressions to a number. */
-export function numericValue(value: unknown): number {
-  return Number(value ?? 0);
+export function toFiniteNumber(value: unknown): number {
+  return typeof value === "number" ? value : Number(value ?? 0);
 }
 
 /** Reads a nullable text column while preserving its nullability. */

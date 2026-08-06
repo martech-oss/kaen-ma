@@ -74,7 +74,7 @@ export function assetPublicPath(workspaceSlug: string, id: string, filename: str
   return `/a/${encodeURIComponent(workspaceSlug)}/${encodeURIComponent(id)}/${encodeURIComponent(filename)}`;
 }
 
-export const assetStatusFilterSchema = z.enum(["active", "archived", "all"]);
+const assetStatusFilterSchema = z.enum(["active", "archived", "all"]);
 export type AssetStatusFilter = z.infer<typeof assetStatusFilterSchema>;
 
 export const assetListInputSchema = z.object({

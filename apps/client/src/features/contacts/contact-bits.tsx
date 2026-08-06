@@ -1,7 +1,6 @@
 import { UserRound } from "lucide-react";
 import { type ReactNode } from "react";
 
-import { FormInput as InputField, FormNativeSelect as SelectInput } from "@/components/app-ui";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { type Contact } from "@openengage/orpc";
+import { type Contact } from "@openengage/core/contacts";
 
 export type BulkAction =
   | "add_tag"
@@ -151,52 +150,12 @@ export function Section({
   );
 }
 
-export function SelectField({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}): ReactNode {
-  return (
-    <SelectInput
-      label={label}
-      name={`filter-${label}`}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {children}
-    </SelectInput>
-  );
-}
-
-export function TextField({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-}): ReactNode {
-  return (
-    <InputField
-      label={label}
-      name={`filter-${label}`}
-      type={type}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
-  );
-}
-
-export function contactName(contact: Contact): string {
+export function contactName(contact: {
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  externalId?: string | null;
+}): string {
   return (
     [contact.firstName, contact.lastName].filter(Boolean).join(" ") ||
     contact.email ||
@@ -205,13 +164,21 @@ export function contactName(contact: Contact): string {
   );
 }
 
-export function slugify(value: string): string {
-  return (
-    value
-      .normalize("NFKD")
-      .toLowerCase()
-      .replaceAll(/[^a-z0-9]+/g, "-")
-      .replaceAll(/^-+|-+$/g, "")
-      .slice(0, 100) || `segment-${Date.now()}`
-  );
+/** Surname-first join with no fallback, shared by contactOptionLabel and the company contact list so both stay in the same order. */
+export function contactSurnameFirstName(contact: {
+  firstName: string | null;
+  lastName: string | null;
+}): string {
+  return [contact.lastName, contact.firstName].filter(Boolean).join(" ");
+}
+
+export function contactOptionLabel(contact: {
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+}): string {
+  const name = contactSurnameFirstName(contact);
+  return name
+    ? `${name}${contact.email ? `（${contact.email}）` : ""}`
+    : (contact.email ?? "名前未設定");
 }

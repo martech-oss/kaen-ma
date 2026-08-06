@@ -1,11 +1,17 @@
+import type {
+  Contact,
+  ContactCreate,
+  ContactListInput,
+  ContactListResult,
+  ContactSummary,
+  ContactTimelineEvent,
+} from "@openengage/core/contacts";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import {
   ContactRepository,
   ContactResourceRepository,
   type OpenEngageDatabase,
 } from "@openengage/database";
-import type { ContactListInput, ContactListResult, ContactSummary } from "@openengage/orpc";
-import type { WorkspaceContext } from "@openengage/orpc";
-import type { Contact, ContactCreate } from "@openengage/orpc";
 
 import { recordContactEvent } from "../contacts/event-service";
 
@@ -40,15 +46,6 @@ export async function createContact(
     resourceId: contact.id,
   });
   return contact;
-}
-
-export interface ContactTimelineEvent {
-  id: string;
-  type: string;
-  resourceType: string | null;
-  resourceId: string | null;
-  properties: Record<string, unknown>;
-  occurredAt: string;
 }
 
 export async function getContactTimeline(

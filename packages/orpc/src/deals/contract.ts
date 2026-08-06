@@ -13,11 +13,9 @@ import {
   dealUpdateSchema,
 } from "@openengage/core/deals";
 
-import { workspaceErrors } from "../shared/errors";
+import { authedErrors, workspaceErrors } from "../shared/errors";
+import { ackSchema } from "../shared/schemas";
 
-const forbidden = {
-  FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
-} as const;
 const dealNotFound = { DEAL_NOT_FOUND: { status: 404, message: "商談が見つかりません" } } as const;
 const taskNotFound = {
   DEAL_TASK_NOT_FOUND: { status: 404, message: "タスクが見つかりません" },
@@ -30,7 +28,7 @@ const badReference = {
 const badStage = {
   INVALID_DEAL_STAGE: { status: 422, message: "移動先ステージがパイプラインに存在しません" },
 } as const;
-const base = { ...workspaceErrors, ...forbidden } as const;
+const base = authedErrors;
 
 export const dealsContract = {
   options: oc
@@ -75,7 +73,7 @@ export const dealsContract = {
     .route({ method: "POST", path: "/deals/{id}/archive" })
     .errors({ ...base, ...dealNotFound })
     .input(z.object({ id: z.string().min(1) }))
-    .output(z.object({ archived: z.literal(true) })),
+    .output(ackSchema),
   createTask: oc
     .route({ method: "POST", path: "/deals/{dealId}/tasks", successStatus: 201 })
     .errors({
@@ -103,5 +101,5 @@ export const dealsContract = {
     .route({ method: "DELETE", path: "/deals/{dealId}/tasks/{taskId}" })
     .errors({ ...base, ...taskNotFound })
     .input(z.object({ dealId: z.string().min(1), taskId: z.string().min(1) }))
-    .output(z.object({ removed: z.literal(true) })),
+    .output(ackSchema),
 };

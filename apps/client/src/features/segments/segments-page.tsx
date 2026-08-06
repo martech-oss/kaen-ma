@@ -1,6 +1,6 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Plus, Shapes } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type ReactNode, type FormEvent, useState } from "react";
 
 import {
   FormDialog,
@@ -13,7 +13,7 @@ import {
   SimpleEmpty,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
-import { segmentsQueryOptions } from "@/features/segments/segment-api";
+import { segmentsQueryOptions, useCreateSegment } from "@/features/segments/segment-api";
 import {
   createSegmentCondition,
   getSegmentOperatorOptions,
@@ -22,21 +22,20 @@ import {
   segmentFieldOptions,
 } from "@/features/segments/segment-fields";
 import { useFormSubmission } from "@/hooks/use-form-submission";
+import { getFormString } from "@/lib/form-data";
 import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
-import { getFormString, slugify } from "@/lib/utils";
+import { slugify } from "@/lib/utils";
 import {
   getSegmentFieldDefinition,
   type SegmentField,
   type SegmentFilter,
   type SegmentOperator,
   type SegmentRow,
-} from "@openengage/orpc";
+} from "@openengage/core/segments";
 
 export type { SegmentRow };
 
 export function SegmentsPage(): ReactNode {
-  const queryClient = useQueryClient();
   const { data: segments } = useSuspenseQuery(segmentsQueryOptions());
   const [showForm, setShowForm] = useState(false);
 
@@ -67,7 +66,6 @@ export function SegmentsPage(): ReactNode {
         onOpenChange={setShowForm}
         onSaved={async () => {
           setShowForm(false);
-          await queryClient.invalidateQueries({ queryKey: orpcQuery.segments.list.key() });
         }}
       />
     </PageLayout>
@@ -83,7 +81,7 @@ function SegmentFormDialog({
   onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
 }): ReactNode {
-  const createSegment = useMutation(orpcQuery.segments.create.mutationOptions());
+  const createSegment = useCreateSegment();
   const { busy, error, run } = useFormSubmission("セグメントを作成できませんでした");
   const [kind, setKind] = useState<"static" | "dynamic">("static");
   const [field, setField] = useState<SegmentField>("stage");

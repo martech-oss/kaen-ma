@@ -1,6 +1,6 @@
 import { createFileRoute, type SearchSchemaInput, stripSearchParams } from "@tanstack/react-router";
 
-import { RouteError, RoutePending } from "@/components/route-status";
+import { routeStatusComponents } from "@/components/route-status";
 import {
   type AssetSearch,
   assetSearchDefaults,
@@ -20,8 +20,7 @@ export const Route = createFileRoute("/_app/website/assets")({
     await context.queryClient.ensureQueryData(assetsQueryOptions(deps));
     return { role: context.workspace.role };
   },
-  pendingComponent: RoutePending,
-  errorComponent: RouteError,
+  ...routeStatusComponents,
   component: AssetsRoute,
 });
 

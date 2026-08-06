@@ -5,10 +5,13 @@ import { type ReactNode, useState } from "react";
 import { ErrorAlert as ErrorNotice } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { assignCompanyContact, removeCompanyContact } from "@/features/companies/company-api";
+import {
+  assignCompanyContact,
+  invalidateCompanyQueries,
+  removeCompanyContact,
+} from "@/features/companies/company-api";
 import { type CompanyOption, type SegmentOption } from "@/features/contacts/contact-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
-import { orpcQuery } from "@/lib/orpc";
 import type { ContactProfile } from "@openengage/core/contacts";
 
 import { ControlledSelect, Section } from "./contact-bits";
@@ -100,13 +103,6 @@ export function CompanyEditor({
   const assigned = new Set(companies.map((company) => company.id));
   const queryClient = useQueryClient();
 
-  async function invalidateCompany(companyId: string) {
-    await queryClient.invalidateQueries({
-      queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
-    });
-    await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
-  }
-
   async function addCompany() {
     if (!selectedId) return;
     await run(async () => {
@@ -115,7 +111,7 @@ export function CompanyEditor({
         contactId,
         isPrimary: companies.length === 0,
       });
-      await invalidateCompany(selectedId);
+      await invalidateCompanyQueries(queryClient, selectedId);
       setSelectedId("");
       await onChanged();
     });
@@ -124,7 +120,7 @@ export function CompanyEditor({
   async function removeCompany(companyId: string) {
     await run(async () => {
       await removeCompanyContact(companyId, contactId);
-      await invalidateCompany(companyId);
+      await invalidateCompanyQueries(queryClient, companyId);
       await onChanged();
     });
   }

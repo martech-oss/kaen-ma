@@ -1,3 +1,5 @@
+import { ack } from "@openengage/orpc";
+
 import { authed, requireRole } from "../orpc/base";
 import {
   CompanyConflictError,
@@ -61,7 +63,7 @@ export const assignCompanyContactProcedure = authed.companies.assignContact.hand
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const assigned = await assignCompanyContact(context.database, context.workspace, input);
     if (!assigned) throw errors.COMPANY_CONTACT_NOT_FOUND();
-    return { assigned: true as const };
+    return ack;
   },
 );
 
@@ -70,7 +72,7 @@ export const removeCompanyContactProcedure = authed.companies.removeContact.hand
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const removed = await removeCompanyContact(context.database, context.workspace, input);
     if (!removed) throw errors.COMPANY_CONTACT_NOT_FOUND();
-    return { removed: true as const };
+    return ack;
   },
 );
 

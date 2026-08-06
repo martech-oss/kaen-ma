@@ -13,14 +13,8 @@ import {
   companyUpdateInputSchema,
 } from "@openengage/core/contacts";
 
-import { workspaceErrors } from "../shared/errors";
-
-const forbidden = {
-  FORBIDDEN: {
-    status: 403,
-    message: "この操作を行う権限がありません",
-  },
-} as const;
+import { authedErrors, workspaceErrors } from "../shared/errors";
+import { ackSchema } from "../shared/schemas";
 
 const notFound = {
   COMPANY_NOT_FOUND: {
@@ -49,36 +43,34 @@ export const companiesContract = {
     .output(companyDetailSchema),
   create: oc
     .route({ method: "POST", path: "/companies", successStatus: 201 })
-    .errors({ ...workspaceErrors, ...forbidden, ...conflict })
+    .errors({ ...authedErrors, ...conflict })
     .input(companyCreateSchema)
     .output(companySchema),
   update: oc
     .route({ method: "PATCH", path: "/companies/{id}" })
-    .errors({ ...workspaceErrors, ...forbidden, ...notFound, ...conflict })
+    .errors({ ...authedErrors, ...notFound, ...conflict })
     .input(companyUpdateInputSchema)
     .output(companySchema),
   assignContact: oc
     .route({ method: "POST", path: "/companies/{id}/contacts", successStatus: 201 })
     .errors({
-      ...workspaceErrors,
-      ...forbidden,
+      ...authedErrors,
       COMPANY_CONTACT_NOT_FOUND: {
         status: 404,
         message: "会社または連絡先が見つかりません",
       },
     })
     .input(companyAssignContactInputSchema)
-    .output(z.object({ assigned: z.literal(true) })),
+    .output(ackSchema),
   removeContact: oc
     .route({ method: "DELETE", path: "/companies/{id}/contacts/{contactId}" })
     .errors({
-      ...workspaceErrors,
-      ...forbidden,
+      ...authedErrors,
       COMPANY_CONTACT_NOT_FOUND: {
         status: 404,
         message: "会社との関連が見つかりません",
       },
     })
     .input(companyRemoveContactInputSchema)
-    .output(z.object({ removed: z.literal(true) })),
+    .output(ackSchema),
 };

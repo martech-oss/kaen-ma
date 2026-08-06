@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Background, Controls, MiniMap, Panel, ReactFlow } from "@xyflow/react";
 import {
@@ -37,10 +37,15 @@ import {
 import { Input } from "@/components/ui/input";
 import {
   automationsQueryOptions,
-  emailTemplateOptionsQueryOptions,
+  useCreateAutomation,
+  usePublishAutomationDraft,
+  useSaveAutomationDraft,
+  useSetAutomationStatus,
 } from "@/features/automations/automation-api";
+import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
+import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
+import { RESOURCE_STATUS_LABELS } from "@/lib/status-labels";
 import { cn } from "@/lib/utils";
 import type { AutomationRow } from "@openengage/core/automations";
 
@@ -59,7 +64,6 @@ export type {
 } from "./automation-types";
 
 export function AutomationsPage(): ReactNode {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data: automations } = useSuspenseQuery(automationsQueryOptions());
   const { data: allTemplates } = useSuspenseQuery(emailTemplateOptionsQueryOptions());
@@ -73,8 +77,8 @@ export function AutomationsPage(): ReactNode {
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
   const [creating, setCreating] = useState(false);
 
-  const createAutomation = useMutation(orpcQuery.automations.create.mutationOptions());
-  const setAutomationStatus = useMutation(orpcQuery.automations.setStatus.mutationOptions());
+  const createAutomation = useCreateAutomation();
+  const setAutomationStatus = useSetAutomationStatus();
 
   function selectPreset(value: PresetId): void {
     setPreset(value);
@@ -91,14 +95,13 @@ export function AutomationsPage(): ReactNode {
     try {
       const definition = createPresetAutomation(name.trim(), preset, template);
       const created = await createAutomation.mutateAsync(definition);
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() });
       setCreateOpen(false);
       await navigate({
         to: "/automations/$id",
         params: { id: created.id },
       });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "オートメーションを作成できません");
+      toast.error(getErrorMessage(error, "オートメーションを作成できません"));
     } finally {
       setCreating(false);
     }
@@ -108,10 +111,9 @@ export function AutomationsPage(): ReactNode {
     const status = automation.status === "active" ? "paused" : "active";
     try {
       await setAutomationStatus.mutateAsync({ id: automation.id, status });
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() });
       toast.success(status === "active" ? "オートメーションを再開しました" : "一時停止しました");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "更新できませんでした");
+      toast.error(getErrorMessage(error, "更新できませんでした"));
     }
   }
 
@@ -257,10 +259,9 @@ export function AutomationBuilder({
   initialDraft: AutomationDraft;
   options: AutomationOptions;
 }): ReactNode {
-  const queryClient = useQueryClient();
-  const saveDraft = useMutation(orpcQuery.automations.saveDraft.mutationOptions());
-  const publishDraft = useMutation(orpcQuery.automations.publish.mutationOptions());
-  const setAutomationStatus = useMutation(orpcQuery.automations.setStatus.mutationOptions());
+  const saveDraft = useSaveAutomationDraft();
+  const publishDraft = usePublishAutomationDraft();
+  const setAutomationStatus = useSetAutomationStatus();
   const builder = useAutomationBuilder(initialDraft.graph);
   const { definition, selectedNode, flowNodes, flowEdges } = builder;
   const [status, setStatus] = useState(initialDraft.status);
@@ -292,11 +293,8 @@ export function AutomationBuilder({
         setNotice("下書きを保存しました");
         toast.success("下書きを保存しました");
       }
-      // The list page's cache would otherwise still show the pre-save status/
-      // enrollment counts when the user navigates back to it.
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "保存できませんでした";
+      const message = getErrorMessage(error, "保存できませんでした");
       setNotice(message);
       toast.error(message);
     } finally {
@@ -309,10 +307,9 @@ export function AutomationBuilder({
     try {
       await setAutomationStatus.mutateAsync({ id, status: nextStatus });
       setStatus(nextStatus);
-      await queryClient.invalidateQueries({ queryKey: orpcQuery.automations.list.key() });
       toast.success(nextStatus === "active" ? "再開しました" : "一時停止しました");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "更新できませんでした");
+      toast.error(getErrorMessage(error, "更新できませんでした"));
     }
   }
 
@@ -418,16 +415,10 @@ export function AutomationBuilder({
 }
 
 function AutomationStatusBadge({ status }: { status: AutomationRow["status"] }): ReactNode {
-  const label = {
-    draft: "下書き",
-    active: "稼働中",
-    paused: "一時停止",
-    archived: "アーカイブ",
-  }[status];
   return (
     <Badge variant={status === "active" ? "default" : "secondary"}>
       {status === "active" ? <span className="size-1.5 rounded-full bg-current" /> : null}
-      {label}
+      {RESOURCE_STATUS_LABELS[status]}
     </Badge>
   );
 }

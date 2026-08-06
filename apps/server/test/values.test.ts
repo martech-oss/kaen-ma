@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   isRecord,
   nullablePrimitiveString,
-  numericValue,
+  toFiniteNumber,
   parseJsonRecord,
   parseJsonValue,
   primitiveString,
@@ -32,8 +32,8 @@ describe("value normalization", () => {
   });
 
   it("coerces aggregate values to numbers", () => {
-    expect(numericValue("12")).toBe(12);
-    expect(numericValue(null)).toBe(0);
+    expect(toFiniteNumber("12")).toBe(12);
+    expect(toFiniteNumber(null)).toBe(0);
   });
 
   it("parses JSON with a fallback", () => {

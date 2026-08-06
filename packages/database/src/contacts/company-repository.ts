@@ -1,10 +1,10 @@
-import { and, asc, desc, eq, like, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, or, sql } from "drizzle-orm";
 
 import type { Company, CompanyCreate, CompanyUpdate } from "@openengage/core/contacts";
 import type { WorkspaceContext } from "@openengage/core/shared";
 
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
-import { escapeLike } from "../shared/database-utils";
+import { didChange, ensureLoaded, likeContains, nowIso } from "../shared/database-utils";
+import { WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { companies, companyContacts, contacts } from "./schema";
 
@@ -12,22 +12,15 @@ export interface CompanySummary extends Company {
   contactCount: number;
 }
 
-export class CompanyRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: WorkspaceContext,
-  ) {
-    this.database = createDatabase(database);
-  }
-
+export class CompanyRepository extends WorkspaceRepository<WorkspaceContext> {
   public async listCompanies(input: { query?: string; limit?: number }): Promise<CompanySummary[]> {
     const limit = Math.min(Math.max(input.limit ?? 100, 1), 200);
-    const conditions = [eq(companies.workspaceId, this.context.workspaceId)];
+    const conditions = [this.inWorkspace(companies)];
     if (input.query) {
-      const query = `%${escapeLike(input.query)}%`;
-      conditions.push(or(like(companies.name, query), like(companies.domain, query))!);
+      const query = input.query;
+      conditions.push(
+        or(likeContains(companies.name, query), likeContains(companies.domain, query))!,
+      );
     }
     const rows = await this.database.orm
       .select({
@@ -75,14 +68,14 @@ export class CompanyRepository {
         createdAt: true,
         updatedAt: true,
       },
-      where: and(eq(companies.workspaceId, this.context.workspaceId), eq(companies.id, id)),
+      where: and(this.inWorkspace(companies), eq(companies.id, id)),
     });
     return row ?? null;
   }
 
   public async createCompany(input: CompanyCreate): Promise<Company> {
     const id = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     await this.database.orm.insert(companies).values({
       id,
       workspaceId: this.context.workspaceId,
@@ -92,9 +85,7 @@ export class CompanyRepository {
       createdAt: now,
       updatedAt: now,
     });
-    const company = await this.getCompany(id);
-    if (!company) throw new Error("Created company could not be loaded");
-    return company;
+    return ensureLoaded(await this.getCompany(id), "Created company");
   }
 
   public async updateCompany(id: string, input: CompanyUpdate): Promise<Company | null> {
@@ -106,9 +97,9 @@ export class CompanyRepository {
         name: input.name ?? existing.name,
         domain:
           input.domain === undefined ? existing.domain : (input.domain?.toLowerCase() ?? null),
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
-      .where(and(eq(companies.workspaceId, this.context.workspaceId), eq(companies.id, id)));
+      .where(and(this.inWorkspace(companies), eq(companies.id, id)));
     return this.getCompany(id);
   }
 
@@ -134,12 +125,7 @@ export class CompanyRepository {
           eq(contacts.id, companyContacts.contactId),
         ),
       )
-      .where(
-        and(
-          eq(companyContacts.workspaceId, this.context.workspaceId),
-          eq(companyContacts.companyId, companyId),
-        ),
-      )
+      .where(and(this.inWorkspace(companyContacts), eq(companyContacts.companyId, companyId)))
       .orderBy(
         desc(companyContacts.isPrimary),
         asc(
@@ -156,7 +142,7 @@ export class CompanyRepository {
       .innerJoin(contacts, eq(contacts.workspaceId, companies.workspaceId))
       .where(
         and(
-          eq(companies.workspaceId, this.context.workspaceId),
+          this.inWorkspace(companies),
           eq(companies.id, companyId),
           eq(contacts.id, contactId),
           ne(contacts.status, "archived"),
@@ -187,7 +173,7 @@ export class CompanyRepository {
         contactId: input.contactId,
         title: input.title,
         isPrimary,
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso(),
       })
       .onConflictDoUpdate({
         target: [companyContacts.workspaceId, companyContacts.companyId, companyContacts.contactId],
@@ -216,11 +202,11 @@ export class CompanyRepository {
       .delete(companyContacts)
       .where(
         and(
-          eq(companyContacts.workspaceId, this.context.workspaceId),
+          this.inWorkspace(companyContacts),
           eq(companyContacts.companyId, companyId),
           eq(companyContacts.contactId, contactId),
         ),
       );
-    return result.meta.changes > 0;
+    return didChange(result);
   }
 }

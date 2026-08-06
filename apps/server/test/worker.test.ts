@@ -9,7 +9,7 @@ import {
   contacts,
   contactTags,
   createDatabase,
-  reserveIdempotencyKey,
+  IdempotencyRepository,
   segmentMemberships,
   segments,
   tags,
@@ -18,12 +18,6 @@ import {
 
 import { isEmailVerificationRequired, resolveAuthBaseURL } from "../src/auth/service";
 import { seedWorkspace, seedWorkspaceClient } from "./factory";
-
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
 
 describe("OpenEngage Worker", () => {
   it("uses the actual localhost port for Better Auth during development", () => {
@@ -219,10 +213,10 @@ describe("OpenEngage Worker", () => {
     });
     await expect(
       client.contacts.assignTag({ contactId: contact.id, resourceId: tag.id }),
-    ).resolves.toEqual({ assigned: true });
+    ).resolves.toEqual({ ok: true });
     await expect(
       client.contacts.addToSegment({ contactId: contact.id, resourceId: group.id }),
-    ).resolves.toEqual({ assigned: true });
+    ).resolves.toEqual({ ok: true });
     await expect(
       client.companies.assignContact({
         id: account.id,
@@ -230,7 +224,7 @@ describe("OpenEngage Worker", () => {
         title: "Marketing Lead",
         isPrimary: true,
       }),
-    ).resolves.toEqual({ assigned: true });
+    ).resolves.toEqual({ ok: true });
     const scored = await client.contacts.adjustScore({
       contactId: contact.id,
       delta: 75,
@@ -269,7 +263,7 @@ describe("OpenEngage Worker", () => {
         value: "OpenEngage MA",
         description: "Updated shared brand label",
       }),
-    ).resolves.toEqual({ updated: true });
+    ).resolves.toEqual({ ok: true });
 
     const content = {
       schemaVersion: 1 as const,
@@ -309,9 +303,7 @@ describe("OpenEngage Worker", () => {
       html: expect.stringContaining("Hello 太郎 from OpenEngage Workspace"),
       text: expect.stringContaining("Hello 太郎 from OpenEngage Workspace"),
     });
-    await expect(client.emails.publishTemplate({ id: templateId })).resolves.toEqual({
-      published: true,
-    });
+    await expect(client.emails.publishTemplate({ id: templateId })).resolves.toEqual({ ok: true });
     expect(
       (await client.emails.listTemplates({ archived: false })).find(
         (template) => template.id === templateId,
@@ -328,7 +320,7 @@ describe("OpenEngage Worker", () => {
         subject: "Updated {{ contact.first_name }}",
         content,
       }),
-    ).resolves.toEqual({ updated: true });
+    ).resolves.toEqual({ ok: true });
     expect(
       (await client.emails.listTemplates({ archived: false })).find(
         (template) => template.id === templateId,
@@ -358,12 +350,8 @@ describe("OpenEngage Worker", () => {
       publishedRevision: 1,
     });
 
-    await expect(client.emails.archiveTemplate({ id: templateId })).resolves.toEqual({
-      archived: true,
-    });
-    await expect(client.emails.archiveVariable({ id: variable.id })).resolves.toEqual({
-      archived: true,
-    });
+    await expect(client.emails.archiveTemplate({ id: templateId })).resolves.toEqual({ ok: true });
+    await expect(client.emails.archiveVariable({ id: variable.id })).resolves.toEqual({ ok: true });
 
     const filtered = await client.contacts.list({
       tagId: tag.id,
@@ -397,31 +385,53 @@ describe("OpenEngage Worker", () => {
       }),
     ]);
 
-    await expect(client.contacts.archive({ id: contact.id })).resolves.toEqual({
-      archived: true,
-    });
+    await expect(client.contacts.archive({ id: contact.id })).resolves.toEqual({ ok: true });
     await expect(
       client.contacts.update({ id: contact.id, firstName: "Blocked" }),
     ).rejects.toMatchObject({ code: "CONTACT_ARCHIVED", status: 409 });
     await expect(
       client.contacts.removeTag({ contactId: contact.id, resourceId: tag.id }),
     ).rejects.toMatchObject({ code: "RELATION_REJECTED", status: 409 });
-    await expect(client.contacts.restore({ id: contact.id })).resolves.toEqual({
-      restored: true,
-    });
+    await expect(client.contacts.restore({ id: contact.id })).resolves.toEqual({ ok: true });
     await expect(
       client.contacts.removeTag({ contactId: contact.id, resourceId: tag.id }),
-    ).resolves.toEqual({ removed: true });
+    ).resolves.toEqual({ ok: true });
   });
 
   it("reserves a delivery idempotency key only once", async () => {
     const { workspaceId } = await seedWorkspace(env.DB);
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
-    expect(
-      await reserveIdempotencyKey(env.DB, workspaceId, "delivery", "same-key", expiresAt),
-    ).toBe(true);
-    expect(
-      await reserveIdempotencyKey(env.DB, workspaceId, "delivery", "same-key", expiresAt),
-    ).toBe(false);
+    const idempotency = new IdempotencyRepository(env.DB);
+    expect(await idempotency.reserve(workspaceId, "delivery", "same-key", expiresAt)).toBe(true);
+    expect(await idempotency.reserve(workspaceId, "delivery", "same-key", expiresAt)).toBe(false);
+  });
+
+  it("requires admin to archive an email template or variable even though marketer can create them", async () => {
+    const { client } = await seedWorkspaceClient(env.DB, { role: "marketer" });
+
+    const variable = await client.emails.createVariable({
+      key: "brand_name",
+      name: "Brand name",
+      value: "OpenEngage",
+      description: "Shared brand label",
+    });
+    const template = await client.emails.createTemplate({
+      name: "Welcome",
+      subject: "Welcome {{ contact.first_name }}",
+      content: {
+        schemaVersion: 1 as const,
+        backgroundColor: "#f4f5f7",
+        contentColor: "#ffffff",
+        width: 600,
+        blocks: [{ id: "body", type: "text" as const, html: "<p>Hello</p>" }],
+      },
+    });
+
+    await expect(client.emails.archiveTemplate({ id: template.id })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(client.emails.archiveVariable({ id: variable.id })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
   });
 });

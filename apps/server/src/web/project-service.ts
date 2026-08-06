@@ -1,7 +1,7 @@
 import { and, count, desc, eq } from "drizzle-orm";
 
+import type { ProjectRow } from "@openengage/core/projects";
 import { projectItems, projects, uuidv7, type OpenEngageDatabase } from "@openengage/database";
-import type { ProjectRow } from "@openengage/orpc";
 
 export async function listProjects(
   database: OpenEngageDatabase,

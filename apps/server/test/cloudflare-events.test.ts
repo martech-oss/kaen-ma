@@ -7,12 +7,6 @@ import type { RuntimeEnv } from "../src/env";
 import { processCloudflareEmailEvent } from "../src/messaging/cloudflare-events";
 import { seedWorkspace } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 const kinds = ["delivered", "deferred", "bounced", "failed", "rejected", "complained"] as const;
 
 describe("Cloudflare Email Sending events", () => {

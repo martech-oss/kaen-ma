@@ -1,3 +1,4 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   Building2,
@@ -9,12 +10,12 @@ import {
   UserRound,
   Zap,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 
 import {
   ArchiveConfirm,
   ErrorAlert as ErrorNotice,
-  FormInput as InputField,
+  FormInput,
   LoadingButton,
 } from "@/components/app-ui";
 import { Button } from "@/components/ui/button";
@@ -32,17 +33,18 @@ import {
   adjustContactScore,
   archiveContact,
   assignContactTag,
-  loadContactProfile,
+  contactProfileQueryOptions,
+  invalidateContactOptions,
   removeContactFromSegment,
   removeContactTag,
   restoreContact,
   type ContactOptions,
   updateContact,
 } from "@/features/contacts/contact-api";
-import { useFormSubmission } from "@/hooks/use-form-submission";
-import { nullableString } from "@/lib/form-data";
+import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { getFormString, nullableString } from "@/lib/form-data";
 import { formatLongDateTime } from "@/lib/format";
-import { cn, getFormString } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { type ContactProfile } from "@openengage/core/contacts";
 
 export type { ContactProfile };
@@ -61,28 +63,20 @@ export function ContactDrawer({
   onClose: () => void;
   onChanged: () => Promise<void>;
 }): ReactNode {
-  const [profile, setProfile] = useState<ContactProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const profileQuery = useQuery(contactProfileQueryOptions(contactId));
+  const queryClient = useQueryClient();
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"details" | "activity">("details");
 
-  const loadProfile = useCallback(async () => {
-    setLoading(true);
-    try {
-      setProfile(await loadContactProfile(contactId));
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "プロフィールを読み込めませんでした");
-    } finally {
-      setLoading(false);
-    }
-  }, [contactId]);
-
-  useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
+  const profile = profileQuery.data;
+  const loading = profileQuery.isLoading;
 
   async function changed() {
-    await Promise.all([loadProfile(), onChanged()]);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: contactProfileQueryOptions(contactId).queryKey }),
+      invalidateContactOptions(queryClient),
+      onChanged(),
+    ]);
   }
 
   async function mutate(action: () => Promise<unknown>) {
@@ -91,7 +85,7 @@ export function ContactDrawer({
       await action();
       await changed();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "更新できませんでした");
+      setError(getErrorMessage(caught, "更新できませんでした"));
     }
   }
 
@@ -217,7 +211,9 @@ export function ContactDrawer({
           </Tabs>
         ) : (
           <div className="p-6">
-            <ErrorNotice>{error}</ErrorNotice>
+            <ErrorNotice>
+              {getErrorMessage(profileQuery.error, "プロフィールを読み込めませんでした")}
+            </ErrorNotice>
           </div>
         )}
       </SheetContent>
@@ -255,20 +251,20 @@ function ProfileEditForm({
     <Section title="基本情報" icon={<UserRound className="size-4" />}>
       <form onSubmit={(event) => void submit(event)} className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3">
-          <InputField
+          <FormInput
             label="名"
             name="firstName"
             defaultValue={contact.firstName ?? ""}
             disabled={disabled}
           />
-          <InputField
+          <FormInput
             label="姓"
             name="lastName"
             defaultValue={contact.lastName ?? ""}
             disabled={disabled}
           />
         </div>
-        <InputField
+        <FormInput
           label="メール"
           name="email"
           type="email"
@@ -276,20 +272,20 @@ function ProfileEditForm({
           disabled={disabled}
         />
         <div className="grid grid-cols-2 gap-3">
-          <InputField
+          <FormInput
             label="電話番号"
             name="phone"
             defaultValue={contact.phone ?? ""}
             disabled={disabled}
           />
-          <InputField
+          <FormInput
             label="外部ID"
             name="externalId"
             defaultValue={contact.externalId ?? ""}
             disabled={disabled}
           />
         </div>
-        <InputField
+        <FormInput
           label="ステージ"
           name="stage"
           defaultValue={contact.stage}
@@ -338,8 +334,8 @@ function ScoreForm({
         onSubmit={(event) => void submit(event)}
         className="grid gap-3 md:grid-cols-[120px_1fr_auto]"
       >
-        <InputField label="加減点" name="delta" type="number" required />
-        <InputField label="理由" name="reason" required />
+        <FormInput label="加減点" name="delta" type="number" required />
+        <FormInput label="理由" name="reason" required />
         <div className="flex items-end">
           <LoadingButton busy={busy} variant="outline" type="submit">
             反映

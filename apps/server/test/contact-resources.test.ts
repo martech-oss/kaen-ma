@@ -5,12 +5,6 @@ import type { WorkspaceRole } from "@openengage/orpc";
 
 import { seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 async function seedWorkspace(role: WorkspaceRole = "owner") {
   const { client } = await seedWorkspaceClient(env.DB, { role, timezone: "Asia/Tokyo" });
   return client;

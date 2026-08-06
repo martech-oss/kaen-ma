@@ -1,6 +1,6 @@
 import type { ContactDataJob } from "@openengage/core/contacts";
+import type { WorkspaceContext } from "@openengage/core/shared";
 import { DataJobRepository, uuidv7, type OpenEngageDatabase } from "@openengage/database";
-import type { WorkspaceContext } from "@openengage/orpc";
 
 import { parseCsv } from "./csv";
 

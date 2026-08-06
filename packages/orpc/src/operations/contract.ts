@@ -6,6 +6,7 @@ import { deadLetterRowSchema } from "@openengage/core/platform";
 import { dashboardSchema } from "@openengage/core/reports";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
+import { ackSchema, idInput } from "../shared/schemas";
 
 export const CSV_MAX_BYTES = 25 * 1024 * 1024;
 
@@ -45,7 +46,7 @@ export const contactDataContract = {
       ...authedErrors,
       DATA_JOB_NOT_FOUND: { status: 404, message: "データJobが見つかりません" },
     })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(contactDataJobSchema),
   downloadExport: oc
     .route({ method: "GET", path: "/contacts/exports/{id}/download" })
@@ -54,7 +55,7 @@ export const contactDataContract = {
       EXPORT_NOT_READY: { status: 404, message: "Exportはまだ完了していません" },
       EXPORT_MISSING: { status: 404, message: "Exportファイルがありません" },
     })
-    .input(z.object({ id: z.string().min(1) }))
+    .input(idInput)
     .output(z.file()),
 };
 
@@ -69,6 +70,6 @@ export const platformContract = {
       ...authedErrors,
       DEAD_LETTER_NOT_FOUND: { status: 404, message: "DLQ項目が見つかりません" },
     })
-    .input(z.object({ id: z.string().min(1) }))
-    .output(z.object({ replayed: z.literal(true) })),
+    .input(idInput)
+    .output(ackSchema),
 };

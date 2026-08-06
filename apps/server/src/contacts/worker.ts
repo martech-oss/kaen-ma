@@ -1,4 +1,8 @@
-import { DataJobWorkerRepository, type ContactImportRow } from "@openengage/database";
+import {
+  createDatabase,
+  DataJobWorkerRepository,
+  type ContactImportRow,
+} from "@openengage/database";
 
 import { PermanentChannelError } from "../channels";
 import { type RuntimeEnv } from "../env";
@@ -10,7 +14,7 @@ export async function processContactImport(
   totalParts: number,
   env: RuntimeEnv,
 ): Promise<void> {
-  const repository = new DataJobWorkerRepository(env.DB);
+  const repository = new DataJobWorkerRepository(createDatabase(env.DB));
   const job = await repository.claimImportJob(jobId);
   if (!job) return;
   await repository.markProcessing(jobId);
@@ -73,7 +77,7 @@ export async function processContactImport(
 }
 
 export async function processContactExport(jobId: string, env: RuntimeEnv): Promise<void> {
-  const repository = new DataJobWorkerRepository(env.DB);
+  const repository = new DataJobWorkerRepository(createDatabase(env.DB));
   const job = await repository.claimExportJob(jobId);
   if (!job) return;
   const lastId = typeof job.cursor["lastId"] === "string" ? job.cursor["lastId"] : "";

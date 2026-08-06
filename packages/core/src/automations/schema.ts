@@ -1,6 +1,8 @@
 import * as z from "zod";
 
-export const automationStatusSchema = z.enum(["draft", "active", "paused", "archived"]);
+import { segmentOperatorSchema, segmentValueSchema } from "../segments/schema";
+
+const automationStatusSchema = z.enum(["draft", "active", "paused", "archived"]);
 
 export const automationRowSchema = z.object({
   id: z.string(),
@@ -15,9 +17,7 @@ export const automationRowSchema = z.object({
 });
 export type AutomationRow = z.infer<typeof automationRowSchema>;
 
-import { segmentOperatorSchema, segmentValueSchema } from "../segments/schema";
-
-export const sourceNodeSchema = z.object({
+const sourceNodeSchema = z.object({
   id: z.string().min(1),
   type: z.literal("source"),
   position: z.object({ x: z.number(), y: z.number() }),
@@ -54,7 +54,7 @@ export const sourceNodeSchema = z.object({
   ]),
 });
 
-export const actionNodeSchema = z.object({
+const actionNodeSchema = z.object({
   id: z.string().min(1),
   type: z.literal("action"),
   position: z.object({ x: z.number(), y: z.number() }),
@@ -84,14 +84,14 @@ const predicateSchema = z.object({
   value: segmentValueSchema,
 });
 
-export const conditionNodeSchema = z.object({
+const conditionNodeSchema = z.object({
   id: z.string().min(1),
   type: z.literal("condition"),
   position: z.object({ x: z.number(), y: z.number() }),
   config: predicateSchema,
 });
 
-export const decisionNodeSchema = z.object({
+const decisionNodeSchema = z.object({
   id: z.string().min(1),
   type: z.literal("decision"),
   position: z.object({ x: z.number(), y: z.number() }),
@@ -109,7 +109,7 @@ export const decisionNodeSchema = z.object({
   }),
 });
 
-export const delayNodeSchema = z.object({
+const delayNodeSchema = z.object({
   id: z.string().min(1),
   type: z.literal("delay"),
   position: z.object({ x: z.number(), y: z.number() }),
@@ -126,7 +126,7 @@ export const delayNodeSchema = z.object({
   ]),
 });
 
-export const automationNodeSchema = z.discriminatedUnion("type", [
+const automationNodeSchema = z.discriminatedUnion("type", [
   sourceNodeSchema,
   actionNodeSchema,
   conditionNodeSchema,
@@ -135,7 +135,7 @@ export const automationNodeSchema = z.discriminatedUnion("type", [
 ]);
 export type AutomationNode = z.infer<typeof automationNodeSchema>;
 
-export const automationEdgeSchema = z.object({
+const automationEdgeSchema = z.object({
   id: z.string().min(1),
   source: z.string().min(1),
   target: z.string().min(1),

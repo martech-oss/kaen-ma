@@ -1,4 +1,4 @@
-import type { AutomationDefinition } from "@openengage/orpc";
+import type { AutomationDefinition } from "@openengage/core/automations";
 
 export function automationTrigger(
   config: Extract<AutomationDefinition["nodes"][number], { type: "source" }>["config"],

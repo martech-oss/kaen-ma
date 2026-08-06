@@ -12,7 +12,7 @@ export const tagSchema = z.object({
 });
 export type Tag = z.infer<typeof tagSchema>;
 
-export const segmentOptionSchema = z.object({
+const segmentOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   slug: z.string(),
@@ -23,7 +23,7 @@ export const segmentOptionSchema = z.object({
 });
 export type SegmentOption = z.infer<typeof segmentOptionSchema>;
 
-export const companyOptionSchema = z.object({
+const companyOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   domain: z.string().nullable(),
@@ -31,7 +31,7 @@ export const companyOptionSchema = z.object({
 });
 export type CompanyOption = z.infer<typeof companyOptionSchema>;
 
-export const stageCountSchema = z.object({
+const stageCountSchema = z.object({
   stage: z.string(),
   contactCount: z.number().int().nonnegative(),
 });

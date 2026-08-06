@@ -1,13 +1,9 @@
-import { compileSegmentFilter } from "@openengage/core";
+import { compileSegmentFilter } from "@openengage/core/segments";
 import { SegmentRepository, type OpenEngageDatabase } from "@openengage/database";
 
-/**
- * These helpers are called from flows that only carry a workspace id (bulk
- * contact actions, membership refreshes), so a minimal repository context is
- * synthesized here; the repository only reads `workspaceId` from it.
- */
+/** These helpers are called from flows that only carry a workspace id (bulk contact actions, membership refreshes). */
 function segmentRepository(database: OpenEngageDatabase, workspaceId: string): SegmentRepository {
-  return new SegmentRepository(database, { workspaceId, userId: "system", role: "owner" });
+  return new SegmentRepository(database, { workspaceId });
 }
 
 export async function updateSegmentMemberCount(

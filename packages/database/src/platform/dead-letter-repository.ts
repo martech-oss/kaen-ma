@@ -1,8 +1,9 @@
 import { and, desc, eq } from "drizzle-orm";
 
 import { automationJobs } from "../automations/schema";
-import { createDatabase, type DatabaseSource } from "../client";
 import { deliveries } from "../messaging/schema";
+import { changedExactlyOne } from "../shared/database-utils";
+import { DatabaseRepository } from "../shared/repository-base";
 import { deadLetters } from "./schema";
 
 export interface DeadLetterRecord {
@@ -16,12 +17,10 @@ export interface DeadLetterRecord {
 }
 
 /** Repository for the dead_letters table and the source lookups used to file one. */
-export class DeadLetterRepository {
-  public constructor(private readonly database: DatabaseSource) {}
-
+export class DeadLetterRepository extends DatabaseRepository {
   public async findJobWorkspace(jobId: string): Promise<string | null> {
-    const [row] = await createDatabase(this.database)
-      .orm.select({ workspaceId: automationJobs.workspaceId })
+    const [row] = await this.database.orm
+      .select({ workspaceId: automationJobs.workspaceId })
       .from(automationJobs)
       .where(eq(automationJobs.id, jobId))
       .limit(1);
@@ -29,8 +28,8 @@ export class DeadLetterRepository {
   }
 
   public async findDeliveryWorkspace(deliveryId: string): Promise<string | null> {
-    const [row] = await createDatabase(this.database)
-      .orm.select({ workspaceId: deliveries.workspaceId })
+    const [row] = await this.database.orm
+      .select({ workspaceId: deliveries.workspaceId })
       .from(deliveries)
       .where(eq(deliveries.id, deliveryId))
       .limit(1);
@@ -46,7 +45,7 @@ export class DeadLetterRepository {
     attempts: number;
     createdAt: string;
   }): Promise<void> {
-    await createDatabase(this.database).orm.insert(deadLetters).values({
+    await this.database.orm.insert(deadLetters).values({
       id: input.id,
       workspaceId: input.workspaceId,
       sourceQueue: input.sourceQueue,
@@ -58,8 +57,8 @@ export class DeadLetterRepository {
   }
 
   public async list(workspaceId: string, limit = 100): Promise<DeadLetterRecord[]> {
-    const rows = await createDatabase(this.database)
-      .orm.select()
+    const rows = await this.database.orm
+      .select()
       .from(deadLetters)
       .where(eq(deadLetters.workspaceId, workspaceId))
       .orderBy(desc(deadLetters.createdAt))
@@ -79,8 +78,8 @@ export class DeadLetterRepository {
     workspaceId: string,
     deadLetterId: string,
   ): Promise<{ id: string; sourceQueue: string; messageBody: string } | null> {
-    const [row] = await createDatabase(this.database)
-      .orm.select({
+    const [row] = await this.database.orm
+      .select({
         id: deadLetters.id,
         sourceQueue: deadLetters.sourceQueue,
         messageBody: deadLetters.messageBody,
@@ -98,10 +97,10 @@ export class DeadLetterRepository {
   }
 
   public async markReplayed(deadLetterId: string, now: string): Promise<boolean> {
-    const result = await createDatabase(this.database)
-      .orm.update(deadLetters)
+    const result = await this.database.orm
+      .update(deadLetters)
       .set({ status: "replayed", replayedAt: now })
       .where(and(eq(deadLetters.id, deadLetterId), eq(deadLetters.status, "pending")));
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 }

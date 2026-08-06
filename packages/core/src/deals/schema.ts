@@ -1,12 +1,12 @@
 import * as z from "zod";
 
-export const dealStatusSchema = z.enum(["open", "won", "lost"]);
+const dealStatusSchema = z.enum(["open", "won", "lost"]);
 export type DealStatus = z.infer<typeof dealStatusSchema>;
 
-export const dealTaskTypeSchema = z.enum(["task", "call", "email", "meeting"]);
+const dealTaskTypeSchema = z.enum(["task", "call", "email", "meeting"]);
 export type DealTaskType = z.infer<typeof dealTaskTypeSchema>;
 
-export const dealTaskStatusSchema = z.enum(["open", "completed"]);
+const dealTaskStatusSchema = z.enum(["open", "completed"]);
 export type DealTaskStatus = z.infer<typeof dealTaskStatusSchema>;
 
 const nullableIdSchema = z.string().min(1).nullable().optional();
@@ -64,7 +64,7 @@ export const dealTaskUpdateSchema = dealTaskFieldsSchema.partial().extend({
 });
 export type DealTaskUpdate = z.infer<typeof dealTaskUpdateSchema>;
 
-export const dealStageSchema = z.object({
+const dealStageSchema = z.object({
   id: z.string(),
   name: z.string(),
   color: z.string(),
@@ -73,7 +73,7 @@ export const dealStageSchema = z.object({
 });
 export type DealStage = z.infer<typeof dealStageSchema>;
 
-export const dealPipelineSchema = z.object({
+const dealPipelineSchema = z.object({
   id: z.string(),
   name: z.string(),
   isDefault: z.boolean(),
@@ -81,20 +81,20 @@ export const dealPipelineSchema = z.object({
 });
 export type DealPipeline = z.infer<typeof dealPipelineSchema>;
 
-export const dealContactOptionSchema = z.object({
+const dealContactOptionSchema = z.object({
   id: z.string(),
   email: z.string().nullable(),
   firstName: z.string().nullable(),
   lastName: z.string().nullable(),
 });
 
-export const dealCompanyOptionSchema = z.object({
+const dealCompanyOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   domain: z.string().nullable(),
 });
 
-export const dealMemberOptionSchema = z.object({
+const dealMemberOptionSchema = z.object({
   id: z.string(),
   name: z.string(),
   email: z.string(),
@@ -160,7 +160,7 @@ export const dealTaskSchema = z.object({
 });
 export type DealTask = z.infer<typeof dealTaskSchema>;
 
-export const dealListSummarySchema = z.object({
+const dealListSummarySchema = z.object({
   openCount: z.number().int().nonnegative(),
   openValue: z.number(),
   wonCount: z.number().int().nonnegative(),

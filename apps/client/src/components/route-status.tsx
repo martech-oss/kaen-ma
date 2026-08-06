@@ -29,3 +29,5 @@ export function RouteError({ error }: { error: Error }): ReactNode {
     </div>
   );
 }
+
+export const routeStatusComponents = { pendingComponent: RoutePending, errorComponent: RouteError };

@@ -1,5 +1,5 @@
+import type { WorkspaceContext } from "@openengage/core/shared";
 import type { OpenEngageDatabase } from "@openengage/database";
-import type { WorkspaceContext } from "@openengage/orpc";
 
 export type McpWorkspaceContext = WorkspaceContext & { apiKeyId: string };
 

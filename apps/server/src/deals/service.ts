@@ -1,4 +1,3 @@
-import { DealRepository, writeAuditLog, type OpenEngageDatabase } from "@openengage/database";
 import type {
   DealCreate,
   DealDetailData,
@@ -9,8 +8,14 @@ import type {
   DealTaskCreate,
   DealTaskUpdate,
   DealUpdate,
-  WorkspaceContext,
-} from "@openengage/orpc";
+} from "@openengage/core/deals";
+import type { WorkspaceContext } from "@openengage/core/shared";
+import {
+  DealRepository,
+  ensureLoaded,
+  writeAuditLog,
+  type OpenEngageDatabase,
+} from "@openengage/database";
 
 import { serializeDeal, serializeStage, serializeTask } from "./records";
 
@@ -176,7 +181,7 @@ export async function updateDeal(
     }),
   );
   const deal = await repository.getDeal(current.id);
-  return { kind: "ok", deal: serializeDeal(deal!) };
+  return { kind: "ok", deal: serializeDeal(ensureLoaded(deal, "Updated deal")) };
 }
 
 export async function moveDeal(
@@ -201,7 +206,7 @@ export async function moveDeal(
       metadata: { previousStageId: deal.stageId, stageId },
     }),
   );
-  return { kind: "ok", deal: serializeDeal(updated!) };
+  return { kind: "ok", deal: serializeDeal(ensureLoaded(updated, "Moved deal")) };
 }
 
 export async function archiveDeal(
@@ -267,7 +272,7 @@ export async function updateDealTask(
     completedAt,
     updatedAt: now,
   });
-  return { kind: "ok", task: serializeTask(task!) };
+  return { kind: "ok", task: serializeTask(ensureLoaded(task, "Updated deal task")) };
 }
 
 export async function deleteDealTask(

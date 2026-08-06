@@ -1,14 +1,14 @@
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
-import { RouteError, RoutePending } from "@/components/route-status";
+import { routeStatusComponents } from "@/components/route-status";
 import {
   automationDraftQueryOptions,
-  emailTemplateOptionsQueryOptions,
   formOptionsQueryOptions,
   segmentOptionsQueryOptions,
 } from "@/features/automations/automation-api";
 import { AutomationBuilder } from "@/features/automations/automation-pages";
+import { emailTemplateOptionsQueryOptions } from "@/features/emails/email-api";
 
 export const Route = createFileRoute("/_app/automations/$id")({
   loader: ({ params, context }) =>
@@ -18,8 +18,7 @@ export const Route = createFileRoute("/_app/automations/$id")({
       context.queryClient.ensureQueryData(formOptionsQueryOptions()),
       context.queryClient.ensureQueryData(segmentOptionsQueryOptions()),
     ]),
-  pendingComponent: RoutePending,
-  errorComponent: RouteError,
+  ...routeStatusComponents,
   component: AutomationRoute,
 });
 

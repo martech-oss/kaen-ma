@@ -2,20 +2,9 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 
 import { workspaceRoleSchema } from "@openengage/core/shared";
-import { workspaceSchema } from "@openengage/core/workspaces";
+import { webhookEndpointRowSchema, workspaceSchema } from "@openengage/core/workspaces";
 
 import { authedErrors, workspaceErrors } from "../shared/errors";
-
-export const webhookEndpointRowSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  url: z.string(),
-  eventTypes: z.array(z.string()),
-  enabled: z.boolean(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type WebhookEndpointRow = z.infer<typeof webhookEndpointRowSchema>;
 
 export const workspaceContract = {
   get: oc
@@ -24,10 +13,7 @@ export const workspaceContract = {
     .output(workspaceSchema),
   createApiKey: oc
     .route({ method: "POST", path: "/workspace/api-keys", successStatus: 201 })
-    .errors({
-      ...workspaceErrors,
-      FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
-    })
+    .errors(authedErrors)
     .input(
       z.object({
         name: z.string().trim().min(1).max(191),

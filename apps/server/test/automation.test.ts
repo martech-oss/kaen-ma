@@ -9,12 +9,6 @@ import { contract } from "@openengage/orpc";
 import { enrollInactiveContacts } from "../src/automations/enrollment";
 import { seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 type Client = ContractRouterClient<typeof contract>;
 
 describe("Automation flows", () => {

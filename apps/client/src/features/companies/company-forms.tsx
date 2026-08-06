@@ -18,8 +18,9 @@ import {
   FieldTitle,
 } from "@/components/ui/field";
 import type { ContactOption } from "@/features/companies/company-api";
+import { contactOptionLabel } from "@/features/contacts/contact-bits";
 import { useFormSubmission } from "@/hooks/use-form-submission";
-import { getFormString } from "@/lib/utils";
+import { getFormString } from "@/lib/form-data";
 
 export function CompanyForm({
   open,
@@ -162,11 +163,4 @@ export function AddCompanyContactForm({
       </Field>
     </FormDialog>
   );
-}
-
-function contactOptionLabel(contact: ContactOption): string {
-  const name = [contact.lastName, contact.firstName].filter(Boolean).join(" ");
-  return name
-    ? `${name}${contact.email ? `（${contact.email}）` : ""}`
-    : (contact.email ?? "名前未設定");
 }

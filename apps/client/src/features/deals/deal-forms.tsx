@@ -2,6 +2,7 @@ import { Check, Pencil, Trash2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 
 import {
+  ConfirmDialog,
   ErrorAlert,
   FormInput,
   FormNativeSelect,
@@ -12,6 +13,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
+import { contactOptionLabel } from "@/features/contacts/contact-bits";
 import {
   type DealCreate,
   type DealOptions,
@@ -22,10 +24,11 @@ import {
   type DealTaskType,
 } from "@/features/deals/deal-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
+import { getFormString } from "@/lib/form-data";
 import { formatMonthDayTime, toDateTimeLocal } from "@/lib/format";
-import { getFormString } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
-import { contactOptionLabel, taskTypeLabel } from "./deal-labels";
+import { taskTypeLabel } from "./deal-labels";
 
 export function DealForm({
   options,
@@ -277,9 +280,10 @@ export function TaskRow({
   const overdue = task.status === "open" && task.dueAt && new Date(task.dueAt) < new Date();
   return (
     <div
-      className={`flex flex-wrap items-start gap-3 rounded-lg border p-3 ${
-        task.status === "completed" ? "bg-muted/40 opacity-70" : ""
-      }`}
+      className={cn(
+        "flex flex-wrap items-start gap-3 rounded-lg border p-3",
+        task.status === "completed" && "bg-muted/40 opacity-70",
+      )}
     >
       <Button
         variant={task.status === "completed" ? "secondary" : "outline"}
@@ -291,7 +295,7 @@ export function TaskRow({
       </Button>
       <div className="min-w-48 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`font-medium ${task.status === "completed" ? "line-through" : ""}`}>
+          <span className={cn("font-medium", task.status === "completed" && "line-through")}>
             {task.title}
           </span>
           <Badge variant="outline">{taskTypeLabel(task.type)}</Badge>
@@ -309,9 +313,15 @@ export function TaskRow({
         <Button variant="ghost" size="icon-sm" aria-label="タスクを編集" onClick={onEdit}>
           <Pencil />
         </Button>
-        <Button variant="ghost" size="icon-sm" aria-label="タスクを削除" onClick={onDelete}>
-          <Trash2 />
-        </Button>
+        <ConfirmDialog
+          title="タスクを削除しますか？"
+          description={`「${task.title}」を削除します。`}
+          confirmLabel="削除"
+          triggerLabel="タスクを削除"
+          trigger={<Button variant="ghost" size="icon-sm" />}
+          triggerContent={<Trash2 />}
+          onConfirm={onDelete}
+        />
       </div>
     </div>
   );

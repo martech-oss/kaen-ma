@@ -1,7 +1,7 @@
 import { ReportsRepository } from "@openengage/database";
 
-import { primitiveString } from "../platform/values";
-import { publicRange, rate, type ReportDatabase, type ReportRange, toNumber } from "./shared";
+import { primitiveString, toFiniteNumber } from "../platform/values";
+import { publicRange, rate, type ReportDatabase, type ReportRange } from "./shared";
 
 export async function emailReport(
   database: ReportDatabase,
@@ -11,13 +11,13 @@ export async function emailReport(
   const data = await new ReportsRepository(database).emailsSummary(workspaceId, range);
   const summaryRow = data.summary;
   const summary = {
-    sends: toNumber(summaryRow["sends"]),
-    delivered: toNumber(summaryRow["delivered"]),
-    opens: toNumber(summaryRow["opens"]),
-    clicks: toNumber(summaryRow["clicks"]),
-    bounces: toNumber(summaryRow["bounces"]),
-    unsubscribes: toNumber(summaryRow["unsubscribes"]),
-    complaints: toNumber(summaryRow["complaints"]),
+    sends: toFiniteNumber(summaryRow["sends"]),
+    delivered: toFiniteNumber(summaryRow["delivered"]),
+    opens: toFiniteNumber(summaryRow["opens"]),
+    clicks: toFiniteNumber(summaryRow["clicks"]),
+    bounces: toFiniteNumber(summaryRow["bounces"]),
+    unsubscribes: toFiniteNumber(summaryRow["unsubscribes"]),
+    complaints: toFiniteNumber(summaryRow["complaints"]),
   };
   return {
     category: "emails" as const,
@@ -33,16 +33,16 @@ export async function emailReport(
     },
     trend: data.trend.map((row) => ({
       day: primitiveString(row["day"]),
-      sends: toNumber(row["sends"]),
-      delivered: toNumber(row["delivered"]),
-      opens: toNumber(row["opens"]),
-      clicks: toNumber(row["clicks"]),
+      sends: toFiniteNumber(row["sends"]),
+      delivered: toFiniteNumber(row["delivered"]),
+      opens: toFiniteNumber(row["opens"]),
+      clicks: toFiniteNumber(row["clicks"]),
     })),
     sources: data.sources.map((row) => {
-      const sends = toNumber(row["sends"]);
-      const delivered = toNumber(row["delivered"]);
-      const opens = toNumber(row["opens"]);
-      const clicks = toNumber(row["clicks"]);
+      const sends = toFiniteNumber(row["sends"]);
+      const delivered = toFiniteNumber(row["delivered"]);
+      const opens = toFiniteNumber(row["opens"]);
+      const clicks = toFiniteNumber(row["clicks"]);
       return {
         id: primitiveString(row["source_id"]),
         name: primitiveString(row["source_name"]),
@@ -51,8 +51,8 @@ export async function emailReport(
         delivered,
         opens,
         clicks,
-        bounces: toNumber(row["bounces"]),
-        unsubscribes: toNumber(row["unsubscribes"]),
+        bounces: toFiniteNumber(row["bounces"]),
+        unsubscribes: toFiniteNumber(row["unsubscribes"]),
         openRate: rate(opens, delivered),
         clickRate: rate(clicks, delivered),
       };

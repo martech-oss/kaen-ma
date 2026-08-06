@@ -1,29 +1,32 @@
-import { and, count, desc, eq, isNotNull, isNull, like, lt, type SQL } from "drizzle-orm";
-
-import {
-  assets,
-  organization,
-  uuidv7,
-  writeAuditLog,
-  type OpenEngageDatabase,
-} from "@openengage/database";
+import type {
+  Asset,
+  AssetListInput,
+  AssetListResult,
+  AssetSummary,
+  AssetUpdateInput,
+} from "@openengage/core/assets";
 import {
   assetKindFromContentType,
   assetPublicPath,
   isBlockedAssetContentType,
   normalizeAssetContentType,
-  type Asset,
-  type AssetChecksumAlgorithm,
-  type AssetKind,
-  type AssetListInput,
-  type AssetListResult,
-  type AssetSummary,
-  type AssetUpdateInput,
-  type AssetVisibility,
-  type WorkspaceContext,
-} from "@openengage/orpc";
+} from "@openengage/core/assets";
+import type {
+  AssetChecksumAlgorithm,
+  AssetKind,
+  AssetVisibility,
+  WorkspaceContext,
+} from "@openengage/core/shared";
+import {
+  AssetRepository,
+  nowIso,
+  uuidv7,
+  writeAuditLog,
+  type AssetRow,
+  type OpenEngageDatabase,
+} from "@openengage/database";
 
-import { sha256HexFromBytes } from "../platform/crypto";
+import { bytesToHex, sha256HexFromBytes } from "../platform/crypto";
 import { sanitizeFilename } from "../platform/values";
 
 /** Raised when an upload's content type is one the delivery routes must never serve. */
@@ -33,48 +36,6 @@ export class AssetContentTypeBlockedError extends Error {
     this.name = "AssetContentTypeBlockedError";
   }
 }
-
-interface AssetRow {
-  id: string;
-  name: string;
-  originalFilename: string;
-  kind: string;
-  description: string;
-  altText: string;
-  r2Key: string;
-  contentType: string;
-  size: number;
-  checksum: string;
-  checksumAlgorithm: string;
-  width: number | null;
-  height: number | null;
-  visibility: string;
-  createdByUserId: string | null;
-  archivedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-const assetColumns = {
-  id: assets.id,
-  name: assets.name,
-  originalFilename: assets.originalFilename,
-  kind: assets.kind,
-  description: assets.description,
-  altText: assets.altText,
-  r2Key: assets.r2Key,
-  contentType: assets.contentType,
-  size: assets.size,
-  checksum: assets.checksum,
-  checksumAlgorithm: assets.checksumAlgorithm,
-  width: assets.width,
-  height: assets.height,
-  visibility: assets.visibility,
-  createdByUserId: assets.createdByUserId,
-  archivedAt: assets.archivedAt,
-  createdAt: assets.createdAt,
-  updatedAt: assets.updatedAt,
-} as const;
 
 /** Everything the DTO layer needs beyond the row itself. */
 export interface AssetOrigin {
@@ -87,11 +48,8 @@ export async function loadAssetOrigin(
   workspaceId: string,
   appUrl: string,
 ): Promise<AssetOrigin> {
-  const row = await database.orm.query.organization.findFirst({
-    columns: { slug: true },
-    where: eq(organization.id, workspaceId),
-  });
-  return { workspaceSlug: row?.slug ?? workspaceId, appUrl };
+  const slug = await new AssetRepository(database, { workspaceId }).workspaceSlug();
+  return { workspaceSlug: slug ?? workspaceId, appUrl };
 }
 
 /**
@@ -139,38 +97,13 @@ export async function listAssets(
   input: AssetListInput,
   origin: AssetOrigin,
 ): Promise<AssetListResult> {
-  const conditions: SQL[] = [eq(assets.workspaceId, workspaceId)];
-  if (input.status === "active") conditions.push(isNull(assets.archivedAt));
-  if (input.status === "archived") conditions.push(isNotNull(assets.archivedAt));
-  if (input.kind) conditions.push(eq(assets.kind, input.kind));
-  if (input.visibility) conditions.push(eq(assets.visibility, input.visibility));
-  if (input.query) conditions.push(like(assets.name, `%${escapeLike(input.query)}%`));
-
-  const [totalRow] = await database.orm
-    .select({ count: count() })
-    .from(assets)
-    .where(and(...conditions));
-
-  const pageConditions: SQL[] = [...conditions];
-  if (input.cursor) pageConditions.push(lt(assets.id, input.cursor));
-
-  // uuidv7 embeds the creation millisecond in its high bits and is stamped in the
-  // same statement as `createdAt`, so ordering by id is ordering by creation time
-  // - which lets the cursor stay a single column.
-  const rows = await database.orm
-    .select(assetColumns)
-    .from(assets)
-    .where(and(...pageConditions))
-    .orderBy(desc(assets.id))
-    .limit(input.limit + 1);
-
-  const hasMore = rows.length > input.limit;
-  const items = rows.slice(0, input.limit).map((row) => toAssetSummary(row, origin));
+  const page = await new AssetRepository(database, { workspaceId }).list(input);
+  const items = page.items.map((row) => toAssetSummary(row, origin));
   const last = items.at(-1);
   return {
     items,
-    total: totalRow?.count ?? 0,
-    ...(hasMore && last ? { nextCursor: last.id } : {}),
+    total: page.total,
+    ...(page.hasMore && last ? { nextCursor: last.id } : {}),
   };
 }
 
@@ -180,21 +113,8 @@ export async function getAsset(
   assetId: string,
   origin: AssetOrigin,
 ): Promise<Asset | null> {
-  const row = await findAssetRow(database, workspaceId, assetId);
+  const row = await new AssetRepository(database, { workspaceId }).getById(assetId);
   return row ? toAsset(row, origin) : null;
-}
-
-async function findAssetRow(
-  database: OpenEngageDatabase,
-  workspaceId: string,
-  assetId: string,
-): Promise<AssetRow | undefined> {
-  const [row] = await database.orm
-    .select(assetColumns)
-    .from(assets)
-    .where(and(eq(assets.workspaceId, workspaceId), eq(assets.id, assetId)))
-    .limit(1);
-  return row;
 }
 
 /**
@@ -243,7 +163,7 @@ export async function uploadAsset(
     customMetadata: { workspaceId: workspace.workspaceId, assetId: id },
     sha256: checksum,
   });
-  const now = new Date().toISOString();
+  const now = nowIso();
   const row: AssetRow = {
     id,
     name: input.name,
@@ -264,7 +184,7 @@ export async function uploadAsset(
     createdAt: now,
     updatedAt: now,
   };
-  await database.orm.insert(assets).values({ ...row, workspaceId: workspace.workspaceId });
+  await new AssetRepository(database, workspace).insert(row);
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "asset.create",
@@ -309,7 +229,7 @@ export async function createStreamedAsset(
   const key = buildAssetKey(workspace.workspaceId, id, input.originalFilename);
   const stored = await putAssetObject(bucket, key, workspace.workspaceId, id, input);
   if (!stored) return { kind: "size_mismatch" };
-  const now = new Date().toISOString();
+  const now = nowIso();
   const row: AssetRow = {
     id,
     name: input.originalFilename,
@@ -330,7 +250,7 @@ export async function createStreamedAsset(
     createdAt: now,
     updatedAt: now,
   };
-  await database.orm.insert(assets).values({ ...row, workspaceId: workspace.workspaceId });
+  await new AssetRepository(database, workspace).insert(row);
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "asset.create",
@@ -356,14 +276,13 @@ export async function replaceAssetContent(
   origin: AssetOrigin,
   background: { waitUntil(promise: Promise<unknown>): void },
 ): Promise<StreamedUploadOutcome> {
-  const existing = await findAssetRow(database, workspace.workspaceId, assetId);
+  const repository = new AssetRepository(database, workspace);
+  const existing = await repository.getById(assetId);
   if (!existing) return { kind: "not_found" };
   const key = buildAssetKey(workspace.workspaceId, assetId, input.originalFilename);
   const stored = await putAssetObject(bucket, key, workspace.workspaceId, assetId, input);
   if (!stored) return { kind: "size_mismatch" };
-  const updatedAt = new Date().toISOString();
-  const row: AssetRow = {
-    ...existing,
+  const contentPatch = {
     originalFilename: input.originalFilename,
     kind: assetKindFromContentType(input.contentType),
     r2Key: key,
@@ -373,23 +292,9 @@ export async function replaceAssetContent(
     checksumAlgorithm: stored.checksumAlgorithm,
     width: input.width,
     height: input.height,
-    updatedAt,
   };
-  await database.orm
-    .update(assets)
-    .set({
-      originalFilename: row.originalFilename,
-      kind: row.kind,
-      r2Key: row.r2Key,
-      contentType: row.contentType,
-      size: row.size,
-      checksum: row.checksum,
-      checksumAlgorithm: row.checksumAlgorithm,
-      width: row.width,
-      height: row.height,
-      updatedAt,
-    })
-    .where(and(eq(assets.workspaceId, workspace.workspaceId), eq(assets.id, assetId)));
+  const updatedAt = await repository.updateContent(assetId, contentPatch);
+  const row: AssetRow = { ...existing, ...contentPatch, updatedAt };
   if (existing.r2Key !== key) background.waitUntil(bucket.delete(existing.r2Key));
   background.waitUntil(
     writeAuditLog(database, workspace, {
@@ -426,13 +331,9 @@ async function putAssetObject(
     size: object.size,
     // R2 always computes MD5 for a single-part put; the etag fallback only
     // guards against a runtime that stops doing so.
-    checksum: md5 ? toHex(md5) : object.etag,
+    checksum: md5 ? bytesToHex(md5) : object.etag,
     checksumAlgorithm: md5 ? "md5" : "sha256",
   };
-}
-
-function toHex(value: ArrayBuffer): string {
-  return [...new Uint8Array(value)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export async function findAssetForDelivery(
@@ -440,7 +341,7 @@ export async function findAssetForDelivery(
   workspaceId: string,
   assetId: string,
 ): Promise<{ r2Key: string; name: string; kind: string; contentType: string } | null> {
-  const row = await findAssetRow(database, workspaceId, assetId);
+  const row = await new AssetRepository(database, { workspaceId }).getById(assetId);
   if (!row) return null;
   return { r2Key: row.r2Key, name: row.name, kind: row.kind, contentType: row.contentType };
 }
@@ -451,7 +352,7 @@ export async function getAssetFile(
   workspaceId: string,
   assetId: string,
 ): Promise<File | null> {
-  const row = await findAssetRow(database, workspaceId, assetId);
+  const row = await new AssetRepository(database, { workspaceId }).getById(assetId);
   if (!row) return null;
   const object = await bucket.get(row.r2Key);
   if (!object) return null;
@@ -471,28 +372,18 @@ export async function updateAsset(
   origin: AssetOrigin,
   background: { waitUntil(promise: Promise<unknown>): void },
 ): Promise<AssetUpdateOutcome> {
-  const existing = await findAssetRow(database, workspace.workspaceId, input.id);
+  const repository = new AssetRepository(database, workspace);
+  const existing = await repository.getById(input.id);
   if (!existing) return { kind: "not_found" };
   if (existing.archivedAt !== null) return { kind: "archived" };
-  const updatedAt = new Date().toISOString();
-  const next: AssetRow = {
-    ...existing,
+  const metadataPatch = {
     name: input.name ?? existing.name,
     description: input.description ?? existing.description,
     altText: input.altText ?? existing.altText,
     visibility: input.visibility ?? existing.visibility,
-    updatedAt,
   };
-  await database.orm
-    .update(assets)
-    .set({
-      name: next.name,
-      description: next.description,
-      altText: next.altText,
-      visibility: next.visibility,
-      updatedAt,
-    })
-    .where(and(eq(assets.workspaceId, workspace.workspaceId), eq(assets.id, input.id)));
+  const updatedAt = await repository.updateMetadata(input.id, metadataPatch);
+  const next: AssetRow = { ...existing, ...metadataPatch, updatedAt };
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "asset.update",
@@ -510,18 +401,8 @@ export async function archiveAsset(
   assetId: string,
   background: { waitUntil(promise: Promise<unknown>): void },
 ): Promise<boolean> {
-  const now = new Date().toISOString();
-  const result = await database.orm
-    .update(assets)
-    .set({ archivedAt: now, updatedAt: now })
-    .where(
-      and(
-        eq(assets.workspaceId, workspace.workspaceId),
-        eq(assets.id, assetId),
-        isNull(assets.archivedAt),
-      ),
-    );
-  if (result.meta.changes !== 1) return false;
+  const changed = await new AssetRepository(database, workspace).archive(assetId);
+  if (!changed) return false;
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "asset.archive",
@@ -538,17 +419,8 @@ export async function restoreAsset(
   assetId: string,
   background: { waitUntil(promise: Promise<unknown>): void },
 ): Promise<boolean> {
-  const result = await database.orm
-    .update(assets)
-    .set({ archivedAt: null, updatedAt: new Date().toISOString() })
-    .where(
-      and(
-        eq(assets.workspaceId, workspace.workspaceId),
-        eq(assets.id, assetId),
-        isNotNull(assets.archivedAt),
-      ),
-    );
-  if (result.meta.changes !== 1) return false;
+  const changed = await new AssetRepository(database, workspace).restore(assetId);
+  if (!changed) return false;
   background.waitUntil(
     writeAuditLog(database, workspace, {
       action: "asset.restore",
@@ -567,12 +439,11 @@ export async function deleteAsset(
   assetId: string,
   background: { waitUntil(promise: Promise<unknown>): void },
 ): Promise<boolean> {
-  const row = await findAssetRow(database, workspace.workspaceId, assetId);
+  const repository = new AssetRepository(database, workspace);
+  const row = await repository.getById(assetId);
   if (!row) return false;
-  const result = await database.orm
-    .delete(assets)
-    .where(and(eq(assets.workspaceId, workspace.workspaceId), eq(assets.id, assetId)));
-  if (result.meta.changes !== 1) return false;
+  const changed = await repository.deleteRow(assetId);
+  if (!changed) return false;
   background.waitUntil(bucket.delete(row.r2Key));
   background.waitUntil(
     writeAuditLog(database, workspace, {
@@ -583,9 +454,4 @@ export async function deleteAsset(
     }),
   );
   return true;
-}
-
-/** `like` treats `%` and `_` as wildcards; user text must not smuggle them in. */
-function escapeLike(value: string): string {
-  return value.replaceAll("%", "").replaceAll("_", "");
 }

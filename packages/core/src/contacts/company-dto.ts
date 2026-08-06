@@ -16,7 +16,7 @@ const companyFieldsSchema = z.object({
 export const companyCreateSchema = companyFieldsSchema;
 export type CompanyCreate = z.infer<typeof companyCreateSchema>;
 
-export const companyUpdateSchema = companyFieldsSchema.partial().extend({
+const companyUpdateSchema = companyFieldsSchema.partial().extend({
   domain: companyFieldsSchema.shape.domain.unwrap().nullable().optional(),
 });
 export type CompanyUpdate = z.infer<typeof companyUpdateSchema>;
@@ -37,7 +37,7 @@ export const companySummarySchema = companySchema.extend({
 export type CompanySummary = z.infer<typeof companySummarySchema>;
 
 /** A contact as listed on an account, with its account-specific role fields. */
-export const companyContactDtoSchema = z.object({
+const companyContactDtoSchema = z.object({
   id: z.string(),
   email: z.string().nullable(),
   firstName: z.string().nullable(),

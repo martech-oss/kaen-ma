@@ -1,6 +1,6 @@
 import * as z from "zod";
 
-import { MessagingWorkerRepository } from "@openengage/database";
+import { createDatabase, MessagingWorkerRepository } from "@openengage/database";
 
 import type { RuntimeEnv } from "../env";
 
@@ -48,7 +48,7 @@ export async function processCloudflareEmailEvent(
         : kind === "rejected" && event.payload.rejection?.reason === "suppressed"
           ? "provider"
           : null;
-  await new MessagingWorkerRepository(env.DB).applyCloudflareDeliveryEvent({
+  await new MessagingWorkerRepository(createDatabase(env.DB)).applyCloudflareDeliveryEvent({
     providerEventId: event.payload.eventId,
     providerMessageId: event.payload.messageId,
     type: kind,

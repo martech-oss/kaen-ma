@@ -1,9 +1,14 @@
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Building2, ChevronDown, Filter, Plus, RefreshCw, Search, Tags, X } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 
-import { ErrorAlert as ErrorNotice, PageLayout as Page } from "@/components/app-ui";
+import {
+  ErrorAlert as ErrorNotice,
+  FormInput,
+  FormNativeSelect,
+  PageLayout as Page,
+} from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,17 +24,18 @@ import { NativeSelectOption } from "@/components/ui/native-select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   bulkUpdateContacts,
-  contactOptionsQueryKey,
   contactOptionsQueryOptions,
   type ContactSearch,
   type ContactSort,
   contactsQueryOptions,
   type ContactStatus,
+  invalidateContactOptions,
+  invalidateContactsList,
 } from "@/features/contacts/contact-api";
 import { refreshSegment as refreshSegmentResource } from "@/features/segments/segment-api";
-import { useFormSubmission } from "@/hooks/use-form-submission";
+import { useCursorPagination } from "@/hooks/use-cursor-pagination";
+import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
 import { formatLongDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
 import type { ContactSummary } from "@openengage/core/contacts";
 
@@ -40,8 +46,6 @@ import {
   contactName,
   ContactStatusBadge,
   ControlledSelect,
-  SelectField,
-  TextField,
 } from "./contact-bits";
 import { ContactDrawer } from "./contact-drawer";
 import { useContactFilters } from "./contact-filters";
@@ -50,14 +54,12 @@ import { createSegmentFilter } from "./segment-filter";
 
 export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }): ReactNode {
   const queryClient = useQueryClient();
-  // Local, not URL-synced: cursor pagination resets whenever the URL-backed
-  // filters change (below), same trigger the query itself refetches on.
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
-  useEffect(() => {
-    setCursor(undefined);
-    setCursorHistory([]);
-  }, [initialSearch]);
+  const {
+    cursor,
+    hasPreviousPage,
+    goToNextPage: goToNextCursor,
+    goToPreviousPage: goToPreviousCursor,
+  } = useCursorPagination(initialSearch);
 
   const contactsQuery = useQuery(contactsQueryOptions(initialSearch, cursor));
   const optionsQuery = useSuspenseQuery(contactOptionsQueryOptions());
@@ -103,19 +105,11 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
   const { busy, error, run, setError } = useFormSubmission("操作に失敗しました");
 
   const refreshContacts = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: orpcQuery.contacts.list.key({ type: "query" }),
-    });
+    await invalidateContactsList(queryClient);
     setSelected(new Set());
   }, [queryClient]);
 
-  const refreshOptions = useCallback(
-    () =>
-      queryClient.invalidateQueries({
-        queryKey: contactOptionsQueryKey,
-      }),
-    [queryClient],
-  );
+  const refreshOptions = useCallback(() => invalidateContactOptions(queryClient), [queryClient]);
 
   const refreshContactData = useCallback(async () => {
     await Promise.all([refreshContacts(), refreshOptions()]);
@@ -126,19 +120,12 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
     contacts.length > 0 && contacts.every((contact) => selected.has(contact.id));
 
   function goToNextPage() {
-    if (!nextCursor) return;
-    setCursorHistory((history) => [...history, cursor ?? ""]);
-    setCursor(nextCursor);
+    goToNextCursor(nextCursor);
     setSelected(new Set());
   }
 
   function goToPreviousPage() {
-    setCursorHistory((history) => {
-      if (history.length === 0) return history;
-      const previous = history[history.length - 1];
-      setCursor(previous || undefined);
-      return history.slice(0, -1);
-    });
+    goToPreviousCursor();
     setSelected(new Set());
   }
 
@@ -382,21 +369,40 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
 
           {advancedOpen && (
             <div className="grid gap-3 rounded-lg bg-muted/50 p-4 md:grid-cols-2 xl:grid-cols-4">
-              <SelectField label="ステージ" value={stage} onChange={setStage}>
+              <FormNativeSelect
+                label="ステージ"
+                name="stage-filter"
+                value={stage}
+                onChange={(event) => setStage(event.target.value)}
+              >
                 <NativeSelectOption value="">すべて</NativeSelectOption>
                 {options.stages.map((item) => (
                   <NativeSelectOption key={item.stage} value={item.stage}>
                     {item.stage} ({item.contactCount})
                   </NativeSelectOption>
                 ))}
-              </SelectField>
-              <TextField label="スコア下限" type="number" value={scoreMin} onChange={setScoreMin} />
-              <TextField label="スコア上限" type="number" value={scoreMax} onChange={setScoreMax} />
-              <SelectField
+              </FormNativeSelect>
+              <FormInput
+                label="スコア下限"
+                name="scoreMin-filter"
+                type="number"
+                value={scoreMin}
+                onChange={(event) => setScoreMin(event.target.value)}
+              />
+              <FormInput
+                label="スコア上限"
+                name="scoreMax-filter"
+                type="number"
+                value={scoreMax}
+                onChange={(event) => setScoreMax(event.target.value)}
+              />
+              <FormNativeSelect
                 label="並び順"
+                name="sort-filter"
                 value={`${sort}:${direction}`}
-                onChange={(value) => {
-                  const [nextSort = "updatedAt", nextDirection = "desc"] = value.split(":");
+                onChange={(event) => {
+                  const [nextSort = "updatedAt", nextDirection = "desc"] =
+                    event.target.value.split(":");
                   setSort(nextSort as ContactSort);
                   setDirection(nextDirection === "asc" ? "asc" : "desc");
                 }}
@@ -407,7 +413,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
                 <NativeSelectOption value="score:asc">スコアが低い順</NativeSelectOption>
                 <NativeSelectOption value="name:asc">名前順</NativeSelectOption>
                 <NativeSelectOption value="email:asc">メール順</NativeSelectOption>
-              </SelectField>
+              </FormNativeSelect>
               <div className="flex items-end gap-2 md:col-span-2 xl:col-span-4">
                 <Button variant="outline" onClick={clearFilters}>
                   条件をクリア
@@ -486,11 +492,10 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
           <div className="border-b p-4">
             <ErrorNotice>
               {error ||
-                (contactsQuery.error instanceof Error
-                  ? contactsQuery.error.message
-                  : optionsQuery.error instanceof Error
-                    ? optionsQuery.error.message
-                    : "連絡先を読み込めませんでした")}
+                getErrorMessage(
+                  contactsQuery.error ?? optionsQuery.error,
+                  "連絡先を読み込めませんでした",
+                )}
             </ErrorNotice>
           </div>
         )}
@@ -507,7 +512,7 @@ export function ContactsPage({ initialSearch }: { initialSearch: ContactSearch }
             className="min-w-[980px]"
             pagination={{
               hasNextPage: Boolean(nextCursor),
-              hasPreviousPage: cursorHistory.length > 0,
+              hasPreviousPage,
               onNext: goToNextPage,
               onPrevious: goToPreviousPage,
             }}

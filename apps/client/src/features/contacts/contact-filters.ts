@@ -1,10 +1,8 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { ContactSearch, ContactStatus } from "@/features/contacts/contact-api";
-
-/** How long typing settles before the filters are pushed into the URL. */
-const NAVIGATE_DEBOUNCE_MS = 180;
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 
 /**
  * Mirrors the contact list filters between local state and the URL search params.
@@ -41,8 +39,8 @@ export function useContactFilters(initialSearch: ContactSearch) {
     setDirection(initialSearch.direction);
   }, [initialSearch]);
 
-  useEffect(() => {
-    const nextSearch: ContactSearch = {
+  const nextSearch = useMemo<ContactSearch>(
+    () => ({
       q: query,
       status,
       stage,
@@ -53,39 +51,22 @@ export function useContactFilters(initialSearch: ContactSearch) {
       scoreMax,
       sort,
       direction: direction === "asc" ? "asc" : "desc",
-    };
-    // Bail out when nothing actually changed, or adopting the URL above would
-    // immediately navigate back to it.
-    if (
-      Object.keys(nextSearch).every(
-        (key) =>
-          nextSearch[key as keyof ContactSearch] === initialSearch[key as keyof ContactSearch],
-      )
-    ) {
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      void navigate({
-        to: "/contacts",
-        search: nextSearch,
-        replace: true,
-      });
-    }, NAVIGATE_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [
-    companyId,
-    direction,
-    initialSearch,
-    navigate,
-    query,
-    scoreMax,
-    scoreMin,
-    segmentId,
-    sort,
-    stage,
-    status,
-    tagId,
-  ]);
+    }),
+    [companyId, direction, query, scoreMax, scoreMin, segmentId, sort, stage, status, tagId],
+  );
+
+  useDebouncedSearch({
+    value: nextSearch,
+    onCommit: (value) => {
+      // Bail out when nothing actually changed, or adopting the URL above would
+      // immediately navigate back to it.
+      const unchanged = Object.keys(value).every(
+        (key) => value[key as keyof ContactSearch] === initialSearch[key as keyof ContactSearch],
+      );
+      if (unchanged) return;
+      void navigate({ to: "/contacts", search: value, replace: true });
+    },
+  });
 
   const hasAdvancedFilters = Boolean(
     stage || tagId || companyId || segmentId || scoreMin || scoreMax,

@@ -44,7 +44,6 @@ flowchart LR
     V["訪問者・フォーム・Tracking"] --> C
     C -->|"Service Binding"| S["Server Worker<br>Hono / oRPC / REST"]
     S -->|"AGENT_APP Fetch Binding"| AG["Agent Worker<br>Flue / Durable Objects"]
-    AG -->|"SERVER_AGENT_API RPC"| S
     CR["Cron Scheduler"] --> S
     S --> D["D1<br>業務データ・実行状態"]
     S --> R["R2<br>Asset・CSV・Archive"]
@@ -87,6 +86,65 @@ platform / reports / segments / web / workspaces
 `platform`(`operations`contractに統合)を持たず、
 代わりに`assets`、`operations`、`projects`、横断的な`shared`があります。
 `companies`はcontacts配下の`company-contract.ts`/`company-schema.ts`として存在し、独立ドメインではありません。
+
+### router / service / repository の責務
+
+`apps/server/src/<domain>/router.ts`は原則`packages/database`の`*Repository`を直接呼びます。
+`service.ts`は本物のオーケストレーション(複数ステップ、監査ログ、外部I/O、DTOに収まらない計算)が
+あるドメインだけに存在します: `web/asset-service.ts`(R2・checksum・content-typeポリシー)、
+`deals/service.ts`(参照検証・get-after-write)、`auth/service.ts`(Better Auth設定)、
+`mcp/`(ツール実行の集約)。単なる1行委譲(`return new XRepository(...).method(...)`)や
+レコード→DTOのフィールドコピーは、前者はrouterへインライン化し、後者はrepository側で
+`coreSchema.parse(...)`を返すこと(`packages/database/src/contacts/repository.ts`の`toContact`が参考実装)。
+
+### apps/client のUI・データ層規約
+
+`components/app-ui/`はドメインを問わない共有UIコンポーネントです。新しい画面を作る前に
+まずここを確認してください:
+
+| ファイル          | 内容                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| `layout.tsx`      | `PageHeader`, `PageLayout`(ページ共通の見出し+アクション枠)                           |
+| `metrics.tsx`     | `MetricGrid`, `MetricCard`(サマリーカードのグリッド)                                  |
+| `resources.tsx`   | `ResourceGrid`, `ResourceCard`(カード一覧のグリッド)                                  |
+| `form-fields.tsx` | `FormInput`, `FormTextarea`, `FormNativeSelect`(ラベル+エラー表示付きフォーム部品)    |
+| `dialogs.tsx`     | `AppDialog`, `FormDialog`, `ConfirmDialog`, `ArchiveConfirm`(確認/フォームダイアログ) |
+| `feedback.tsx`    | `EmptyState`, `SimpleEmpty`, `ErrorAlert`, `SuccessAlert`, `LoadingButton`            |
+| `copy-button.tsx` | `CopyButton`(値または埋め込みコードのコピー)                                          |
+| `bar-chart.tsx`   | `SimpleBarChart`(日次バーチャート、recharts配線を隠蔽)                                |
+
+`features/<domain>/resource-page.tsx`のような、特定ドメイン専用のページ合成コンポーネント
+(例: `features/website/resource-page.tsx`の`WebsiteResourceListPage`)はここには置きません。
+差分の大部分が列定義やフォーム本体でpropsに残る場合は、無理にapp-ui化せず機能ドメイン側に
+置いてください(将来の分岐に耐えない巨大な設定propsノブ化を避けるため)。
+
+`hooks/`は特定ドメインに依存しない汎用ロジックです:
+
+| ファイル                   | 内容                                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `use-form-submission.ts`   | `useFormSubmission`(busy/error state付きsubmit)、`getErrorMessage(error, fallback)`           |
+| `use-resource-editor.ts`   | `useResourceEditor`(作成/編集ダイアログのopen状態)、`saveResource`(作成/更新の振り分け+toast) |
+| `use-debounced-search.ts`  | `useDebouncedSearch`(検索語のデバウンス、内部でref保持しコールバックのメモ化を要求しない)     |
+| `use-cursor-pagination.ts` | `useCursorPagination`(カーソルページネーションの前へ/次へ状態)                                |
+| `use-mobile.ts`            | `useIsMobile`                                                                                 |
+
+各`features/<domain>/<domain>-api.ts`は、その機能ドメインがoRPCとやり取りする唯一の窓口です:
+
+- 一覧・詳細取得は`<domain>QueryOptions(...)`という名前でTanStack Queryの`queryOptions`を返す
+  (コンポーネント側は`useSuspenseQuery`/`useQuery`に渡すだけで、`orpcQuery`を直接importしない)。
+- 作成・更新・削除は`use<Verb><Domain>()`という名前のhookにし、内部で`useMutation`を呼び、
+  意味のあるキャッシュ無効化を`onSuccess`に持たせる。単純なCRUD(作成・更新・アーカイブ)は
+  built-in invalidationを持たせ、複数ステップの操作の一部(例: 連絡先作成の直後にタグ・会社を
+  割り当てる)は無効化を呼び出し側に委ねる薄いhookにし、理由を一行コメントで残す
+  (`features/contacts/contact-api.ts`の`useCreateContact`が参考実装)。
+- コンポーネント(`.tsx`)から`orpc`/`orpcQuery`を直接importしないこと。
+  `scripts/check-architecture.mjs`がこれを機械的に強制します。
+
+ルートの`loader`は`context.queryClient.ensureQueryData(<domain>QueryOptions(...))`で
+React Queryのキャッシュを温め、コンポーネント側は`Route.useLoaderData()`ではなく
+同じ`queryOptions`を渡した`useSuspenseQuery`でデータを読みます(`routes/_app.website.pages.tsx`が
+参考実装)。`pendingComponent`/`errorComponent`は個々のルートで書かず、
+`components/route-status.tsx`の`routeStatusComponents`をspreadしてください。
 
 ## 必要環境
 
@@ -198,10 +256,10 @@ pnpm check         # format・lint・型・テスト・ビルドを一括検証
 - `EMAIL`: Transactional送信用のEmail Sending binding。`allowed_sender_addresses`で送信元を限定
 - `openengage-email-events`: Email Sendingの6種類の配送イベントを受け取るQueue consumer
 
-`apps/agent/wrangler.jsonc`は`workers_dev: false`の非公開Worker `openengage-agent`と、
-Serverのnamed entrypoint `AgentBackend`を呼び出す`SERVER_AGENT_API` bindingを定義します。
+`apps/agent/wrangler.jsonc`は`workers_dev: false`の非公開Worker `openengage-agent`を定義します。
 Flueは`/api/agents/hello`にmountされます。Better AuthのCookieやAPIキーをAgentへ渡さず、
-Serverがセッション、Workspace membership、会話所有権を検証してから転送します。
+Serverがセッション、Workspace membership、会話所有権を検証してから`AGENT_APP`経由で転送します。
+Server→Agentの一方向のみで、AgentからServerへ呼び返すbindingはありません。
 
 ローカル開発ではClient ViteがServerをauxiliary Workerとして起動し、Agent Viteを別プロセスで
 起動します。`openengage-server`と`openengage-agent`は`workers_dev: false`のため公開URLを持ちません。
@@ -234,17 +292,10 @@ pnpm deploy
 ```
 
 通常の`pnpm deploy`は`openengage-server` → `openengage-agent` → `openengage`の順でデプロイします。
-
-初回だけServerとAgentの相互Bindingが循環するため、次の順で作成します。
-
-```bash
-pnpm --filter @openengage/agent deploy:bootstrap
-pnpm deploy
-```
-
-bootstrap環境は`SERVER_AGENT_API`なしでAgentを先に作成します。その後Serverを作成し、通常の
-Agent設定でnamed RPC bindingを有効化してからClientをデプロイします。`create-openengage`での
-初回セットアップはこの順序を自動実行します。
+Server → Agentは`AGENT_APP`の一方向Bindingのみで、AgentからServerへの逆Bindingは存在しないため、
+初回デプロイでも特別な順序は不要です。`create-openengage`は`pnpm --filter @openengage/agent deploy:bootstrap`
+を先に実行してから`pnpm deploy`する2段階の初回セットアップを行いますが、これは現在の構成では
+`pnpm deploy`単体と等価です(bootstrap環境固有のBinding差分がないため)。
 
 ## 初回セットアップ
 
@@ -453,6 +504,16 @@ POST   /api/v1/assets/:id/restore
 > `GET /api/v1/assets/:id/file` へ移動しました。メタデータを返す `assets.get` が
 > 同じパスを必要とし、同一method+pathの2 procedureはOpenAPIハンドラが先勝ちで
 > 解決してしまうためです。管理画面は`/api/rpc`(procedure名で解決)を使うため影響はありません。
+
+> **破壊的変更 (v0.1)**: 確認のみを返すmutation(archive・restore・delete・assign・
+> remove・refresh・replay・publish・saveなど)の出力は、procedureごとに異なっていた
+> `{ archived: true }` / `{ removed: true }` / `{ updated: true }` 等の形を廃止し、
+> 共通の `{ ok: true }` に統一しました。件数や新規IDなど意味のある値を返す
+> procedure(例: `contacts.bulkUpdate` の `{ updated: number }`)は対象外です。
+> あわせて、いくつかの404エラーコードをドメイン別に統一しました
+> (`NOT_FOUND` → `FORM_NOT_FOUND` / `PAGE_NOT_FOUND` / `SITE_MESSAGE_NOT_FOUND` /
+> `TEMPLATE_NOT_FOUND` / `MESSAGE_VARIABLE_NOT_FOUND`)。SDKの型を再生成すれば
+> コンパイル時に検出できます。
 
 APIではbodyやqueryの`workspace_id`を信用しません。Cookie SessionまたはBearer API KeyからWorkspaceを決定し、D1クエリにも必ず`workspace_id`を含めます。
 

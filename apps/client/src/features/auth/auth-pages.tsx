@@ -8,7 +8,8 @@ import { ErrorAlert, FormInput, LoadingButton, SuccessAlert } from "@/components
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getFormString, slugify } from "@/lib/utils";
+import { getFormString } from "@/lib/form-data";
+import { slugify } from "@/lib/utils";
 
 export function AuthPage({ redirectTo = "/dashboard" }: { redirectTo?: string }): ReactNode {
   const router = useRouter();

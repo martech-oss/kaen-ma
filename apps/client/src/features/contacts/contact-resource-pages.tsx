@@ -1,8 +1,9 @@
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { Plus, Tags } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { ErrorAlert, FormDialog, FormInput, PageLayout } from "@/components/app-ui";
+import { FormDialog, FormInput, PageLayout } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,39 +15,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
+  contactResourcesQueryOptions,
   createContactTag,
-  loadContactResources,
   type ContactResources,
 } from "@/features/contacts/contact-resource-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
-import { getFormString } from "@/lib/utils";
+import { getFormString } from "@/lib/form-data";
 
-function useContactResources(initialResources: ContactResources): {
-  resources: ContactResources;
-  loading: boolean;
-  error: string;
-  load: () => Promise<void>;
-} {
-  const [resources, setResources] = useState<ContactResources>(initialResources);
-  const { busy, error, run } = useFormSubmission("コンタクト設定を読み込めませんでした");
-
-  async function load() {
-    await run(async () => {
-      setResources(await loadContactResources());
-    });
-  }
-
-  return { resources, loading: busy, error, load };
-}
-
-export function ContactTagsPage({
-  initialResources,
-}: {
-  initialResources: ContactResources;
-}): ReactNode {
-  const { resources, loading, error, load } = useContactResources(initialResources);
+export function ContactTagsPage(): ReactNode {
+  const { data: resources } = useSuspenseQuery(contactResourcesQueryOptions());
+  const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
 
   const columns: DataTableColumn<ContactResources["tags"][number]>[] = [
@@ -97,17 +76,12 @@ export function ContactTagsPage({
         </Button>
       }
     >
-      {error ? <ResourceLoadError message={error} onRetry={load} /> : null}
       <Card>
         <CardHeader className="border-b">
           <CardTitle>すべてのタグ</CardTitle>
           <CardDescription>タグごとの利用数と識別用スラッグを確認できます。</CardDescription>
           <CardAction>
-            {loading ? (
-              <Skeleton className="h-5 w-12 rounded-full" />
-            ) : (
-              <Badge variant="secondary">{resources.tags.length}件</Badge>
-            )}
+            <Badge variant="secondary">{resources.tags.length}件</Badge>
           </CardAction>
         </CardHeader>
         <CardContent className="px-0">
@@ -116,7 +90,6 @@ export function ContactTagsPage({
             rows={resources.tags}
             rowKey={(tag) => tag.id}
             caption="コンタクトタグ一覧"
-            loading={loading}
             emptyTitle="タグがまだありません"
             emptyDescription="検索や分類に使う最初のタグを作成しましょう。"
             emptyAction={
@@ -132,28 +105,13 @@ export function ContactTagsPage({
         open={showCreate}
         onOpenChange={setShowCreate}
         onSaved={async () => {
-          await load();
+          await queryClient.invalidateQueries({
+            queryKey: contactResourcesQueryOptions().queryKey,
+          });
           setShowCreate(false);
         }}
       />
     </PageLayout>
-  );
-}
-
-function ResourceLoadError({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => Promise<void>;
-}): ReactNode {
-  return (
-    <div className="flex flex-col gap-3">
-      <ErrorAlert>{message}</ErrorAlert>
-      <Button className="self-start" variant="outline" onClick={() => void onRetry()}>
-        再読み込み
-      </Button>
-    </div>
   );
 }
 

@@ -10,6 +10,12 @@ function trimmed(value: FormDataEntryValue | null): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Reads a field as-is (untrimmed), or "" if it's missing or not a string. */
+export function getFormString(formData: FormData, name: string): string {
+  const value = formData.get(name);
+  return typeof value === "string" ? value : "";
+}
+
 /** Blank becomes `undefined` — for optional fields that are omitted when empty. */
 export function optionalString(value: FormDataEntryValue | null): string | undefined {
   return trimmed(value) || undefined;

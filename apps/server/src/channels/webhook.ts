@@ -1,5 +1,6 @@
 import type { DeliveryEvent } from "@openengage/core/shared";
 
+import { isRecord } from "../platform/values";
 import { PermanentChannelError, TransientChannelError } from "./errors";
 import { hmacHex, isStaleTimestamp, timingSafeEqual } from "./signatures";
 import type {
@@ -9,7 +10,6 @@ import type {
   ChannelSendResult,
   WebhookVerification,
 } from "./types";
-import { isRecord } from "./values";
 import { assertSafeWebhookUrl } from "./webhook-url";
 
 export interface WebhookAdapterOptions {

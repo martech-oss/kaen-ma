@@ -15,20 +15,22 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { assertJobTransition, type JobStatus } from "@openengage/core";
 import {
   automationDefinitionSchema,
   type AutomationDefinition,
 } from "@openengage/core/automations";
-import { jsonRecordSchema, type JsonRecord, type WorkspaceContext } from "@openengage/core/shared";
+import { assertJobTransition, type JobStatus } from "@openengage/core/platform";
+import { jsonRecordSchema, type JsonRecord } from "@openengage/core/shared";
 
-import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
+import type { DatabaseSource } from "../client";
 import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";
 import { scoreEvents } from "../contacts/score-schema";
 import { emailTemplates } from "../messaging/schema";
 import { segmentMemberships } from "../segments/schema";
-import { isConstraintError } from "../shared/database-utils";
-import { decodeJson, encodeJson } from "../shared/json-codec";
+import { changedExactlyOne, didChange, isConstraintError, nowIso } from "../shared/database-utils";
+import { decodeJson, defineJsonCodec } from "../shared/json-codec";
+import { UNPAGINATED_LIST_LIMIT } from "../shared/pagination";
+import { DatabaseRepository, WorkspaceRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import {
   automationEnrollments,
@@ -37,6 +39,8 @@ import {
   automationTriggers,
   automationVersions,
 } from "./schema";
+
+const graphCodec = defineJsonCodec(automationDefinitionSchema, "automation_versions.graph");
 
 /** automation_jobs.status vocabulary (mirrors the table CHECK constraint). */
 export type AutomationJobStatus =
@@ -145,13 +149,7 @@ export type AutomationContactColumn = keyof typeof AUTOMATION_CONTACT_COLUMNS;
  * (no archived-contact guard, membership source 'automation'), which is why
  * they exist alongside the stricter ContactResourceRepository methods.
  */
-export class AutomationEngineRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(database: DatabaseSource) {
-    this.database = createDatabase(database);
-  }
-
+export class AutomationEngineRepository extends DatabaseRepository {
   /** Workspaces holding due pending jobs, oldest due first (dispatch fan-out). */
   public async workspacesWithDueJobs(
     now: string,
@@ -273,9 +271,9 @@ export class AutomationEngineRepository {
     if (!row) return null;
     return {
       ...row,
-      graph: decodeJson(row.graph, automationDefinitionSchema, "automation_versions.graph"),
+      graph: graphCodec.decode(row.graph),
       payload: decodeJson(row.payload, jsonRecordSchema, "automation_jobs.payload"),
-      customFields: decodeJson(row.customFields, jsonRecordSchema, "contacts.customFields"),
+      customFields: decodeJson(row.customFields, jsonRecordSchema, "contacts.custom_fields"),
     };
   }
 
@@ -296,7 +294,7 @@ export class AutomationEngineRepository {
           eq(automationJobs.status, "leased"),
         ),
       );
-    return result.meta.changes > 0;
+    return didChange(result);
   }
 
   /** Re-schedules a running job to wake at `dueAt` (running -> pending). */
@@ -513,7 +511,7 @@ export class AutomationEngineRepository {
       .insert(segmentMemberships)
       .values({ workspaceId, segmentId, contactId, source: "automation", joinedAt: now })
       .onConflictDoNothing();
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   /** remove_segment action: removes the membership regardless of its source. */
@@ -692,22 +690,8 @@ export async function claimDueJobs(
   return new AutomationEngineRepository(database).claimDueJobs(now, leaseUntil, limit, workspaceId);
 }
 
-/**
- * Workspace-scoped automation store: admin CRUD, the publish pipeline and
- * enrollment writes. Scoped by workspace id only, because event-driven
- * enrollment flows resolve just the workspace id; a full
- * {@link WorkspaceContext} is assignable wherever this scope is expected.
- */
-export class AutomationRepository {
-  private readonly database: OpenEngageDatabase;
-
-  public constructor(
-    database: DatabaseSource,
-    public readonly context: Pick<WorkspaceContext, "workspaceId">,
-  ) {
-    this.database = createDatabase(database);
-  }
-
+/** Workspace-scoped automation store: admin CRUD, the publish pipeline and enrollment writes. */
+export class AutomationRepository extends WorkspaceRepository {
   /** Automation list rows with enrollment counters and the published trigger source. */
   public async listAutomationsWithCounts(): Promise<
     Array<{
@@ -747,9 +731,9 @@ export class AutomationRepository {
         updatedAt: automations.updatedAt,
       })
       .from(automations)
-      .where(eq(automations.workspaceId, this.context.workspaceId))
+      .where(this.inWorkspace(automations))
       .orderBy(desc(automations.updatedAt))
-      .limit(200);
+      .limit(UNPAGINATED_LIST_LIMIT);
   }
 
   /** Creates the automation shell plus its first draft version atomically. */
@@ -761,7 +745,7 @@ export class AutomationRepository {
   }): Promise<{ id: string; draftVersionId: string }> {
     const id = uuidv7();
     const draftVersionId = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     await orm.batch([
       orm.insert(automations).values({
@@ -781,7 +765,7 @@ export class AutomationRepository {
         version: 1,
         status: "draft",
         timezone: input.timezone,
-        graph: encodeJson(input.graph, automationDefinitionSchema, "automation_versions.graph"),
+        graph: graphCodec.encode(input.graph),
         createdAt: now,
       }),
     ]);
@@ -802,17 +786,12 @@ export class AutomationRepository {
           eq(automationVersions.workspaceId, automations.workspaceId),
         ),
       )
-      .where(
-        and(
-          eq(automations.workspaceId, this.context.workspaceId),
-          eq(automations.id, automationId),
-        ),
-      )
+      .where(and(this.inWorkspace(automations), eq(automations.id, automationId)))
       .get();
     return row
       ? {
           ...row,
-          graph: decodeJson(row.graph, automationDefinitionSchema, "automation_versions.graph"),
+          graph: graphCodec.decode(row.graph),
         }
       : null;
   }
@@ -836,7 +815,7 @@ export class AutomationRepository {
       .update(automationVersions)
       .set({
         timezone: input.timezone,
-        graph: encodeJson(input.graph, automationDefinitionSchema, "automation_versions.graph"),
+        graph: graphCodec.encode(input.graph),
       })
       .where(
         and(
@@ -845,13 +824,13 @@ export class AutomationRepository {
           eq(automationVersions.status, "draft"),
         ),
       );
-    if (result.meta.changes === 0) return false;
+    if (!didChange(result)) return false;
     await orm
       .update(automations)
       .set({
         name: input.name,
         description: input.description,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso(),
       })
       .where(and(eq(automations.workspaceId, workspaceId), eq(automations.id, automationId)));
     return true;
@@ -877,7 +856,7 @@ export class AutomationRepository {
       )
       .where(
         and(
-          eq(automations.workspaceId, this.context.workspaceId),
+          this.inWorkspace(automations),
           eq(automations.id, automationId),
           eq(automationVersions.status, "draft"),
         ),
@@ -886,7 +865,7 @@ export class AutomationRepository {
     return row
       ? {
           ...row,
-          graph: decodeJson(row.graph, automationDefinitionSchema, "automation_versions.graph"),
+          graph: graphCodec.decode(row.graph),
         }
       : null;
   }
@@ -898,7 +877,7 @@ export class AutomationRepository {
       .from(emailTemplates)
       .where(
         and(
-          eq(emailTemplates.workspaceId, this.context.workspaceId),
+          this.inWorkspace(emailTemplates),
           isNull(emailTemplates.archivedAt),
           eq(emailTemplates.purpose, "transactional"),
           isNotNull(emailTemplates.publishedRevision),
@@ -930,7 +909,7 @@ export class AutomationRepository {
   }): Promise<{ draftVersionId: string }> {
     const workspaceId = this.context.workspaceId;
     const nextDraftId = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     await orm.batch([
       orm
@@ -950,7 +929,7 @@ export class AutomationRepository {
         version: input.currentVersion + 1,
         status: "draft",
         timezone: input.timezone,
-        graph: encodeJson(input.graph, automationDefinitionSchema, "automation_versions.graph"),
+        graph: graphCodec.encode(input.graph),
         createdAt: now,
       }),
       orm
@@ -995,16 +974,16 @@ export class AutomationRepository {
   ): Promise<boolean> {
     const result = await this.database.orm
       .update(automations)
-      .set({ status, updatedAt: new Date().toISOString() })
+      .set({ status, updatedAt: nowIso() })
       .where(
         and(
-          eq(automations.workspaceId, this.context.workspaceId),
+          this.inWorkspace(automations),
           eq(automations.id, automationId),
           isNotNull(automations.publishedVersionId),
           inArray(automations.status, ["active", "paused"]),
         ),
       );
-    return result.meta.changes === 1;
+    return changedExactlyOne(result);
   }
 
   /** Published triggers of active automations listening for this event. */
@@ -1042,7 +1021,7 @@ export class AutomationRepository {
       )
       .where(
         and(
-          eq(automationTriggers.workspaceId, this.context.workspaceId),
+          this.inWorkspace(automationTriggers),
           eq(automations.status, "active"),
           eq(automations.publishedVersionId, automationTriggers.automationVersionId),
           eq(automationTriggers.eventType, eventType),
@@ -1067,7 +1046,7 @@ export class AutomationRepository {
       )
       .where(
         and(
-          eq(automations.workspaceId, this.context.workspaceId),
+          this.inWorkspace(automations),
           eq(automations.id, automationId),
           eq(automations.status, "active"),
         ),
@@ -1076,7 +1055,7 @@ export class AutomationRepository {
     return row
       ? {
           ...row,
-          graph: decodeJson(row.graph, automationDefinitionSchema, "automation_versions.graph"),
+          graph: graphCodec.decode(row.graph),
         }
       : null;
   }
@@ -1099,7 +1078,7 @@ export class AutomationRepository {
     const workspaceId = this.context.workspaceId;
     const enrollmentId = uuidv7();
     const jobId = uuidv7();
-    const now = new Date().toISOString();
+    const now = nowIso();
     const orm = this.database.orm;
     try {
       await orm.batch([

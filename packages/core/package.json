@@ -13,6 +13,7 @@
     "./deals": "./src/deals/schema.ts",
     "./messaging": "./src/messaging/schema.ts",
     "./platform": "./src/platform/index.ts",
+    "./projects": "./src/projects/schema.ts",
     "./reports": "./src/reports/schema.ts",
     "./segments": "./src/segments/index.ts",
     "./shared": "./src/shared/schema.ts",

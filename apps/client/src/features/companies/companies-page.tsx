@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -30,37 +30,37 @@ import {
   companiesQueryOptions,
   companyContactOptionsQueryOptions,
   companyQueryOptions,
+  useAssignCompanyContact,
+  useCreateCompany,
+  useRemoveCompanyContact,
+  useUpdateCompany,
   type CompanyContactDto,
   type CompanySummary,
 } from "@/features/companies/company-api";
+import { contactSurnameFirstName } from "@/features/contacts/contact-bits";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
 import { formatDate } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
 
 import { AddCompanyContactForm, CompanyForm } from "./company-forms";
 
 export function CompaniesPage({ initialQuery }: { initialQuery: string }): ReactNode {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data: companies } = useSuspenseQuery(companiesQueryOptions(initialQuery));
   const [query, setQuery] = useState(initialQuery);
   const [showCreate, setShowCreate] = useState(false);
-  const createCompany = useMutation(orpcQuery.companies.create.mutationOptions());
+  const createCompany = useCreateCompany();
 
   useEffect(() => {
     setQuery(initialQuery);
   }, [initialQuery]);
 
-  useEffect(() => {
-    if (query === initialQuery) return;
-    const timer = window.setTimeout(() => {
-      void navigate({
-        to: "/contacts/companies",
-        search: { q: query },
-        replace: true,
-      });
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [initialQuery, navigate, query]);
+  useDebouncedSearch({
+    value: query,
+    onCommit: (value) => {
+      if (value === initialQuery) return;
+      void navigate({ to: "/contacts/companies", search: { q: value }, replace: true });
+    },
+  });
 
   const columns: DataTableColumn<CompanySummary>[] = [
     {
@@ -163,7 +163,6 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
         submitLabel="作成"
         onSubmit={async (values) => {
           const company = await createCompany.mutateAsync(values);
-          await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
           toast.success("会社を作成しました");
           setShowCreate(false);
           await navigate({
@@ -177,14 +176,13 @@ export function CompaniesPage({ initialQuery }: { initialQuery: string }): React
 }
 
 export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNode {
-  const queryClient = useQueryClient();
   const { data: company } = useSuspenseQuery(companyQueryOptions(companyId));
   const { data: contactOptions } = useSuspenseQuery(companyContactOptionsQueryOptions());
   const [showEdit, setShowEdit] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
-  const updateCompany = useMutation(orpcQuery.companies.update.mutationOptions());
-  const removeContact = useMutation(orpcQuery.companies.removeContact.mutationOptions());
-  const assignContact = useMutation(orpcQuery.companies.assignContact.mutationOptions());
+  const updateCompany = useUpdateCompany();
+  const removeContact = useRemoveCompanyContact();
+  const assignContact = useAssignCompanyContact();
 
   const assignedIds = new Set(company.contacts.map((contact) => contact.id));
 
@@ -195,7 +193,7 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
       cell: (contact) => (
         <div className="flex flex-col gap-0.5">
           <span className="font-medium">
-            {contactName(contact)}
+            {contactSurnameFirstName(contact) || contact.email || "名前未設定"}
             {contact.isPrimary ? (
               <Badge variant="outline" className="ml-2">
                 主担当
@@ -233,17 +231,9 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
           variant="ghost"
           size="sm"
           onClick={() => {
-            void removeContact
-              .mutateAsync({ id: company.id, contactId: contact.id })
-              .then(async () => {
-                toast.success("会社との関連を解除しました");
-                await queryClient.invalidateQueries({
-                  queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
-                });
-                await queryClient.invalidateQueries({
-                  queryKey: orpcQuery.companies.list.key(),
-                });
-              });
+            void removeContact.mutateAsync({ id: company.id, contactId: contact.id }).then(() => {
+              toast.success("会社との関連を解除しました");
+            });
           }}
         >
           <UserMinus data-icon="inline-start" />
@@ -351,10 +341,6 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
             name: values.name,
             domain: values.domain || null,
           });
-          await queryClient.invalidateQueries({
-            queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
-          });
-          await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
           toast.success("会社を更新しました");
           setShowEdit(false);
         }}
@@ -367,19 +353,10 @@ export function CompanyDetailPage({ companyId }: { companyId: string }): ReactNo
         contacts={contactOptions.items.filter((contact) => !assignedIds.has(contact.id))}
         onSubmit={async (values) => {
           await assignContact.mutateAsync({ id: company.id, ...values });
-          await queryClient.invalidateQueries({
-            queryKey: orpcQuery.companies.get.key({ input: { id: companyId } }),
-          });
-          await queryClient.invalidateQueries({ queryKey: orpcQuery.companies.list.key() });
           toast.success("連絡先を会社へ追加しました");
           setShowAddContact(false);
         }}
       />
     </PageLayout>
   );
-}
-
-function contactName(contact: CompanyContactDto): string {
-  const name = [contact.lastName, contact.firstName].filter(Boolean).join(" ");
-  return name || contact.email || "名前未設定";
 }

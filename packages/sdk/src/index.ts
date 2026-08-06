@@ -45,5 +45,5 @@ export type { Dashboard } from "@openengage/core/reports";
 export type { DeadLetterRow } from "@openengage/core/platform";
 export type { SegmentRow } from "@openengage/core/segments";
 export type { SubscriptionTopicRow } from "@openengage/core/consent";
-export type { WebhookEndpointRow } from "@openengage/orpc";
-export type { ProjectRow } from "@openengage/orpc";
+export type { ProjectRow } from "@openengage/core/projects";
+export type { WebhookEndpointRow } from "@openengage/core/workspaces";

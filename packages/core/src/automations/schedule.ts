@@ -1,4 +1,4 @@
-import type { AutomationNode } from "./automations/schema.js";
+import type { AutomationNode } from "./schema.js";
 
 type DelayNode = Extract<AutomationNode, { type: "delay" }>;
 

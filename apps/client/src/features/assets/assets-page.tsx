@@ -1,10 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ArchiveRestore, Pencil, Replace, Search, Upload, X } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-import { ArchiveConfirm, PageLayout } from "@/components/app-ui";
+import { ArchiveConfirm, CopyButton, PageLayout } from "@/components/app-ui";
 import { type DataTableColumn, DataTable } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +28,12 @@ import {
   type AssetVisibility,
   assetsQueryOptions,
   formatBytes,
+  invalidateAssetsList,
   loadAsset,
+  useArchiveAsset,
+  useDeleteAsset,
+  useRestoreAsset,
+  useUpdateAsset,
 } from "@/features/assets/asset-api";
 import { AssetKindBadge, AssetThumbnail, AssetVisibilityBadge } from "@/features/assets/asset-bits";
 import {
@@ -37,9 +42,10 @@ import {
   AssetReplaceDialog,
   AssetUploadDialog,
 } from "@/features/assets/asset-forms";
-import { CopyButton } from "@/features/website/website-shared";
+import { useCursorPagination } from "@/hooks/use-cursor-pagination";
+import { useDebouncedSearch } from "@/hooks/use-debounced-search";
+import { getErrorMessage } from "@/hooks/use-form-submission";
 import { formatDateTime } from "@/lib/format";
-import { orpcQuery } from "@/lib/orpc";
 import type { WorkspaceRole } from "@openengage/core/shared";
 
 const WRITE_ROLES = new Set<WorkspaceRole>(["marketer", "admin", "owner"]);
@@ -57,14 +63,8 @@ export function AssetsPage({
   const canWrite = WRITE_ROLES.has(role);
   const canDelete = DELETE_ROLES.has(role);
 
-  // Local, not URL-synced: the cursor resets whenever the URL-backed filters
-  // change, which is the same trigger the query refetches on.
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
-  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
-  useEffect(() => {
-    setCursor(undefined);
-    setCursorHistory([]);
-  }, [initialSearch]);
+  const { cursor, hasPreviousPage, goToNextPage, goToPreviousPage } =
+    useCursorPagination(initialSearch);
 
   const [queryText, setQueryText] = useState(initialSearch.q);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -76,22 +76,22 @@ export function AssetsPage({
   const total = assetsQuery.data?.total ?? 0;
   const nextCursor = assetsQuery.data?.nextCursor;
 
-  const updateAsset = useMutation(orpcQuery.assets.update.mutationOptions());
-  const archiveAsset = useMutation(orpcQuery.assets.archive.mutationOptions());
-  const restoreAsset = useMutation(orpcQuery.assets.restore.mutationOptions());
-  const deleteAsset = useMutation(orpcQuery.assets.delete.mutationOptions());
+  const updateAsset = useUpdateAsset();
+  const archiveAsset = useArchiveAsset();
+  const restoreAsset = useRestoreAsset();
+  const deleteAsset = useDeleteAsset();
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (queryText === initialSearch.q) return;
+  useDebouncedSearch({
+    value: queryText,
+    onCommit: (value) => {
+      if (value === initialSearch.q) return;
       void navigate({
         to: "/website/assets",
-        search: { ...initialSearch, q: queryText },
+        search: { ...initialSearch, q: value },
         replace: true,
       });
-    }, 180);
-    return () => clearTimeout(timer);
-  }, [queryText, initialSearch, navigate]);
+    },
+  });
 
   function setSearch(changes: Partial<AssetSearch>): void {
     void navigate({
@@ -102,16 +102,15 @@ export function AssetsPage({
   }
 
   async function refresh(): Promise<void> {
-    await queryClient.invalidateQueries({ queryKey: orpcQuery.assets.list.key() });
+    await invalidateAssetsList(queryClient);
   }
 
   async function withToast(action: () => Promise<void>, message: string): Promise<void> {
     try {
       await action();
       toast.success(message);
-      await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "操作に失敗しました");
+      toast.error(getErrorMessage(error, "操作に失敗しました"));
     }
   }
 
@@ -123,10 +122,6 @@ export function AssetsPage({
   }): Promise<void> {
     if (!editing) return;
     await updateAsset.mutateAsync({ id: editing.id, ...values });
-    await queryClient.invalidateQueries({
-      queryKey: orpcQuery.assets.get.key({ input: { id: editing.id } }),
-    });
-    await refresh();
     setEditing(null);
     toast.success("アセットを更新しました");
   }
@@ -244,18 +239,9 @@ export function AssetsPage({
 
   const pagination = {
     hasNextPage: Boolean(nextCursor),
-    hasPreviousPage: cursorHistory.length > 0,
-    onNext: () => {
-      if (!nextCursor) return;
-      setCursorHistory((history) => [...history, cursor ?? ""]);
-      setCursor(nextCursor);
-    },
-    onPrevious: () =>
-      setCursorHistory((history) => {
-        if (history.length === 0) return history;
-        setCursor(history[history.length - 1] || undefined);
-        return history.slice(0, -1);
-      }),
+    hasPreviousPage,
+    onNext: () => goToNextPage(nextCursor),
+    onPrevious: goToPreviousPage,
   };
 
   return (
@@ -483,6 +469,6 @@ async function openEditor(asset: AssetSummary, set: (value: Asset | null) => voi
   try {
     set(await loadAsset(asset.id));
   } catch (error) {
-    toast.error(error instanceof Error ? error.message : "アセットを読み込めませんでした");
+    toast.error(getErrorMessage(error, "アセットを読み込めませんでした"));
   }
 }

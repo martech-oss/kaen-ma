@@ -3,12 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 interface JsonRpcResponse {
   jsonrpc: "2.0";
   id: number;

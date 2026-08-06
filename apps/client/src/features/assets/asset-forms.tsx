@@ -3,6 +3,7 @@ import { type DragEvent, type FormEvent, type ReactNode, useState } from "react"
 
 import {
   AppDialog,
+  ConfirmDialog,
   ErrorAlert,
   FormDialog,
   FormInput,
@@ -11,23 +12,11 @@ import {
   FormTextarea,
   LoadingButton,
 } from "@/components/app-ui";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogMedia,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { formatBytes, type Asset, type AssetVisibility } from "@/features/assets/asset-api";
 import { replaceAssetContent, uploadAssetFile } from "@/features/assets/asset-upload";
-import { useFormSubmission } from "@/hooks/use-form-submission";
-import { getFormString } from "@/lib/utils";
+import { getErrorMessage, useFormSubmission } from "@/hooks/use-form-submission";
+import { getFormString } from "@/lib/form-data";
 import { cn } from "@/lib/utils";
 
 type UploadState = "pending" | "uploading" | "done" | "error";
@@ -92,7 +81,7 @@ export function AssetUploadDialog({
       } catch (error) {
         patch(index, {
           state: "error",
-          error: error instanceof Error ? error.message : "アップロードに失敗しました",
+          error: getErrorMessage(error, "アップロードに失敗しました"),
         });
       }
     }
@@ -297,7 +286,7 @@ export function AssetReplaceDialog({
       setPercent(0);
       await onReplaced();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "差し替えできませんでした");
+      setError(getErrorMessage(caught, "差し替えできませんでした"));
     } finally {
       setBusy(false);
     }
@@ -351,30 +340,15 @@ export function AssetDeleteConfirm({
   onConfirm: () => void | Promise<void>;
 }): ReactNode {
   return (
-    <AlertDialog>
-      <AlertDialogTrigger
-        render={<Button size="sm" variant="ghost" aria-label={`${name}を完全に削除`} />}
-      >
-        完全に削除
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogMedia>
-            <UploadCloud />
-          </AlertDialogMedia>
-          <AlertDialogTitle>完全に削除しますか？</AlertDialogTitle>
-          <AlertDialogDescription>
-            「{name}
-            」はR2上のファイルごと削除され、公開URLは404になります。この操作は取り消せません。
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>キャンセル</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={() => void onConfirm()}>
-            完全に削除
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <ConfirmDialog
+      title="完全に削除しますか？"
+      description={`「${name}」はR2上のファイルごと削除され、公開URLは404になります。この操作は取り消せません。`}
+      confirmLabel="完全に削除"
+      icon={<UploadCloud />}
+      triggerLabel={`${name}を完全に削除`}
+      trigger={<Button size="sm" variant="ghost" />}
+      triggerContent="完全に削除"
+      onConfirm={onConfirm}
+    />
   );
 }

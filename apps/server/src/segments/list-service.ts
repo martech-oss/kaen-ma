@@ -1,12 +1,12 @@
-import { compileSegmentFilter } from "@openengage/core";
 import type { Contact } from "@openengage/core/contacts";
+import { compileSegmentFilter } from "@openengage/core/segments";
 import type { SegmentFilter, SegmentRow } from "@openengage/core/segments";
 import type { WorkspaceContext } from "@openengage/core/shared";
 import { SegmentRepository, type OpenEngageDatabase } from "@openengage/database";
 
 import {
   nullablePrimitiveString,
-  numericValue,
+  toFiniteNumber,
   parseJsonRecord,
   primitiveString,
 } from "../platform/values";
@@ -61,7 +61,7 @@ export function toPreviewContact(row: Record<string, unknown>): Contact {
     phone: nullablePrimitiveString(row["phone"]),
     externalId: nullablePrimitiveString(row["external_id"]),
     stage: primitiveString(row["stage"]),
-    score: numericValue(row["score"]),
+    score: toFiniteNumber(row["score"]),
     status,
     archivedAt: nullablePrimitiveString(row["archived_at"]),
     customFields: parseJsonRecord(row["custom_fields"]),

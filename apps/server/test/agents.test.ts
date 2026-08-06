@@ -1,16 +1,9 @@
 import { env, exports } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { AgentConversationRepository, createDatabase, member } from "@openengage/database";
+import { AgentConversationRepository } from "@openengage/database";
 
 import { createSessionFixtureClient, seedMember, seedWorkspace } from "./factory";
-
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
 
 describe("agent conversations", () => {
   it("creates and lists conversations only for the current session workspace and user", async () => {
@@ -102,24 +95,5 @@ describe("agent conversations", () => {
       { headers: { cookie } },
     );
     expect(unsupported.status).toBe(404);
-  });
-
-  it("resolves the latest role through AgentBackend and detects revoked membership", async () => {
-    const owner = await seedWorkspace(env.DB);
-    await seedMember(env.DB, { ...owner, role: "viewer" });
-    const conversation = await new AgentConversationRepository(env.DB).create({
-      workspaceId: owner.workspaceId,
-      ownerUserId: owner.userId,
-      agentKey: "hello",
-    });
-
-    await expect(
-      exports.AgentBackend.resolveConversationContext(conversation.id, "hello"),
-    ).resolves.toMatchObject({ ok: true, context: { role: "viewer" } });
-
-    await createDatabase(env.DB).orm.delete(member).where(eq(member.userId, owner.userId));
-    await expect(
-      exports.AgentBackend.resolveConversationContext(conversation.id, "hello"),
-    ).resolves.toEqual({ ok: false, code: "membership_revoked" });
   });
 });

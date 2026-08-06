@@ -26,12 +26,12 @@ import { emailNode } from "./automation-graph";
 import { branchLabel } from "./automation-labels";
 import type { AutomationOptions } from "./automation-types";
 
-export interface AutomationBuilderState {
+interface AutomationBuilderState {
   definition: AutomationDefinition;
   selectedNodeId: string | null;
 }
 
-export type AutomationBuilderAction =
+type AutomationBuilderAction =
   | { type: "replace_definition"; definition: AutomationDefinition }
   | { type: "select_node"; nodeId: string | null }
   | { type: "replace_and_select"; definition: AutomationDefinition; nodeId: string | null };

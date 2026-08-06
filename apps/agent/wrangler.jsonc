@@ -4,13 +4,6 @@
   "compatibility_date": "2026-07-28",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
-  "services": [
-    {
-      "binding": "SERVER_AGENT_API",
-      "service": "openengage-server",
-      "entrypoint": "AgentBackend",
-    },
-  ],
   // Workers Traces shows each agent response as a trace with agent-level
   // spans: https://flueframework.com/docs/guide/observability/#cloudflare
   "observability": { "traces": { "enabled": true } },

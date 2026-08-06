@@ -10,12 +10,6 @@ import {
 
 import { seedMember, seedWorkspaceClient } from "./factory";
 
-declare module "cloudflare:workers" {
-  interface ProvidedEnv {
-    DB: D1Database;
-  }
-}
-
 describe("Reporting", () => {
   it("aggregates contacts, automations, emails, deals, and site activity", async () => {
     const contactId = uuidv7();

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { ContentDocument, EmailBlock } from "@openengage/orpc";
+import type { ContentDocument, EmailBlock } from "@openengage/core/web";
 
 export function ContentDocumentEditor({
   value,

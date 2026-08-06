@@ -2,7 +2,8 @@ import { and, desc, eq } from "drizzle-orm";
 
 import type { AgentConversation, AgentKey } from "@openengage/core/agents";
 
-import { createDatabase, type DatabaseSource } from "../client";
+import { nowIso } from "../shared/database-utils";
+import { DatabaseRepository } from "../shared/repository-base";
 import { uuidv7 } from "../shared/uuid";
 import { agentConversations } from "./schema";
 
@@ -14,9 +15,7 @@ export interface AgentConversationOwner {
   createdAt: string;
 }
 
-export class AgentConversationRepository {
-  public constructor(private readonly database: DatabaseSource) {}
-
+export class AgentConversationRepository extends DatabaseRepository {
   public async create(input: {
     workspaceId: string;
     ownerUserId: string;
@@ -27,9 +26,9 @@ export class AgentConversationRepository {
       workspaceId: input.workspaceId,
       ownerUserId: input.ownerUserId,
       agentKey: input.agentKey,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso(),
     };
-    await createDatabase(this.database).orm.insert(agentConversations).values(row);
+    await this.database.orm.insert(agentConversations).values(row);
     return { id: row.id, agent: row.agentKey, createdAt: row.createdAt };
   }
 
@@ -43,8 +42,8 @@ export class AgentConversationRepository {
       eq(agentConversations.ownerUserId, input.ownerUserId),
     ];
     if (input.agentKey) conditions.push(eq(agentConversations.agentKey, input.agentKey));
-    const rows = await createDatabase(this.database)
-      .orm.select({
+    const rows = await this.database.orm
+      .select({
         id: agentConversations.id,
         agentKey: agentConversations.agentKey,
         createdAt: agentConversations.createdAt,
@@ -63,8 +62,8 @@ export class AgentConversationRepository {
     conversationId: string,
     agentKey: AgentKey,
   ): Promise<AgentConversationOwner | null> {
-    const [row] = await createDatabase(this.database)
-      .orm.select()
+    const [row] = await this.database.orm
+      .select()
       .from(agentConversations)
       .where(
         and(eq(agentConversations.id, conversationId), eq(agentConversations.agentKey, agentKey)),

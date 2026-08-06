@@ -4,11 +4,8 @@ import * as z from "zod";
 import { contactSchema } from "@openengage/core/contacts";
 import { segmentFilterSchema, segmentRowSchema } from "@openengage/core/segments";
 
-import { workspaceErrors } from "../shared/errors";
-
-const forbidden = {
-  FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
-} as const;
+import { authedErrors, workspaceErrors } from "../shared/errors";
+import { ackSchema } from "../shared/schemas";
 
 export const segmentsContract = {
   list: oc
@@ -18,8 +15,7 @@ export const segmentsContract = {
   create: oc
     .route({ method: "POST", path: "/segments", successStatus: 201 })
     .errors({
-      ...workspaceErrors,
-      ...forbidden,
+      ...authedErrors,
       FILTER_REQUIRED: { status: 422, message: "動的セグメントには条件が必要です" },
     })
     .input(
@@ -43,15 +39,14 @@ export const segmentsContract = {
   refresh: oc
     .route({ method: "POST", path: "/segments/{id}/refresh" })
     .errors({
-      ...workspaceErrors,
-      ...forbidden,
+      ...authedErrors,
       SEGMENT_NOT_FOUND: { status: 404, message: "セグメントが見つかりません" },
     })
     .input(z.object({ id: z.string().min(1) }))
-    .output(z.object({ refreshed: z.literal(true) })),
+    .output(ackSchema),
   preview: oc
     .route({ method: "POST", path: "/segments/preview" })
-    .errors({ ...workspaceErrors, ...forbidden })
+    .errors(authedErrors)
     .input(z.object({ filter: segmentFilterSchema }))
     .output(z.object({ contacts: z.array(contactSchema), capped: z.boolean() })),
 };

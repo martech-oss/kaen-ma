@@ -1,20 +1,9 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
+import { projectResourceTypeSchema, projectRowSchema } from "@openengage/core/projects";
+
 import { authedErrors, workspaceErrors } from "../shared/errors";
-
-export const projectRowSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  color: z.string(),
-  itemCount: z.number().int().nonnegative(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type ProjectRow = z.infer<typeof projectRowSchema>;
-
-export const projectResourceTypeSchema = z.enum(["automation", "email", "form", "page", "segment"]);
 
 export const projectsContract = {
   list: oc
