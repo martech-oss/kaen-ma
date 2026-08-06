@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "test": "vitest run --config vitest.config.ts",
     "deploy": "vite build && wrangler deploy",
     "deploy:bootstrap": "CLOUDFLARE_ENV=bootstrap vite build && wrangler deploy",
     "typecheck": "tsc --noEmit",
@@ -13,9 +14,12 @@
   },
   "dependencies": {
     "@flue/runtime": "^2.0.1",
+    "@openengage/core": "workspace:*",
     "@openengage/orpc": "workspace:*",
     "agents": "^0.14.2",
-    "hono": "^4.7.0"
+    "hono": "^4.7.0",
+    "just-bash": "^3.2.0",
+    "valibot": "^1.4.2"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.39.2",
@@ -24,6 +28,7 @@
     "@types/node": "^22.10.10",
     "typescript": "catalog:",
     "vite": "^8.0.14",
+    "vitest": "catalog:",
     "wrangler": "^4.97.0"
   }
 }

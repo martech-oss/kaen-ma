@@ -1,0 +1,129 @@
+import { defineTool, type JsonValue } from "@flue/runtime";
+import * as v from "valibot";
+
+import {
+  type AutomationDefinition,
+  type AutomationValidationIssue,
+  automationDefinitionSchema,
+  validateAutomation,
+} from "@openengage/core/automations";
+import { type SegmentFilter, segmentFilterSchema } from "@openengage/core/segments";
+
+export interface ValidationIssue {
+  phase: "schema" | "graph";
+  code: string;
+  path: string;
+  message: string;
+  nodeId?: string;
+  edgeId?: string;
+}
+
+export type SegmentFilterValidationResult =
+  | { valid: true; normalized: SegmentFilter; issues: [] }
+  | { valid: false; issues: ValidationIssue[] };
+
+export type AutomationDefinitionValidationResult =
+  | { valid: true; normalized: AutomationDefinition; issues: [] }
+  | { valid: false; issues: ValidationIssue[]; normalized?: AutomationDefinition };
+
+export function validateSegmentFilterInput(filter: unknown): SegmentFilterValidationResult {
+  const parsed = segmentFilterSchema.safeParse(filter);
+  if (!parsed.success) {
+    return {
+      valid: false,
+      issues: parsed.error.issues.map((issue) => ({
+        phase: "schema",
+        code: issue.code,
+        path: formatPath(issue.path),
+        message: issue.message,
+      })),
+    };
+  }
+
+  return { valid: true, normalized: parsed.data, issues: [] };
+}
+
+export function validateAutomationDefinitionInput(
+  definition: unknown,
+): AutomationDefinitionValidationResult {
+  const parsed = automationDefinitionSchema.safeParse(definition);
+  if (!parsed.success) {
+    return {
+      valid: false,
+      issues: parsed.error.issues.map((issue) => ({
+        phase: "schema",
+        code: issue.code,
+        path: formatPath(issue.path),
+        message: issue.message,
+      })),
+    };
+  }
+
+  const graphIssues = validateAutomation(parsed.data);
+  if (graphIssues.length > 0) {
+    return {
+      valid: false,
+      normalized: parsed.data,
+      issues: graphIssues.map((issue) => formatGraphIssue(parsed.data, issue)),
+    };
+  }
+
+  return { valid: true, normalized: parsed.data, issues: [] };
+}
+
+export const validateSegmentFilterTool = defineTool({
+  name: "validate_segment_filter",
+  description:
+    "Validate a proposed dynamic OpenEngage SegmentFilter with the canonical core schema. Returns normalized JSON or path-specific schema issues. It does not read or write contacts, segments, or any external system.",
+  input: v.object({ filter: v.unknown() }),
+  run({ data }) {
+    return { output: toJsonValue(validateSegmentFilterInput(data.filter)) };
+  },
+});
+
+export const validateAutomationDefinitionTool = defineTool({
+  name: "validate_automation_definition",
+  description:
+    "Validate a proposed OpenEngage AutomationDefinition with the canonical core schema and graph rules. Returns normalized JSON or schema/graph issues. It does not verify resource IDs or write to OpenEngage.",
+  input: v.object({ definition: v.unknown() }),
+  run({ data }) {
+    return { output: toJsonValue(validateAutomationDefinitionInput(data.definition)) };
+  },
+});
+
+function formatPath(path: readonly PropertyKey[]): string {
+  return path.reduce<string>((result, segment) => {
+    if (typeof segment === "number") return `${result}[${segment}]`;
+    const key = String(segment);
+    return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)
+      ? `${result}.${key}`
+      : `${result}[${JSON.stringify(key)}]`;
+  }, "$");
+}
+
+function toJsonValue(value: unknown): JsonValue {
+  return JSON.parse(JSON.stringify(value)) as JsonValue;
+}
+
+function formatGraphIssue(
+  definition: AutomationDefinition,
+  issue: AutomationValidationIssue,
+): ValidationIssue {
+  const nodeIndex = issue.nodeId
+    ? definition.nodes.findIndex((node) => node.id === issue.nodeId)
+    : -1;
+  const edgeIndex = issue.edgeId
+    ? definition.edges.findIndex((edge) => edge.id === issue.edgeId)
+    : -1;
+  const path =
+    edgeIndex >= 0 ? `$.edges[${edgeIndex}]` : nodeIndex >= 0 ? `$.nodes[${nodeIndex}]` : "$";
+
+  return {
+    phase: "graph",
+    code: issue.code,
+    path,
+    message: issue.message,
+    ...(issue.nodeId === undefined ? {} : { nodeId: issue.nodeId }),
+    ...(issue.edgeId === undefined ? {} : { edgeId: issue.edgeId }),
+  };
+}
