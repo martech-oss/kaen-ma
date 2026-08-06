@@ -97,14 +97,14 @@ export const archiveContactProcedure = authed.contacts.archive.handler(
   },
 );
 
-export const importContactsProcedure = authed.operations.importContacts.handler(
+export const importContactsProcedure = authed.contacts.startImport.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (input.file.size > CSV_MAX_BYTES) throw errors.CSV_TOO_LARGE();
     const csvText = await input.file.text();
     const outcome = await startContactImport(
       context.database,
-      { bucket: context.env.ASSETS_BUCKET, queue: context.env.CAMPAIGN_QUEUE },
+      { bucket: context.env.ASSETS_BUCKET, queue: context.env.JOBS_QUEUE },
       context.workspace,
       csvText,
     );
@@ -113,14 +113,14 @@ export const importContactsProcedure = authed.operations.importContacts.handler(
   },
 );
 
-export const exportContactsProcedure = authed.operations.exportContacts.handler(
+export const exportContactsProcedure = authed.contacts.startExport.handler(
   async ({ context, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
-    return startContactExport(context.database, context.env.CAMPAIGN_QUEUE, context.workspace);
+    return startContactExport(context.database, context.env.JOBS_QUEUE, context.workspace);
   },
 );
 
-export const getDataJobProcedure = authed.operations.getDataJob.handler(
+export const getDataJobProcedure = authed.contacts.getDataJob.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
     const job = await getDataJob(context.database, context.workspace.workspaceId, input.id);
@@ -129,7 +129,7 @@ export const getDataJobProcedure = authed.operations.getDataJob.handler(
   },
 );
 
-export const downloadContactExportProcedure = authed.operations.downloadContactExport.handler(
+export const downloadContactExportProcedure = authed.contacts.downloadExport.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "analyst", errors.FORBIDDEN);
     const outcome = await getContactExportFile(
@@ -143,3 +143,17 @@ export const downloadContactExportProcedure = authed.operations.downloadContactE
     return outcome.file;
   },
 );
+
+export const contactProcedures = {
+  list: listContactsProcedure,
+  get: getContactProcedure,
+  timeline: contactTimelineProcedure,
+  recordEvent: recordContactEventProcedure,
+  create: createContactProcedure,
+  update: updateContactProcedure,
+  archive: archiveContactProcedure,
+  startImport: importContactsProcedure,
+  startExport: exportContactsProcedure,
+  getDataJob: getDataJobProcedure,
+  downloadExport: downloadContactExportProcedure,
+};

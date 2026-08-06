@@ -1,7 +1,8 @@
-import { AgentConversationRepository, createDatabase, member } from "@openengage/database";
 import { env, exports } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+
+import { AgentConversationRepository, createDatabase, member } from "@openengage/database";
 
 import { createSessionFixtureClient, seedMember, seedWorkspace } from "./factory";
 
@@ -17,17 +18,17 @@ describe("agent conversations", () => {
     await seedMember(env.DB, owner);
     const { client } = await createSessionFixtureClient(env.DB, owner);
 
-    const created = await client.agentConversations.create({ agent: "hello" });
+    const created = await client.agents.conversations.create({ agent: "hello" });
     expect(created).toMatchObject({ agent: "hello" });
 
-    await expect(client.agentConversations.list({ agent: "hello" })).resolves.toEqual([created]);
+    await expect(client.agents.conversations.list({ agent: "hello" })).resolves.toEqual([created]);
 
     const other = await seedWorkspace(env.DB);
     await seedMember(env.DB, other);
     const otherSession = await createSessionFixtureClient(env.DB, other);
-    await expect(otherSession.client.agentConversations.list({ agent: "hello" })).resolves.toEqual(
-      [],
-    );
+    await expect(
+      otherSession.client.agents.conversations.list({ agent: "hello" }),
+    ).resolves.toEqual([]);
   });
 
   it("requires a Better Auth session and forwards only an owned conversation", async () => {

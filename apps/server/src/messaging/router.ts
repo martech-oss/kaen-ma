@@ -1,13 +1,10 @@
 import { authed, requireRole } from "../orpc/base";
 import {
-  archiveEmailCampaign,
   archiveEmailTemplate,
   archiveMessageVariable,
   createEmailTemplate,
   createMessageVariable,
-  getEmailCampaign,
-  listBroadcastSegmentOptions,
-  listEmailCampaigns,
+  listEmailSegmentOptions,
   listEmailTemplates,
   listMessageVariables,
   listSubscriptionTopicOptions,
@@ -17,52 +14,6 @@ import {
   updateMessageVariable,
   VariableConflictError,
 } from "./service";
-
-export const listEmailCampaignsProcedure = authed.emails.listCampaigns.handler(
-  ({ context, input }) => listEmailCampaigns(context.database, context.workspace, input.archived),
-);
-
-export const getEmailCampaignProcedure = authed.emails.getCampaign.handler(
-  async ({ context, input, errors }) => {
-    const campaign = await getEmailCampaign(context.database, context.workspace, input.id);
-    if (!campaign) throw errors.BROADCAST_NOT_FOUND();
-    return campaign;
-  },
-);
-
-export const createEmailCampaignProcedure = authed.emails.createCampaign.handler(
-  async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    void input;
-    throw errors.MARKETING_DISABLED();
-  },
-);
-
-export const updateEmailCampaignProcedure = authed.emails.updateCampaign.handler(
-  async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    void input;
-    throw errors.MARKETING_DISABLED();
-  },
-);
-
-export const startEmailCampaignProcedure = authed.emails.startCampaign.handler(
-  async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    void input;
-    throw errors.MARKETING_DISABLED();
-  },
-);
-
-export const archiveEmailCampaignProcedure = authed.emails.archiveCampaign.handler(
-  async ({ context, input, errors }) => {
-    requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
-    if (!(await archiveEmailCampaign(context.database, context.workspace, input.id))) {
-      throw errors.NOT_ARCHIVABLE();
-    }
-    return { archived: true as const };
-  },
-);
 
 export const listTemplatesProcedure = authed.emails.listTemplates.handler(({ context, input }) =>
   listEmailTemplates(context.database, context.workspace, input.archived),
@@ -156,9 +107,24 @@ export const archiveVariableProcedure = authed.emails.archiveVariable.handler(
 );
 
 export const listSegmentOptionsProcedure = authed.emails.listSegmentOptions.handler(({ context }) =>
-  listBroadcastSegmentOptions(context.database, context.workspace),
+  listEmailSegmentOptions(context.database, context.workspace),
 );
 
 export const listTopicOptionsProcedure = authed.emails.listTopicOptions.handler(({ context }) =>
   listSubscriptionTopicOptions(context.database, context.workspace),
 );
+
+export const messagingProcedures = {
+  listTemplates: listTemplatesProcedure,
+  createTemplate: createTemplateProcedure,
+  updateTemplate: updateTemplateProcedure,
+  previewTemplate: previewTemplateProcedure,
+  publishTemplate: publishTemplateProcedure,
+  archiveTemplate: archiveTemplateProcedure,
+  listVariables: listVariablesProcedure,
+  createVariable: createVariableProcedure,
+  updateVariable: updateVariableProcedure,
+  archiveVariable: archiveVariableProcedure,
+  listSegmentOptions: listSegmentOptionsProcedure,
+  listTopicOptions: listTopicOptionsProcedure,
+};

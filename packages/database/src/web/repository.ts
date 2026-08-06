@@ -1,12 +1,3 @@
-import type {
-  ContentDocument,
-  LandingPageWrite,
-  SignupFormDefinition,
-  SignupFormWrite,
-  SiteMessageWrite,
-  SiteTrackingWrite,
-  WorkspaceContext,
-} from "@openengage/orpc";
 import {
   and,
   count,
@@ -22,9 +13,26 @@ import {
   sql,
 } from "drizzle-orm";
 
+import {
+  jsonRecordSchema,
+  stringArraySchema,
+  type WorkspaceContext,
+} from "@openengage/core/shared";
+import {
+  contentDocumentSchema,
+  signupFormDefinitionSchema,
+  type ContentDocument,
+  type LandingPageWrite,
+  type SignupFormDefinition,
+  type SignupFormWrite,
+  type SiteMessageWrite,
+  type SiteTrackingWrite,
+} from "@openengage/core/web";
+
 import { organization } from "../auth/schema";
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contactEvents, contacts } from "../contacts/schema";
+import { decodeJson, decodeNullableJson, encodeJson } from "../shared/json-codec";
 import { uuidv7 } from "../shared/uuid";
 import {
   assets,
@@ -103,7 +111,7 @@ export interface PublicFormRecord {
   id: string;
   workspaceId: string;
   name: string;
-  definition: Record<string, unknown>;
+  definition: SignupFormDefinition;
   allowedDomains: string[];
   turnstileEnabled: boolean;
   successMessage: string;
@@ -162,8 +170,8 @@ export class WebRepository {
       .limit(200);
     return rows.map((row) => ({
       ...row,
-      definition: parseJsonRecord(row.definition) as SignupFormDefinition,
-      allowedDomains: parseJsonArray(row.allowedDomains) as string[],
+      definition: decodeJson(row.definition, signupFormDefinitionSchema, "forms.definition"),
+      allowedDomains: decodeJson(row.allowedDomains, stringArraySchema, "forms.allowed_domains"),
     }));
   }
 
@@ -176,8 +184,8 @@ export class WebRepository {
       name: input.name,
       slug: input.slug,
       status: input.status,
-      definition: JSON.stringify(input.definition),
-      allowedDomains: JSON.stringify(input.allowedDomains),
+      definition: encodeJson(input.definition, signupFormDefinitionSchema, "forms.definition"),
+      allowedDomains: encodeJson(input.allowedDomains, stringArraySchema, "forms.allowed_domains"),
       turnstileEnabled: input.turnstileEnabled,
       successMessage: input.successMessage,
       createdAt: now,
@@ -194,8 +202,12 @@ export class WebRepository {
         slug: input.slug,
         status: input.status,
         version: sql`${forms.version} + 1`,
-        definition: JSON.stringify(input.definition),
-        allowedDomains: JSON.stringify(input.allowedDomains),
+        definition: encodeJson(input.definition, signupFormDefinitionSchema, "forms.definition"),
+        allowedDomains: encodeJson(
+          input.allowedDomains,
+          stringArraySchema,
+          "forms.allowed_domains",
+        ),
         turnstileEnabled: input.turnstileEnabled,
         successMessage: input.successMessage,
         updatedAt: new Date().toISOString(),
@@ -254,7 +266,11 @@ export class WebRepository {
       .orderBy(desc(landingPages.updatedAt));
     return rows.map((row) => ({
       ...row,
-      contentDocument: parseNullableJsonRecord(row.contentDocument) as ContentDocument | null,
+      contentDocument: decodeNullableJson(
+        row.contentDocument,
+        contentDocumentSchema,
+        "landing_page_versions.content_document",
+      ),
     }));
   }
 
@@ -282,7 +298,11 @@ export class WebRepository {
         workspaceId,
         pageId: id,
         version: 1,
-        contentDocument: JSON.stringify(input.content),
+        contentDocument: encodeJson(
+          input.content,
+          contentDocumentSchema,
+          "landing_page_versions.content_document",
+        ),
         publishedAt: input.status === "published" ? now : null,
         createdAt: now,
       }),
@@ -325,7 +345,11 @@ export class WebRepository {
         workspaceId,
         pageId: page.id,
         version: nextVersion,
-        contentDocument: JSON.stringify(input.content),
+        contentDocument: encodeJson(
+          input.content,
+          contentDocumentSchema,
+          "landing_page_versions.content_document",
+        ),
         publishedAt: input.status === "published" ? now : null,
         createdAt: now,
       }),
@@ -424,7 +448,11 @@ export class WebRepository {
       settings: settingsRow
         ? {
             enabled: settingsRow.enabled,
-            allowedDomains: parseJsonArray(settingsRow.allowedDomains) as string[],
+            allowedDomains: decodeJson(
+              settingsRow.allowedDomains,
+              stringArraySchema,
+              "site_tracking_settings.allowed_domains",
+            ),
             updatedAt: settingsRow.updatedAt,
           }
         : null,
@@ -437,7 +465,7 @@ export class WebRepository {
       topPages: topPageRows,
       recentEvents: recentEventRows.map((row) => ({
         ...row,
-        properties: parseJsonRecord(row.properties),
+        properties: decodeJson(row.properties, jsonRecordSchema, "contact_events.properties"),
       })),
     };
   }
@@ -445,7 +473,11 @@ export class WebRepository {
   /** Upserts the singleton tracking-settings row for this workspace. */
   public async saveTrackingSettings(input: SiteTrackingWrite): Promise<void> {
     const now = new Date().toISOString();
-    const allowedDomains = JSON.stringify([...new Set(input.allowedDomains)]);
+    const allowedDomains = encodeJson(
+      [...new Set(input.allowedDomains)],
+      stringArraySchema,
+      "site_tracking_settings.allowed_domains",
+    );
     await this.database.orm
       .insert(siteTrackingSettings)
       .values({
@@ -707,8 +739,8 @@ export class PublicFormRepository {
       id: row.id,
       workspaceId: row.workspaceId,
       name: row.name,
-      definition: parseJsonRecord(row.definition),
-      allowedDomains: parseJsonArray(row.allowedDomains) as string[],
+      definition: decodeJson(row.definition, signupFormDefinitionSchema, "forms.definition"),
+      allowedDomains: decodeJson(row.allowedDomains, stringArraySchema, "forms.allowed_domains"),
       turnstileEnabled: row.turnstileEnabled,
       successMessage: row.successMessage,
     };
@@ -795,6 +827,74 @@ export interface PublicAssetRecord {
   checksum: string;
 }
 
+/** Validated public reads shared by landing-page and tracking routes. */
+export class PublicWebRepository {
+  private readonly database: OpenEngageDatabase;
+
+  public constructor(database: DatabaseSource) {
+    this.database = createDatabase(database);
+  }
+
+  public async findPublishedLandingPage(
+    workspaceSlug: string,
+    pageSlug: string,
+  ): Promise<{ contentDocument: ContentDocument; workspaceName: string } | null> {
+    const row = await this.database.orm
+      .select({
+        contentDocument: landingPageVersions.contentDocument,
+        workspaceName: organization.name,
+      })
+      .from(landingPages)
+      .innerJoin(organization, eq(organization.id, landingPages.workspaceId))
+      .innerJoin(
+        landingPageVersions,
+        and(
+          eq(landingPageVersions.id, landingPages.currentVersionId),
+          eq(landingPageVersions.workspaceId, landingPages.workspaceId),
+        ),
+      )
+      .where(
+        and(
+          eq(organization.slug, workspaceSlug),
+          eq(landingPages.slug, pageSlug),
+          eq(landingPages.status, "published"),
+        ),
+      )
+      .get();
+    return row
+      ? {
+          workspaceName: row.workspaceName,
+          contentDocument: decodeJson(
+            row.contentDocument,
+            contentDocumentSchema,
+            "landing_page_versions.content_document",
+          ),
+        }
+      : null;
+  }
+
+  public async findTrackingWorkspace(
+    workspaceSlug: string,
+  ): Promise<{ id: string; allowedDomains: string[] } | null> {
+    const row = await this.database.orm
+      .select({ id: organization.id, allowedDomains: siteTrackingSettings.allowedDomains })
+      .from(organization)
+      .innerJoin(siteTrackingSettings, eq(siteTrackingSettings.workspaceId, organization.id))
+      .where(and(eq(organization.slug, workspaceSlug), eq(siteTrackingSettings.enabled, true)))
+      .get();
+    return row
+      ? {
+          id: row.id,
+          allowedDomains: decodeJson(
+            row.allowedDomains,
+            stringArraySchema,
+            "site_tracking_settings.allowed_domains",
+          ),
+        }
+      : null;
+  }
+}
+
 /**
  * The single gate in front of publicly readable assets. It lives here rather
  * than in `apps/server` because the `openengage-assets` bucket also holds contact
@@ -836,40 +936,5 @@ export class PublicAssetRepository {
       )
       .get();
     return row ?? null;
-  }
-}
-
-/** Parses a JSON object column, treating malformed or non-object values as `{}`. */
-function parseJsonRecord(value: string): Record<string, unknown> {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-/** Parses a JSON array column, treating malformed or non-array values as `[]`. */
-function parseJsonArray(value: string): unknown[] {
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Parses a nullable JSON object column; null and malformed values both become null. */
-function parseNullableJsonRecord(value: string | null): Record<string, unknown> | null {
-  if (value === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
   }
 }

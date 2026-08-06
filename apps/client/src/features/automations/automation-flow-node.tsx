@@ -1,4 +1,3 @@
-import { type AutomationNode } from "@openengage/orpc";
 import { Handle, type Node, type NodeProps, Position } from "@xyflow/react";
 import { Mail } from "lucide-react";
 import { type ReactNode } from "react";
@@ -6,6 +5,7 @@ import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { type AutomationNode } from "@openengage/orpc";
 
 import { nodeLabel, nodeTypeLabel } from "./automation-labels";
 

@@ -1,7 +1,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { workspaceErrors } from "../shared/errors";
 import {
   automationsReportSchema,
   contactsReportSchema,
@@ -9,7 +8,9 @@ import {
   emailsReportSchema,
   reportDateRangeSchema,
   siteReportSchema,
-} from "./schema";
+} from "@openengage/core/reports";
+
+import { workspaceErrors } from "../shared/errors";
 
 /** Reports are analyst-and-above; the range is validated by the shared schema. */
 const analystErrors = {

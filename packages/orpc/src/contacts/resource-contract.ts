@@ -1,16 +1,17 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { workspaceErrors } from "../shared/errors";
-import { contactSchema } from "./contact-schema";
 import {
   contactBulkActionSchema,
   contactOptionsSchema,
   contactProfileSchema,
+  contactSchema,
   contactScoreAdjustSchema,
   tagCreateSchema,
   tagSchema,
-} from "./resource-schema";
+} from "@openengage/core/contacts";
+
+import { workspaceErrors } from "../shared/errors";
 
 const forbidden = {
   FORBIDDEN: {
@@ -42,7 +43,7 @@ const contactRelationInput = z.object({
 
 export const contactResourcesContract = {
   options: oc
-    .route({ method: "GET", path: "/contact-options" })
+    .route({ method: "GET", path: "/contacts/options" })
     .errors(workspaceErrors)
     .output(contactOptionsSchema),
   profile: oc
@@ -51,7 +52,7 @@ export const contactResourcesContract = {
     .input(z.object({ contactId: z.string().min(1) }))
     .output(contactProfileSchema),
   createTag: oc
-    .route({ method: "POST", path: "/tags", successStatus: 201 })
+    .route({ method: "POST", path: "/contacts/tags", successStatus: 201 })
     .errors({
       ...workspaceErrors,
       ...forbidden,
@@ -59,7 +60,7 @@ export const contactResourcesContract = {
     })
     .input(tagCreateSchema)
     .output(tagSchema.omit({ contactCount: true })),
-  addTag: oc
+  assignTag: oc
     .route({ method: "POST", path: "/contacts/{contactId}/tags", successStatus: 201 })
     .errors(relationErrors("タグを追加できませんでした"))
     .input(contactRelationInput)
@@ -69,12 +70,12 @@ export const contactResourcesContract = {
     .errors(relationErrors("タグを削除できませんでした"))
     .input(contactRelationInput)
     .output(z.object({ removed: z.literal(true) })),
-  addSegment: oc
+  addToSegment: oc
     .route({ method: "POST", path: "/contacts/{contactId}/segments", successStatus: 201 })
     .errors(relationErrors("静的セグメントへ追加できませんでした"))
     .input(contactRelationInput)
     .output(z.object({ assigned: z.literal(true) })),
-  removeSegment: oc
+  removeFromSegment: oc
     .route({ method: "DELETE", path: "/contacts/{contactId}/segments/{resourceId}" })
     .errors({ ...workspaceErrors, ...forbidden })
     .input(contactRelationInput)
@@ -89,16 +90,16 @@ export const contactResourcesContract = {
     .input(contactScoreAdjustSchema.extend({ contactId: z.string().min(1) }))
     .output(contactSchema),
   restore: oc
-    .route({ method: "POST", path: "/contacts/{contactId}/restore" })
+    .route({ method: "POST", path: "/contacts/{id}/restore" })
     .errors({
       ...workspaceErrors,
       ...forbidden,
       CONTACT_NOT_ARCHIVED: { status: 404, message: "復元できる連絡先が見つかりません" },
     })
-    .input(z.object({ contactId: z.string().min(1) }))
+    .input(z.object({ id: z.string().min(1) }))
     .output(z.object({ restored: z.literal(true) })),
-  bulkAction: oc
-    .route({ method: "POST", path: "/contact-actions" })
+  bulkUpdate: oc
+    .route({ method: "POST", path: "/contacts/bulk-update" })
     .errors({
       ...workspaceErrors,
       ...forbidden,

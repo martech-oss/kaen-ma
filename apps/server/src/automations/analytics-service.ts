@@ -1,5 +1,6 @@
-import { automationEnrollments, deliveries, type OpenEngageDatabase } from "@openengage/database";
 import { and, count, eq } from "drizzle-orm";
+
+import { automationEnrollments, deliveries, type OpenEngageDatabase } from "@openengage/database";
 
 export interface AutomationAnalytics {
   enrollments: Array<{ status: string; count: number }>;

@@ -16,7 +16,7 @@ describe("three Worker provisioning", () => {
       transactionalFromEmail: "notifications@mail.acme.example",
       transactionalFromName: "Acme Engage",
       server:
-        '{"name": "openengage-server", "service": "openengage-agent", "database_name": "openengage-db", "database_id": "00000000-0000-0000-0000-000000000000", "APP_URL": "http://localhost:5173", "bucket": "openengage-assets", "queues": [{"queue": "openengage-campaign"}, {"queue": "openengage-delivery"}, {"queue": "openengage-dead-letter"}, {"queue": "openengage-email-events"}], "send_email": [{"name": "EMAIL", "allowed_sender_addresses": ["notifications@example.com"]}], "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com", "TRANSACTIONAL_FROM_NAME": "OpenEngage"}',
+        '{"name": "openengage-server", "service": "openengage-agent", "database_name": "openengage-db", "database_id": "00000000-0000-0000-0000-000000000000", "APP_URL": "http://localhost:5173", "bucket": "openengage-assets", "queues": [{"queue": "openengage-jobs"}, {"queue": "openengage-delivery"}, {"queue": "openengage-dead-letter"}, {"queue": "openengage-email-events"}], "send_email": [{"name": "EMAIL", "allowed_sender_addresses": ["notifications@example.com"]}], "TRANSACTIONAL_FROM_EMAIL": "notifications@example.com", "TRANSACTIONAL_FROM_NAME": "OpenEngage"}',
       agent:
         '{"name": "openengage-agent", "env": {"bootstrap": {"name": "openengage-agent"}}, "service": "openengage-server"}',
       client: '{"name": "openengage", "service": "openengage-server"}',

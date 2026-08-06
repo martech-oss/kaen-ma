@@ -127,3 +127,16 @@ export const deleteDealTaskProcedure = authed.deals.deleteTask.handler(
     return { removed: true as const };
   },
 );
+
+export const dealProcedures = {
+  options: dealOptionsProcedure,
+  list: listDealsProcedure,
+  get: getDealProcedure,
+  create: createDealProcedure,
+  update: updateDealProcedure,
+  move: moveDealProcedure,
+  archive: archiveDealProcedure,
+  createTask: createDealTaskProcedure,
+  updateTask: updateDealTaskProcedure,
+  deleteTask: deleteDealTaskProcedure,
+};

@@ -14,7 +14,7 @@ export function cloudflareResourceNames(projectName: string) {
     database: `${projectName}-db`,
     bucket: `${projectName}-assets`,
     queues: {
-      campaign: `${projectName}-campaign`,
+      jobs: `${projectName}-jobs`,
       delivery: `${projectName}-delivery`,
       deadLetter: `${projectName}-dead-letter`,
       emailEvents: `${projectName}-email-events`,
@@ -52,7 +52,7 @@ export function rewriteWorkerConfigs(input: WorkerConfigInput): {
       .replaceAll('"database_name": "openengage-db"', `"database_name": "${resources.database}"`)
       .replaceAll("00000000-0000-0000-0000-000000000000", input.databaseId)
       .replaceAll("openengage-assets", resources.bucket)
-      .replaceAll("openengage-campaign", resources.queues.campaign)
+      .replaceAll("openengage-jobs", resources.queues.jobs)
       .replaceAll("openengage-delivery", resources.queues.delivery)
       .replaceAll("openengage-dead-letter", resources.queues.deadLetter)
       .replaceAll("openengage-email-events", resources.queues.emailEvents)

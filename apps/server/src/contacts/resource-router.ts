@@ -13,11 +13,11 @@ import {
   restoreContact,
 } from "./resource-service";
 
-export const contactOptionsProcedure = authed.contactResources.options.handler(({ context }) =>
+export const contactOptionsProcedure = authed.contacts.options.handler(({ context }) =>
   getContactOptions(context.database, context.workspace),
 );
 
-export const contactProfileProcedure = authed.contactResources.profile.handler(
+export const contactProfileProcedure = authed.contacts.profile.handler(
   async ({ context, input, errors }) => {
     const profile = await getContactProfile(context.database, context.workspace, input.contactId);
     if (!profile) throw errors.CONTACT_NOT_FOUND();
@@ -25,7 +25,7 @@ export const contactProfileProcedure = authed.contactResources.profile.handler(
   },
 );
 
-export const createTagProcedure = authed.contactResources.createTag.handler(
+export const createTagProcedure = authed.contacts.createTag.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     try {
@@ -37,7 +37,7 @@ export const createTagProcedure = authed.contactResources.createTag.handler(
   },
 );
 
-export const addTagProcedure = authed.contactResources.addTag.handler(
+export const addTagProcedure = authed.contacts.assignTag.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await addContactTag(context.database, context.workspace, input))) {
@@ -47,7 +47,7 @@ export const addTagProcedure = authed.contactResources.addTag.handler(
   },
 );
 
-export const removeTagProcedure = authed.contactResources.removeTag.handler(
+export const removeTagProcedure = authed.contacts.removeTag.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await removeContactTag(context.database, context.workspace, input))) {
@@ -57,7 +57,7 @@ export const removeTagProcedure = authed.contactResources.removeTag.handler(
   },
 );
 
-export const addSegmentProcedure = authed.contactResources.addSegment.handler(
+export const addSegmentProcedure = authed.contacts.addToSegment.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     if (!(await addContactSegment(context.database, context.workspace, input))) {
@@ -68,7 +68,7 @@ export const addSegmentProcedure = authed.contactResources.addSegment.handler(
 );
 
 // Mirrors the REST route, which reports success even when nothing matched.
-export const removeSegmentProcedure = authed.contactResources.removeSegment.handler(
+export const removeSegmentProcedure = authed.contacts.removeFromSegment.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     await removeContactSegment(context.database, context.workspace, input);
@@ -76,7 +76,7 @@ export const removeSegmentProcedure = authed.contactResources.removeSegment.hand
   },
 );
 
-export const adjustScoreProcedure = authed.contactResources.adjustScore.handler(
+export const adjustScoreProcedure = authed.contacts.adjustScore.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const { contactId, ...adjustment } = input;
@@ -91,17 +91,17 @@ export const adjustScoreProcedure = authed.contactResources.adjustScore.handler(
   },
 );
 
-export const restoreContactProcedure = authed.contactResources.restore.handler(
+export const restoreContactProcedure = authed.contacts.restore.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "admin", errors.FORBIDDEN);
-    if (!(await restoreContact(context.database, context.workspace, input.contactId))) {
+    if (!(await restoreContact(context.database, context.workspace, input.id))) {
       throw errors.CONTACT_NOT_ARCHIVED();
     }
     return { restored: true as const };
   },
 );
 
-export const bulkActionProcedure = authed.contactResources.bulkAction.handler(
+export const bulkActionProcedure = authed.contacts.bulkUpdate.handler(
   async ({ context, input, errors }) => {
     requireRole(context.workspace.role, "marketer", errors.FORBIDDEN);
     const outcome = await applyContactBulkAction(context.database, context.workspace, input);
@@ -110,3 +110,16 @@ export const bulkActionProcedure = authed.contactResources.bulkAction.handler(
     return { updated: outcome.updated };
   },
 );
+
+export const contactResourceProcedures = {
+  options: contactOptionsProcedure,
+  profile: contactProfileProcedure,
+  createTag: createTagProcedure,
+  assignTag: addTagProcedure,
+  removeTag: removeTagProcedure,
+  addToSegment: addSegmentProcedure,
+  removeFromSegment: removeSegmentProcedure,
+  adjustScore: adjustScoreProcedure,
+  restore: restoreContactProcedure,
+  bulkUpdate: bulkActionProcedure,
+};

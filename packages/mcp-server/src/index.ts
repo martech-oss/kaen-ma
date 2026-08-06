@@ -48,7 +48,7 @@ server.registerTool(
     description: "Read aggregate contact, automation, and delivery health.",
     inputSchema: {},
   },
-  async () => jsonResult(await client.operations.dashboard()),
+  async () => jsonResult(await client.dashboard.get()),
 );
 
 server.registerTool(

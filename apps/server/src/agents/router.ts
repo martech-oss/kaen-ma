@@ -2,7 +2,7 @@ import { AgentConversationRepository } from "@openengage/database";
 
 import { sessionAuthed } from "../orpc/base";
 
-export const createAgentConversationProcedure = sessionAuthed.agentConversations.create.handler(
+export const createAgentConversationProcedure = sessionAuthed.agents.conversations.create.handler(
   async ({ context, input }) =>
     new AgentConversationRepository(context.database).create({
       workspaceId: context.workspace.workspaceId,
@@ -11,7 +11,7 @@ export const createAgentConversationProcedure = sessionAuthed.agentConversations
     }),
 );
 
-export const listAgentConversationsProcedure = sessionAuthed.agentConversations.list.handler(
+export const listAgentConversationsProcedure = sessionAuthed.agents.conversations.list.handler(
   async ({ context, input }) =>
     new AgentConversationRepository(context.database).list({
       workspaceId: context.workspace.workspaceId,
@@ -19,3 +19,10 @@ export const listAgentConversationsProcedure = sessionAuthed.agentConversations.
       ...(input?.agent ? { agentKey: input.agent } : {}),
     }),
 );
+
+export const agentProcedures = {
+  conversations: {
+    create: createAgentConversationProcedure,
+    list: listAgentConversationsProcedure,
+  },
+};

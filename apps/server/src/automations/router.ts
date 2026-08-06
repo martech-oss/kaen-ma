@@ -1,6 +1,6 @@
 import { validateAutomation } from "@openengage/core";
+import type { AutomationDefinition } from "@openengage/core/automations";
 import { AutomationRepository, uuidv7 } from "@openengage/database";
-import { automationDefinitionSchema, type AutomationDefinition } from "@openengage/orpc";
 
 import { authed, requireRole } from "../orpc/base";
 import { isRecord } from "../platform/values";
@@ -21,7 +21,7 @@ export const createAutomationProcedure = authed.automations.create.handler(
       name: input.name,
       description: input.description,
       timezone: input.timezone,
-      graph: JSON.stringify(input),
+      graph: input,
     });
     return { id: created.id, draftVersionId: created.draftVersionId };
   },
@@ -32,9 +32,7 @@ export const getAutomationDraftProcedure = authed.automations.getDraft.handler(
     const repository = new AutomationRepository(context.database, context.workspace);
     const row = await repository.getDraft(input.id);
     if (!row) throw errors.AUTOMATION_NOT_FOUND();
-    const graph = automationDefinitionSchema.safeParse(JSON.parse(row.graph));
-    if (!graph.success) throw errors.AUTOMATION_NOT_FOUND();
-    return { graph: graph.data, status: normalizeAutomationStatus(row.status) };
+    return { graph: row.graph, status: normalizeAutomationStatus(row.status) };
   },
 );
 
@@ -47,7 +45,7 @@ export const saveAutomationDraftProcedure = authed.automations.saveDraft.handler
       name: definition.name,
       description: definition.description,
       timezone: definition.timezone,
-      graph: JSON.stringify(definition),
+      graph: definition,
     });
     if (!updated) throw errors.DRAFT_NOT_EDITABLE();
     return { updated: true as const };
@@ -61,9 +59,7 @@ export const publishAutomationProcedure = authed.automations.publish.handler(
     const row = await repository.findPublishableDraft(input.id);
     if (!row) throw errors.DRAFT_NOT_FOUND();
 
-    const parsed = automationDefinitionSchema.safeParse(JSON.parse(row.graph));
-    if (!parsed.success) throw errors.INVALID_GRAPH({ message: "フロー定義が不正です" });
-    const definition: AutomationDefinition = parsed.data;
+    const definition: AutomationDefinition = row.graph;
     const validation = validateAutomation(definition);
     if (validation.length > 0) {
       throw errors.INVALID_GRAPH({ data: { issues: validation } });
@@ -147,6 +143,17 @@ export const automationAnalyticsProcedure = authed.automations.analytics.handler
   async ({ context, input }) =>
     getAutomationAnalytics(context.database, context.workspace.workspaceId, input.id),
 );
+
+export const automationProcedures = {
+  list: listAutomationsProcedure,
+  create: createAutomationProcedure,
+  getDraft: getAutomationDraftProcedure,
+  saveDraft: saveAutomationDraftProcedure,
+  publish: publishAutomationProcedure,
+  setStatus: setAutomationStatusProcedure,
+  enroll: enrollAutomationProcedure,
+  analytics: automationAnalyticsProcedure,
+};
 
 // isRecord is re-exported for the client-side error shape check in tests.
 export { isRecord };

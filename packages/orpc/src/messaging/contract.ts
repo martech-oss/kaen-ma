@@ -1,18 +1,17 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { workspaceErrors } from "../shared/errors";
 import {
-  broadcastSegmentOptionSchema,
-  broadcastWriteSchema,
-  emailCampaignSchema,
   emailTemplatePreviewSchema,
+  emailSegmentOptionSchema,
   emailTemplateSchema,
   emailTemplateWriteSchema,
   messageVariableSchema,
   messageVariableWriteSchema,
   subscriptionTopicOptionSchema,
-} from "./schema";
+} from "@openengage/core/messaging";
+
+import { workspaceErrors } from "../shared/errors";
 
 const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
@@ -21,113 +20,50 @@ const base = { ...workspaceErrors, ...forbidden } as const;
 const archivedInput = z.object({ archived: z.boolean().default(false) });
 const idInput = z.object({ id: z.string().min(1) });
 
-const invalidResources = {
-  INVALID_BROADCAST_RESOURCES: {
-    status: 422,
-    message: "SegmentまたはMarketingテンプレートが見つかりません",
-  },
-} as const;
-
 export const emailsContract = {
-  listCampaigns: oc
-    .route({ method: "GET", path: "/broadcasts" })
-    .errors(workspaceErrors)
-    .input(archivedInput)
-    .output(z.array(emailCampaignSchema)),
-  getCampaign: oc
-    .route({ method: "GET", path: "/broadcasts/{id}" })
-    .errors({
-      ...workspaceErrors,
-      BROADCAST_NOT_FOUND: { status: 404, message: "メールキャンペーンが見つかりません" },
-    })
-    .input(idInput)
-    .output(emailCampaignSchema),
-  createCampaign: oc
-    .route({ method: "POST", path: "/broadcasts", successStatus: 201 })
-    .errors({
-      ...base,
-      ...invalidResources,
-      MARKETING_DISABLED: { status: 503, message: "Marketingメールは現在利用できません" },
-    })
-    .input(broadcastWriteSchema)
-    .output(z.object({ id: z.string() })),
-  updateCampaign: oc
-    .route({ method: "PATCH", path: "/broadcasts/{id}" })
-    .errors({
-      ...base,
-      ...invalidResources,
-      MARKETING_DISABLED: { status: 503, message: "Marketingメールは現在利用できません" },
-      NOT_EDITABLE: {
-        status: 409,
-        message: "送信済みまたはアーカイブ済みのメールキャンペーンは編集できません",
-      },
-    })
-    .input(broadcastWriteSchema.extend({ id: z.string().min(1) }))
-    .output(z.object({ updated: z.literal(true) })),
-  startCampaign: oc
-    .route({ method: "POST", path: "/broadcasts/{id}/start", successStatus: 202 })
-    .errors({
-      ...base,
-      MARKETING_DISABLED: {
-        status: 503,
-        message: "Marketingメールは現在利用できません",
-      },
-      NOT_STARTABLE: { status: 409, message: "Broadcastは既に開始済みか存在しません" },
-    })
-    .input(idInput)
-    .output(z.object({ started: z.literal(true) })),
-  archiveCampaign: oc
-    .route({ method: "POST", path: "/broadcasts/{id}/archive" })
-    .errors({
-      ...base,
-      NOT_ARCHIVABLE: { status: 409, message: "送信中のメールキャンペーンはアーカイブできません" },
-    })
-    .input(idInput)
-    .output(z.object({ archived: z.literal(true) })),
-
   listTemplates: oc
-    .route({ method: "GET", path: "/email-templates" })
+    .route({ method: "GET", path: "/emails/templates" })
     .errors(workspaceErrors)
     .input(archivedInput)
     .output(z.array(emailTemplateSchema)),
   createTemplate: oc
-    .route({ method: "POST", path: "/email-templates", successStatus: 201 })
+    .route({ method: "POST", path: "/emails/templates", successStatus: 201 })
     .errors(base)
     .input(emailTemplateWriteSchema)
     .output(z.object({ id: z.string() })),
   updateTemplate: oc
-    .route({ method: "PATCH", path: "/email-templates/{id}" })
+    .route({ method: "PATCH", path: "/emails/templates/{id}" })
     .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })
     .input(emailTemplateWriteSchema.extend({ id: z.string().min(1) }))
     .output(z.object({ updated: z.literal(true) })),
   previewTemplate: oc
-    .route({ method: "POST", path: "/email-templates/preview" })
+    .route({ method: "POST", path: "/emails/templates/preview" })
     .errors(base)
     .input(emailTemplateWriteSchema.pick({ subject: true, content: true }))
     .output(emailTemplatePreviewSchema),
   publishTemplate: oc
-    .route({ method: "POST", path: "/email-templates/{id}/publish" })
+    .route({ method: "POST", path: "/emails/templates/{id}/publish" })
     .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })
     .input(idInput)
     .output(z.object({ published: z.literal(true) })),
   archiveTemplate: oc
-    .route({ method: "POST", path: "/email-templates/{id}/archive" })
+    .route({ method: "POST", path: "/emails/templates/{id}/archive" })
     .errors({ ...base, NOT_FOUND: { status: 404, message: "メールテンプレートが見つかりません" } })
     .input(idInput)
     .output(z.object({ archived: z.literal(true) })),
 
   listVariables: oc
-    .route({ method: "GET", path: "/message-variables" })
+    .route({ method: "GET", path: "/emails/variables" })
     .errors(workspaceErrors)
     .input(archivedInput)
     .output(z.array(messageVariableSchema)),
   createVariable: oc
-    .route({ method: "POST", path: "/message-variables", successStatus: 201 })
+    .route({ method: "POST", path: "/emails/variables", successStatus: 201 })
     .errors({ ...base, VARIABLE_CONFLICT: { status: 409, message: "同じキーが既に存在します" } })
     .input(messageVariableWriteSchema)
     .output(z.object({ id: z.string() })),
   updateVariable: oc
-    .route({ method: "PATCH", path: "/message-variables/{id}" })
+    .route({ method: "PATCH", path: "/emails/variables/{id}" })
     .errors({
       ...base,
       NOT_FOUND: { status: 404, message: "メッセージ変数が見つかりません" },
@@ -136,7 +72,7 @@ export const emailsContract = {
     .input(messageVariableWriteSchema.extend({ id: z.string().min(1) }))
     .output(z.object({ updated: z.literal(true) })),
   archiveVariable: oc
-    .route({ method: "POST", path: "/message-variables/{id}/archive" })
+    .route({ method: "POST", path: "/emails/variables/{id}/archive" })
     .errors({ ...base, NOT_FOUND: { status: 404, message: "メッセージ変数が見つかりません" } })
     .input(idInput)
     .output(z.object({ archived: z.literal(true) })),
@@ -145,11 +81,11 @@ export const emailsContract = {
   // canonical /segments and /subscription-topics resources when both are
   // exposed through the OpenAPI surface.
   listSegmentOptions: oc
-    .route({ method: "GET", path: "/email-options/segments" })
+    .route({ method: "GET", path: "/emails/options/segments" })
     .errors(workspaceErrors)
-    .output(z.array(broadcastSegmentOptionSchema)),
+    .output(z.array(emailSegmentOptionSchema)),
   listTopicOptions: oc
-    .route({ method: "GET", path: "/email-options/topics" })
+    .route({ method: "GET", path: "/emails/options/topics" })
     .errors(workspaceErrors)
     .output(z.array(subscriptionTopicOptionSchema)),
 };

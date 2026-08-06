@@ -28,14 +28,14 @@
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.32",
     "postal-mime": "^2.7.5",
-    "zod": "^4.4.3"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.8",
     "@cloudflare/workers-types": "^5.20260728.1",
     "@orpc/client": "1.14.13",
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
     "wrangler": "^4.114.0"
   }
 }

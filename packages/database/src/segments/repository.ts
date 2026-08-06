@@ -1,7 +1,10 @@
-import type { SegmentFilter, WorkspaceContext } from "@openengage/orpc";
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 
+import { segmentFilterSchema, type SegmentFilter } from "@openengage/core/segments";
+import type { WorkspaceContext } from "@openengage/core/shared";
+
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
+import { decodeNullableJson, encodeJson } from "../shared/json-codec";
 import { uuidv7 } from "../shared/uuid";
 import { segmentMemberships, segments } from "./schema";
 
@@ -11,7 +14,9 @@ export interface CompiledSegmentFilter {
   params: Array<string | number | null>;
 }
 
-export type SegmentRecord = typeof segments.$inferSelect;
+export type SegmentRecord = Omit<typeof segments.$inferSelect, "filterAst"> & {
+  filterAst: SegmentFilter | null;
+};
 
 export class SegmentRepository {
   private readonly database: OpenEngageDatabase;
@@ -24,12 +29,16 @@ export class SegmentRepository {
   }
 
   public async listSegments(): Promise<SegmentRecord[]> {
-    return await this.database.orm
+    const rows = await this.database.orm
       .select()
       .from(segments)
       .where(eq(segments.workspaceId, this.context.workspaceId))
       .orderBy(desc(segments.updatedAt))
       .limit(200);
+    return rows.map((row) => ({
+      ...row,
+      filterAst: decodeNullableJson(row.filterAst, segmentFilterSchema, "segments.filter_ast"),
+    }));
   }
 
   public async createSegment(input: {
@@ -46,7 +55,9 @@ export class SegmentRepository {
       name: input.name,
       slug: input.slug,
       kind: input.kind,
-      filterAst: input.filter ? JSON.stringify(input.filter) : null,
+      filterAst: input.filter
+        ? encodeJson(input.filter, segmentFilterSchema, "segments.filter_ast")
+        : null,
       createdAt: now,
       updatedAt: now,
     });
@@ -59,13 +70,18 @@ export class SegmentRepository {
    */
   public async findSegmentDefinition(
     id: string,
-  ): Promise<{ kind: string; filterAst: string | null } | null> {
+  ): Promise<{ kind: string; filterAst: SegmentFilter | null } | null> {
     const [row] = await this.database.orm
       .select({ kind: segments.kind, filterAst: segments.filterAst })
       .from(segments)
       .where(and(eq(segments.workspaceId, this.context.workspaceId), eq(segments.id, id)))
       .limit(1);
-    return row ?? null;
+    return row
+      ? {
+          ...row,
+          filterAst: decodeNullableJson(row.filterAst, segmentFilterSchema, "segments.filter_ast"),
+        }
+      : null;
   }
 
   /** Recomputes the denormalized `member_count` of one segment. */

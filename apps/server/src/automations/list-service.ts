@@ -1,5 +1,5 @@
+import type { AutomationRow } from "@openengage/core/automations";
 import { AutomationRepository, type OpenEngageDatabase } from "@openengage/database";
-import type { AutomationRow } from "@openengage/orpc";
 
 export async function listAutomations(
   database: OpenEngageDatabase,

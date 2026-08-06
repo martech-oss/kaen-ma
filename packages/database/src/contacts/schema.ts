@@ -10,7 +10,6 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { organization } from "../auth/schema";
-import { automationEnrollments } from "../automations/schema";
 
 export const companies = sqliteTable(
   "companies",
@@ -168,33 +167,6 @@ export const contactTags = sqliteTable(
       columns: [table.workspaceId, table.contactId, table.tagId],
       name: "contact_tags_workspace_id_contact_id_tag_id_pk",
     }),
-  ],
-);
-
-export const scoreEvents = sqliteTable(
-  "score_events",
-  {
-    id: text().primaryKey().notNull(),
-    workspaceId: text("workspace_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
-    contactId: text("contact_id")
-      .notNull()
-      .references(() => contacts.id, { onDelete: "cascade" }),
-    delta: integer().notNull(),
-    reason: text().notNull(),
-    automationEnrollmentId: text("automation_enrollment_id").references(
-      () => automationEnrollments.id,
-      { onDelete: "set null" },
-    ),
-    createdAt: text("created_at").notNull(),
-  },
-  (table) => [
-    index("score_events_workspace_contact_idx").on(
-      table.workspaceId,
-      table.contactId,
-      table.createdAt,
-    ),
   ],
 );
 

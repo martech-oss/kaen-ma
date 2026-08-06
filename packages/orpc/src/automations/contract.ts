@@ -1,34 +1,18 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
+import {
+  automationDefinitionSchema,
+  automationDraftSchema,
+  automationRowSchema,
+} from "@openengage/core/automations";
+
 import { workspaceErrors } from "../shared/errors";
-import { automationDefinitionSchema } from "./schema";
 
 const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
 } as const;
 const base = { ...workspaceErrors, ...forbidden } as const;
-
-export const automationStatusSchema = z.enum(["draft", "active", "paused", "archived"]);
-
-export const automationRowSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  description: z.string(),
-  status: automationStatusSchema,
-  triggerSource: z.string().nullable(),
-  enrollmentCount: z.number().int().nonnegative(),
-  activeCount: z.number().int().nonnegative(),
-  completedCount: z.number().int().nonnegative(),
-  updatedAt: z.string(),
-});
-export type AutomationRow = z.infer<typeof automationRowSchema>;
-
-export const automationDraftSchema = z.object({
-  graph: automationDefinitionSchema,
-  status: automationStatusSchema,
-});
-export type AutomationDraft = z.infer<typeof automationDraftSchema>;
 
 export const automationsContract = {
   list: oc

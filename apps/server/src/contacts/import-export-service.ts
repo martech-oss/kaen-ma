@@ -1,5 +1,5 @@
+import type { ContactDataJob } from "@openengage/core/contacts";
 import { DataJobRepository, uuidv7, type OpenEngageDatabase } from "@openengage/database";
-import type { DataJob } from "@openengage/orpc";
 import type { WorkspaceContext } from "@openengage/orpc";
 
 import { parseCsv } from "./csv";
@@ -94,10 +94,10 @@ export async function getDataJob(
   database: OpenEngageDatabase,
   workspaceId: string,
   jobId: string,
-): Promise<DataJob | null> {
+): Promise<ContactDataJob | null> {
   const row = await new DataJobRepository(database, { workspaceId }).getDataJob(jobId);
   if (!row) return null;
-  return { ...row, kind: row.kind as DataJob["kind"] };
+  return { ...row, kind: row.kind as ContactDataJob["kind"] };
 }
 
 export type ExportDownloadOutcome =

@@ -131,3 +131,20 @@ export const updateTrackingProcedure = authed.website.updateTracking.handler(
     return { saved: true as const };
   },
 );
+
+export const websiteProcedures = {
+  listForms: listFormsProcedure,
+  createForm: createFormProcedure,
+  updateForm: updateFormProcedure,
+  archiveForm: archiveFormProcedure,
+  listPages: listPagesProcedure,
+  createPage: createPageProcedure,
+  updatePage: updatePageProcedure,
+  archivePage: archivePageProcedure,
+  listMessages: listMessagesProcedure,
+  createMessage: createMessageProcedure,
+  updateMessage: updateMessageProcedure,
+  archiveMessage: archiveMessageProcedure,
+  getTracking: getTrackingProcedure,
+  updateTracking: updateTrackingProcedure,
+};

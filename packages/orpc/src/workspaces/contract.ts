@@ -1,8 +1,10 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
+import { workspaceRoleSchema } from "@openengage/core/shared";
+import { workspaceSchema } from "@openengage/core/workspaces";
+
 import { authedErrors, workspaceErrors } from "../shared/errors";
-import { workspaceSchema } from "./schema";
 
 export const webhookEndpointRowSchema = z.object({
   id: z.string(),
@@ -20,12 +22,26 @@ export const workspaceContract = {
     .route({ method: "GET", path: "/workspace" })
     .errors(workspaceErrors)
     .output(workspaceSchema),
+  createApiKey: oc
+    .route({ method: "POST", path: "/workspace/api-keys", successStatus: 201 })
+    .errors({
+      ...workspaceErrors,
+      FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
+    })
+    .input(
+      z.object({
+        name: z.string().trim().min(1).max(191),
+        role: workspaceRoleSchema.default("viewer"),
+        expiresAt: z.iso.datetime().optional(),
+      }),
+    )
+    .output(z.object({ id: z.string(), token: z.string(), prefix: z.string() })),
   listWebhookEndpoints: oc
-    .route({ method: "GET", path: "/webhook-endpoints" })
+    .route({ method: "GET", path: "/workspace/webhooks" })
     .errors(authedErrors)
     .output(z.array(webhookEndpointRowSchema)),
   createWebhookEndpoint: oc
-    .route({ method: "POST", path: "/webhook-endpoints", successStatus: 201 })
+    .route({ method: "POST", path: "/workspace/webhooks", successStatus: 201 })
     .errors({
       ...authedErrors,
       UNSAFE_WEBHOOK_URL: {

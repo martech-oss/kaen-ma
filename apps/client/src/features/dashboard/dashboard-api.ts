@@ -1,7 +1,7 @@
 import { orpcQuery } from "@/lib/orpc";
 
 export function dashboardQueryOptions() {
-  return orpcQuery.operations.dashboard.queryOptions();
+  return orpcQuery.dashboard.get.queryOptions();
 }
 
 const DELIVERY_TREND_DAYS = 7;

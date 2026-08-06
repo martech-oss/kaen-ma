@@ -7,7 +7,6 @@ import {
   automationTriggers,
   automationVersions,
 } from "./automations/schema";
-import { broadcastRecipients, broadcasts } from "./broadcasts/schema";
 import {
   consentEvents,
   contactSubscriptions,
@@ -20,9 +19,9 @@ import {
   contactEvents,
   contactTags,
   contacts,
-  scoreEvents,
   tags,
 } from "./contacts/schema";
+import { scoreEvents } from "./contacts/score-schema";
 import { dealPipelines, dealStages, dealTasks, deals } from "./deals/schema";
 import { deliveries, deliveryEvents, emailTemplates, inboundEmails } from "./messaging/schema";
 import { auditLogs } from "./platform/schema";
@@ -71,7 +70,6 @@ export const contactsRelations = relations(contacts, ({ many }) => ({
   subscriptions: many(contactSubscriptions),
   consentEvents: many(consentEvents),
   suppressions: many(suppressions),
-  broadcastRecipients: many(broadcastRecipients),
   inboundEmails: many(inboundEmails),
 }));
 
@@ -103,7 +101,6 @@ export const contactEventsRelations = relations(contactEvents, ({ one }) => ({
 
 export const segmentsRelations = relations(segments, ({ many }) => ({
   memberships: many(segmentMemberships),
-  broadcasts: many(broadcasts),
 }));
 
 export const segmentMembershipsRelations = relations(segmentMemberships, ({ one }) => ({
@@ -176,7 +173,6 @@ export const automationJobsRelations = relations(automationJobs, ({ one }) => ({
 export const subscriptionTopicsRelations = relations(subscriptionTopics, ({ many }) => ({
   subscriptions: many(contactSubscriptions),
   consentEvents: many(consentEvents),
-  broadcasts: many(broadcasts),
   deliveries: many(deliveries),
 }));
 
@@ -200,30 +196,7 @@ export const suppressionsRelations = relations(suppressions, ({ one }) => ({
   contact: one(contacts, { fields: [suppressions.contactId], references: [contacts.id] }),
 }));
 
-export const broadcastsRelations = relations(broadcasts, ({ one, many }) => ({
-  segment: one(segments, { fields: [broadcasts.segmentId], references: [segments.id] }),
-  template: one(emailTemplates, {
-    fields: [broadcasts.templateId],
-    references: [emailTemplates.id],
-  }),
-  topic: one(subscriptionTopics, {
-    fields: [broadcasts.topicId],
-    references: [subscriptionTopics.id],
-  }),
-  recipients: many(broadcastRecipients),
-  deliveries: many(deliveries),
-}));
-
-export const broadcastRecipientsRelations = relations(broadcastRecipients, ({ one }) => ({
-  broadcast: one(broadcasts, {
-    fields: [broadcastRecipients.broadcastId],
-    references: [broadcasts.id],
-  }),
-  contact: one(contacts, { fields: [broadcastRecipients.contactId], references: [contacts.id] }),
-}));
-
 export const emailTemplatesRelations = relations(emailTemplates, ({ many }) => ({
-  broadcasts: many(broadcasts),
   deliveries: many(deliveries),
 }));
 
@@ -233,7 +206,6 @@ export const deliveriesRelations = relations(deliveries, ({ one, many }) => ({
     fields: [deliveries.enrollmentId],
     references: [automationEnrollments.id],
   }),
-  broadcast: one(broadcasts, { fields: [deliveries.broadcastId], references: [broadcasts.id] }),
   topic: one(subscriptionTopics, {
     fields: [deliveries.topicId],
     references: [subscriptionTopics.id],

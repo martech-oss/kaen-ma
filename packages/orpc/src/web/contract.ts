@@ -1,7 +1,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { workspaceErrors } from "../shared/errors";
 import {
   landingPageSchema,
   landingPageWriteSchema,
@@ -11,7 +10,9 @@ import {
   siteMessageWriteSchema,
   siteTrackingSchema,
   siteTrackingWriteSchema,
-} from "./schema";
+} from "@openengage/core/web";
+
+import { workspaceErrors } from "../shared/errors";
 
 const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
@@ -27,36 +28,36 @@ function notFound(message: string) {
 
 export const websiteContract = {
   listForms: oc
-    .route({ method: "GET", path: "/forms" })
+    .route({ method: "GET", path: "/website/forms" })
     .errors(workspaceErrors)
     .output(z.array(signupFormSchema)),
   createForm: oc
-    .route({ method: "POST", path: "/forms", successStatus: 201 })
+    .route({ method: "POST", path: "/website/forms", successStatus: 201 })
     .errors({ ...workspaceErrors, ...forbidden })
     .input(signupFormWriteSchema)
     .output(created),
   updateForm: oc
-    .route({ method: "PATCH", path: "/forms/{id}" })
+    .route({ method: "PATCH", path: "/website/forms/{id}" })
     .errors(notFound("フォームが見つかりません"))
     .input(signupFormWriteSchema.extend({ id: z.string().min(1) }))
     .output(created),
   archiveForm: oc
-    .route({ method: "POST", path: "/forms/{id}/archive" })
+    .route({ method: "POST", path: "/website/forms/{id}/archive" })
     .errors(notFound("フォームが見つかりません"))
     .input(idInput)
     .output(archived),
 
   listPages: oc
-    .route({ method: "GET", path: "/pages" })
+    .route({ method: "GET", path: "/website/pages" })
     .errors(workspaceErrors)
     .output(z.array(landingPageSchema)),
   createPage: oc
-    .route({ method: "POST", path: "/pages", successStatus: 201 })
+    .route({ method: "POST", path: "/website/pages", successStatus: 201 })
     .errors({ ...workspaceErrors, ...forbidden })
     .input(landingPageWriteSchema)
     .output(z.object({ id: z.string(), versionId: z.string() })),
   updatePage: oc
-    .route({ method: "PATCH", path: "/pages/{id}" })
+    .route({ method: "PATCH", path: "/website/pages/{id}" })
     .errors({
       ...notFound("ページが見つかりません"),
       PAGE_ARCHIVED: { status: 409, message: "アーカイブ済みページは編集できません" },
@@ -64,37 +65,37 @@ export const websiteContract = {
     .input(landingPageWriteSchema.extend({ id: z.string().min(1) }))
     .output(z.object({ id: z.string(), versionId: z.string() })),
   archivePage: oc
-    .route({ method: "POST", path: "/pages/{id}/archive" })
+    .route({ method: "POST", path: "/website/pages/{id}/archive" })
     .errors(notFound("ページが見つかりません"))
     .input(idInput)
     .output(archived),
 
   listMessages: oc
-    .route({ method: "GET", path: "/site-messages" })
+    .route({ method: "GET", path: "/website/messages" })
     .errors(workspaceErrors)
     .output(z.array(siteMessageSchema)),
   createMessage: oc
-    .route({ method: "POST", path: "/site-messages", successStatus: 201 })
+    .route({ method: "POST", path: "/website/messages", successStatus: 201 })
     .errors({ ...workspaceErrors, ...forbidden })
     .input(siteMessageWriteSchema)
     .output(created),
   updateMessage: oc
-    .route({ method: "PATCH", path: "/site-messages/{id}" })
+    .route({ method: "PATCH", path: "/website/messages/{id}" })
     .errors(notFound("サイトメッセージが見つかりません"))
     .input(siteMessageWriteSchema.extend({ id: z.string().min(1) }))
     .output(created),
   archiveMessage: oc
-    .route({ method: "POST", path: "/site-messages/{id}/archive" })
+    .route({ method: "POST", path: "/website/messages/{id}/archive" })
     .errors(notFound("サイトメッセージが見つかりません"))
     .input(idInput)
     .output(archived),
 
   getTracking: oc
-    .route({ method: "GET", path: "/site-tracking" })
+    .route({ method: "GET", path: "/website/tracking" })
     .errors(workspaceErrors)
     .output(siteTrackingSchema),
   updateTracking: oc
-    .route({ method: "PUT", path: "/site-tracking" })
+    .route({ method: "PUT", path: "/website/tracking" })
     .errors({
       ...workspaceErrors,
       ...forbidden,

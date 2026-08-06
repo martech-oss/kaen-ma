@@ -1,7 +1,8 @@
+import { desc, eq } from "drizzle-orm";
+
 import { assertSafeWebhookUrl } from "@openengage/channels";
 import { uuidv7, webhookEndpoints, type OpenEngageDatabase } from "@openengage/database";
 import type { WebhookEndpointRow } from "@openengage/orpc";
-import { desc, eq } from "drizzle-orm";
 
 import { encryptCredentials } from "../platform/crypto";
 import { randomString } from "../platform/crypto";

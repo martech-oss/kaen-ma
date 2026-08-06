@@ -1,4 +1,4 @@
-import type { MessagePurpose } from "@openengage/orpc";
+import type { MessagePurpose } from "./shared/schema.js";
 
 export interface ConsentSnapshot {
   contactStatus?: "active" | "archived" | "anonymous";

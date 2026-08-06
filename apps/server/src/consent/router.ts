@@ -13,3 +13,8 @@ export const createTopicProcedure = authed.consent.createTopic.handler(
     return { id: outcome.id };
   },
 );
+
+export const consentProcedures = {
+  listTopics: listTopicsProcedure,
+  createTopic: createTopicProcedure,
+};

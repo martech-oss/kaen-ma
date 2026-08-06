@@ -1,4 +1,4 @@
-import type { AutomationDefinition, AutomationEdge, AutomationNode } from "@openengage/orpc";
+import type { AutomationDefinition, AutomationEdge, AutomationNode } from "./automations/schema.js";
 
 export interface AutomationValidationIssue {
   code:

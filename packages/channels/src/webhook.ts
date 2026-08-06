@@ -1,4 +1,4 @@
-import type { DeliveryEvent } from "@openengage/orpc";
+import type { DeliveryEvent } from "@openengage/core/shared";
 
 import { PermanentChannelError, TransientChannelError } from "./errors";
 import { hmacHex, isStaleTimestamp, timingSafeEqual } from "./signatures";

@@ -190,7 +190,7 @@ describe("workspace API journey", () => {
 
   it("rejects webhook endpoints that could target local infrastructure", async () => {
     const api = await seedApiWorkspace();
-    const rejected = await api("/webhook-endpoints", {
+    const rejected = await api("/workspace/webhooks", {
       method: "POST",
       body: JSON.stringify({
         name: "Private target",
@@ -206,7 +206,7 @@ describe("workspace API journey", () => {
       message: expect.any(String),
     });
 
-    const created = await api("/webhook-endpoints", {
+    const created = await api("/workspace/webhooks", {
       method: "POST",
       body: JSON.stringify({
         name: "CRM sync",

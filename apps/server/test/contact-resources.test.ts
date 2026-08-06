@@ -1,6 +1,7 @@
-import type { WorkspaceRole } from "@openengage/orpc";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+
+import type { WorkspaceRole } from "@openengage/orpc";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -23,7 +24,7 @@ async function seedWorkspace(role: WorkspaceRole = "owner") {
 describe("contact resources over oRPC", () => {
   it("maps option rows to camelCase with counts", async () => {
     const client = await seedWorkspace();
-    const tag = await client.contactResources.createTag({ name: "VIP", color: "#0f766e" });
+    const tag = await client.contacts.createTag({ name: "VIP", color: "#0f766e" });
     const group = await client.segments.create({
       name: "Customers",
       slug: "customers",
@@ -34,10 +35,10 @@ describe("contact resources over oRPC", () => {
       stage: "customer",
       customFields: {},
     });
-    await client.contactResources.addTag({ contactId: contact.id, resourceId: tag.id });
-    await client.contactResources.addSegment({ contactId: contact.id, resourceId: group.id });
+    await client.contacts.assignTag({ contactId: contact.id, resourceId: tag.id });
+    await client.contacts.addToSegment({ contactId: contact.id, resourceId: group.id });
 
-    const options = await client.contactResources.options();
+    const options = await client.contacts.options();
     expect(options.tags).toEqual([
       { id: tag.id, name: "VIP", slug: tag.slug, color: "#0f766e", contactCount: 1 },
     ]);
@@ -65,13 +66,13 @@ describe("contact resources over oRPC", () => {
       title: "VP",
       isPrimary: true,
     });
-    await client.contactResources.adjustScore({
+    await client.contacts.adjustScore({
       contactId: contact.id,
       delta: 5,
       reason: "signup",
     });
 
-    const profile = await client.contactResources.profile({ contactId: contact.id });
+    const profile = await client.contacts.profile({ contactId: contact.id });
     expect(profile.companies).toEqual([
       { id: account.id, name: "Globex", domain: null, title: "VP", isPrimary: true },
     ]);
@@ -82,19 +83,19 @@ describe("contact resources over oRPC", () => {
 
   it("requires admin for a bulk archive but allows marketer to tag", async () => {
     const client = await seedWorkspace("marketer");
-    const tag = await client.contactResources.createTag({ name: "Bulk", color: "#64748b" });
+    const tag = await client.contacts.createTag({ name: "Bulk", color: "#64748b" });
     const contact = await client.contacts.create({ email: "b@example.com", customFields: {} });
 
     await expect(
-      client.contactResources.bulkAction({ contactIds: [contact.id], action: "archive" }),
+      client.contacts.bulkUpdate({ contactIds: [contact.id], action: "archive" }),
     ).rejects.toMatchObject({ code: "ARCHIVE_FORBIDDEN", status: 403 });
 
     await expect(
-      client.contactResources.bulkAction({ contactIds: [contact.id], action: "add_tag" }),
+      client.contacts.bulkUpdate({ contactIds: [contact.id], action: "add_tag" }),
     ).rejects.toMatchObject({ code: "RESOURCE_REQUIRED", status: 422 });
 
     await expect(
-      client.contactResources.bulkAction({
+      client.contacts.bulkUpdate({
         contactIds: [contact.id],
         action: "add_tag",
         resourceId: tag.id,
@@ -104,9 +105,9 @@ describe("contact resources over oRPC", () => {
 
   it("rejects a duplicate tag name", async () => {
     const client = await seedWorkspace();
-    await client.contactResources.createTag({ name: "Dup", color: "#64748b" });
+    await client.contacts.createTag({ name: "Dup", color: "#64748b" });
     await expect(
-      client.contactResources.createTag({ name: "Dup", color: "#64748b" }),
+      client.contacts.createTag({ name: "Dup", color: "#64748b" }),
     ).rejects.toMatchObject({ code: "TAG_CONFLICT", status: 409 });
   });
 });

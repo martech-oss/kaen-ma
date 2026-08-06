@@ -17,6 +17,7 @@ import {
 import { execa } from "execa";
 import pc from "picocolors";
 
+import { createCommandRunner } from "./command-runner";
 import {
   cloudflareResourceNames,
   initialWorkerDeployCommands,
@@ -24,26 +25,32 @@ import {
   rewriteWorkerConfigs,
 } from "./provisioning";
 
-const command = process.argv[2] ?? "create";
+const commandRunner = createCommandRunner(async (file, args, { cwd }) => {
+  const result = await execa(file, args, { cwd });
+  return { stdout: result.stdout };
+});
 
-intro(pc.bgMagenta(pc.white(" OpenEngage ")));
+export async function runCli(args = process.argv.slice(2)): Promise<void> {
+  const command = args[0] ?? "create";
+  intro(pc.bgMagenta(pc.white(" OpenEngage ")));
 
-try {
-  if (command === "doctor") await doctor();
-  else if (command === "update") await update();
-  else if (command === "backup") await backup();
-  else if (command === "domain" && process.argv[3] === "add") await addDomain();
-  else await create();
-} catch (error) {
-  cancel(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
+  try {
+    if (command === "doctor") await doctor();
+    else if (command === "update") await update();
+    else if (command === "backup") await backup();
+    else if (command === "domain" && args[1] === "add") await addDomain();
+    else await create(command === "create" ? undefined : command);
+  } catch (error) {
+    cancel(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 }
 
-async function create(): Promise<void> {
+async function create(directoryArgument?: string): Promise<void> {
   const directoryAnswer = await text({
     message: "Project directory",
     placeholder: "openengage",
-    defaultValue: process.argv[2] && process.argv[2] !== "create" ? process.argv[2] : "openengage",
+    defaultValue: directoryArgument ?? "openengage",
     validate: (value) => (!value.trim() ? "Directory is required" : undefined),
   });
   if (isCancel(directoryAnswer)) return abort();
@@ -424,12 +431,7 @@ async function putSecret(directory: string, name: string, value: string): Promis
 }
 
 async function runAllowExisting(file: string, args: string[], cwd: string): Promise<void> {
-  try {
-    await execa(file, args, { cwd });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message.toLowerCase() : String(error);
-    if (!detail.includes("already exists")) throw error;
-  }
+  await commandRunner.allowExisting(file, args, cwd);
 }
 
 async function commandCheck(
@@ -438,16 +440,7 @@ async function commandCheck(
   args: string[],
   cwd: string,
 ): Promise<{ name: string; ok: boolean; detail: string }> {
-  try {
-    await execa(file, args, { cwd });
-    return { name, ok: true, detail: "ok" };
-  } catch (error) {
-    return {
-      name,
-      ok: false,
-      detail: error instanceof Error ? (error.message.split("\n")[0] ?? "failed") : String(error),
-    };
-  }
+  return commandRunner.check(name, file, args, cwd);
 }
 
 async function commandOutputIncludesCheck(
@@ -457,18 +450,7 @@ async function commandOutputIncludesCheck(
   cwd: string,
   expected: string,
 ): Promise<{ name: string; ok: boolean; detail: string }> {
-  if (!expected) return { name, ok: false, detail: "resource is not configured" };
-  try {
-    const result = await execa(file, args, { cwd });
-    const ok = result.stdout.includes(expected);
-    return { name, ok, detail: ok ? expected : `${expected} was not found` };
-  } catch (error) {
-    return {
-      name,
-      ok: false,
-      detail: error instanceof Error ? (error.message.split("\n")[0] ?? "failed") : String(error),
-    };
-  }
+  return commandRunner.outputIncludes(name, file, args, cwd, expected);
 }
 
 async function emailEventSubscriptionCheck(

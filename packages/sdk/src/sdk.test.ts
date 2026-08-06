@@ -37,4 +37,24 @@ describe("createOpenEngageClient", () => {
       defined: true,
     });
   });
+
+  it("uses the v0.1 domain namespace and REST path", async () => {
+    let method = "";
+    let url = "";
+    const client = createOpenEngageClient({
+      baseUrl: "https://openengage.example",
+      apiKey: "openengage_abcdefghijkl_secret-secret-secret-secret",
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        method = request.method;
+        url = request.url;
+        return Response.json({ jobId: "job-id" }, { status: 202 });
+      },
+    });
+
+    await client.contacts.startExport();
+
+    expect(method).toBe("POST");
+    expect(url).toBe("https://openengage.example/api/v1/contacts/exports");
+  });
 });

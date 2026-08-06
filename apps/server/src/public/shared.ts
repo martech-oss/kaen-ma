@@ -1,5 +1,4 @@
-import { type OpenEngageDatabase, organization, siteTrackingSettings } from "@openengage/database";
-import { and, eq } from "drizzle-orm";
+import { type OpenEngageDatabase, PublicWebRepository } from "@openengage/database";
 
 import { sha256Hex } from "../platform/crypto";
 
@@ -7,21 +6,7 @@ export async function loadPublicTrackingWorkspace(
   database: OpenEngageDatabase,
   workspaceSlug: string,
 ): Promise<{ id: string; allowedDomains: string[] } | null> {
-  const [row] = await database.orm
-    .select({ id: organization.id, allowedDomains: siteTrackingSettings.allowedDomains })
-    .from(organization)
-    .innerJoin(siteTrackingSettings, eq(siteTrackingSettings.workspaceId, organization.id))
-    .where(and(eq(organization.slug, workspaceSlug), eq(siteTrackingSettings.enabled, true)))
-    .limit(1);
-  if (!row) return null;
-  try {
-    return {
-      id: row.id,
-      allowedDomains: JSON.parse(row.allowedDomains) as string[],
-    };
-  } catch {
-    return null;
-  }
+  return new PublicWebRepository(database).findTrackingWorkspace(workspaceSlug);
 }
 
 export async function verifyTurnstile(

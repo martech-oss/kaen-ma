@@ -1,7 +1,8 @@
-import { assets, createDatabase, uuidv7 } from "@openengage/database";
-import type { Asset } from "@openengage/orpc";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+
+import { assets, createDatabase, uuidv7 } from "@openengage/database";
+import type { Asset } from "@openengage/orpc";
 
 import { seedWorkspaceClient } from "./factory";
 
@@ -15,6 +16,10 @@ const APP_ORIGIN = new URL(env.APP_URL).origin;
 
 function call(path: string, init?: RequestInit): Promise<Response> {
   return exports.default.fetch(new Request(`http://localhost:8787${path}`, init));
+}
+
+async function decodeBody(response: Response): Promise<string> {
+  return new TextDecoder().decode(await response.arrayBuffer());
 }
 
 /** Streams bytes through the hand-written upload route the way the browser does. */
@@ -64,7 +69,7 @@ describe("Asset streaming and delivery routes", () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect(raw.status).toBe(200);
-    expect(await raw.text()).toBe(body);
+    expect(await decodeBody(raw)).toBe(body);
     expect(raw.headers.get("cache-control")).toBe("private, max-age=0, must-revalidate");
     expect(raw.headers.get("content-security-policy")).toContain("sandbox");
     expect(raw.headers.get("content-disposition")).toContain("inline");
@@ -99,7 +104,7 @@ describe("Asset streaming and delivery routes", () => {
     const raw = await call(`/api/assets/${created.id}/raw`, {
       headers: { authorization: `Bearer ${token}` },
     });
-    expect(await raw.text()).toBe("second");
+    expect(await decodeBody(raw)).toBe("second");
   });
 
   it("rejects malformed, oversized, executable and cross-site uploads", async () => {
@@ -173,7 +178,7 @@ describe("Asset streaming and delivery routes", () => {
 
     const hit = await call(`/a/${slug}/${asset.id}/public.pdf?v=${version}`);
     expect(hit.status).toBe(200);
-    expect(await hit.text()).toBe(body);
+    expect(await decodeBody(hit)).toBe(body);
     expect(hit.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(hit.headers.get("access-control-allow-origin")).toBe("*");
     expect(hit.headers.get("content-security-policy")).toContain("sandbox");
@@ -247,19 +252,19 @@ describe("Asset streaming and delivery routes", () => {
     const partial = await call(url, { headers: { range: "bytes=0-9" } });
     expect(partial.status).toBe(206);
     expect(partial.headers.get("content-range")).toBe(`bytes 0-9/${body.length}`);
-    expect(await partial.text()).toBe("0123456789");
+    expect(await decodeBody(partial)).toBe("0123456789");
 
     const full = await call(url);
     const etag = full.headers.get("etag") ?? "";
     expect(etag).not.toBe("");
     const conditional = await call(url, { headers: { "if-none-match": etag } });
     expect(conditional.status).toBe(304);
-    expect(await conditional.text()).toBe("");
+    expect(await decodeBody(conditional)).toBe("");
 
     const head = await call(url, { method: "HEAD" });
     expect(head.status).toBe(200);
     expect(head.headers.get("content-length")).toBe(String(body.length));
-    expect(await head.text()).toBe("");
+    expect(await decodeBody(head)).toBe("");
   });
 
   it("scopes the admin raw route to the caller's workspace", async () => {

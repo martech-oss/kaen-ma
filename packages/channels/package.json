@@ -11,11 +11,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@openengage/orpc": "workspace:*"
+    "@openengage/core": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260728.1",
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

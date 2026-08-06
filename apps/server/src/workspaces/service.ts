@@ -1,7 +1,8 @@
+import { eq } from "drizzle-orm";
+
 import { type OpenEngageDatabase, organization } from "@openengage/database";
 import type { Workspace } from "@openengage/orpc";
 import type { WorkspaceContext } from "@openengage/orpc";
-import { eq } from "drizzle-orm";
 
 export async function getWorkspace(
   database: OpenEngageDatabase,

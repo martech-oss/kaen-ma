@@ -1,20 +1,19 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { workspaceErrors } from "../shared/errors";
-import {
-  companyCreateSchema,
-  companyDetailSchema,
-  companySchema,
-  companySummarySchema,
-} from "./company-dto";
 import {
   companyAssignContactInputSchema,
+  companyCreateSchema,
+  companyDetailSchema,
   companyGetInputSchema,
   companyListInputSchema,
   companyRemoveContactInputSchema,
+  companySchema,
+  companySummarySchema,
   companyUpdateInputSchema,
-} from "./company-schema";
+} from "@openengage/core/contacts";
+
+import { workspaceErrors } from "../shared/errors";
 
 const forbidden = {
   FORBIDDEN: {

@@ -1,9 +1,10 @@
-import { contract } from "@openengage/orpc";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
 import { env, exports } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+
+import { contract } from "@openengage/orpc";
 
 import { seedWorkspace } from "./factory";
 
@@ -81,13 +82,13 @@ describe("oRPC API", () => {
       status: 409,
     });
 
-    await expect(client.operations.dashboard()).resolves.toMatchObject({
+    await expect(client.dashboard.get()).resolves.toMatchObject({
       contacts: { count: 1 },
     });
 
     const tagName = `oRPC tag ${workspaceId}`;
     await expect(
-      client.contactResources.createTag({ name: tagName, color: "#0f766e" }),
+      client.contacts.createTag({ name: tagName, color: "#0f766e" }),
     ).resolves.toMatchObject({ name: tagName, color: "#0f766e" });
 
     // Email Service is configured only through Worker bindings. Provider

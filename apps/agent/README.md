@@ -14,9 +14,30 @@ Then add a model provider API key to `.env` (any [provider Pi supports](https://
 
 ```sh
 pnpm exec flue run src/agents/hello.ts --message "Say hello!"
+pnpm exec flue run src/agents/hello.ts --message "Design an onboarding automation for trial users"
+pnpm exec flue run src/agents/hello.ts --message "Map the journey from signup to first value"
+pnpm exec flue run src/agents/hello.ts --message "Define a dynamic segment for active trial users"
+pnpm exec flue run src/agents/hello.ts --message "Compile that brief into an OpenEngage automation flow"
+pnpm exec flue run src/agents/hello.ts --message "Draft a three-email win-back sequence"
+pnpm exec flue run src/agents/hello.ts --message "Create a GA4 tracking plan for trial activation"
 ```
 
 Conversations are durable — pass `--id <id>` to continue one.
+
+## Skills
+
+The Hello agent mounts six progressively disclosed skills:
+
+- `marketing-automation` turns a broad acquisition or lifecycle goal into one operational brief with an audience, trigger, flow, owner, and measurement plan.
+- `customer-journey-map` maps stages, touchpoints, emotions, friction, critical moments, and prioritized improvements.
+- `segment-designer` turns targeting requirements into a static membership design or validated dynamic `SegmentFilter` JSON.
+- `automation-flow-designer` compiles a brief and segment into validated `AutomationDefinition` graph JSON with unresolved resource IDs called out.
+- `email-sequence` designs complete multi-email copy, cadence, branches, exits, measurement handoffs, and OpenEngage delivery-capability status.
+- `analytics-tracking` creates a GA4-first event, Key Event, attribution, implementation, and QA plan with an OpenEngage compatibility appendix.
+
+The two schema-validation tools use `@openengage/core` as the source of truth. They only validate and normalize supplied JSON: they do not query IDs, create segments or automations, publish flows, or make any API call.
+
+The agent has a lightweight in-memory sandbox for drafting Markdown. Workspace files are temporary and are not exposed as downloadable artifacts, so the agent always returns the complete result in the conversation. Network access is disabled; provide research, analytics, or source material in the conversation when it should inform an answer.
 
 ## Develop
 

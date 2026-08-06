@@ -16,11 +16,11 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  createContactTag,
   loadContactResources,
   type ContactResources,
 } from "@/features/contacts/contact-resource-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
-import { orpc } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
 
 function useContactResources(initialResources: ContactResources): {
@@ -172,7 +172,7 @@ function CreateTagForm({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     await run(async () => {
-      await orpc.contactResources.createTag({
+      await createContactTag({
         name: getFormString(form, "name"),
         color: getFormString(form, "color"),
       });

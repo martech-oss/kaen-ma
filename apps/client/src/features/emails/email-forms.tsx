@@ -1,4 +1,3 @@
-import type { ContentDocument } from "@openengage/orpc";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { toast } from "sonner";
@@ -13,6 +12,7 @@ import { type EmailTemplateRow, type MessageVariableRow } from "@/features/email
 import { useFormSubmission } from "@/hooks/use-form-submission";
 import { orpcQuery } from "@/lib/orpc";
 import { getFormString } from "@/lib/utils";
+import type { ContentDocument } from "@openengage/orpc";
 
 export function TemplateForm({
   open,

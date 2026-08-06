@@ -1,15 +1,17 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { authedErrors, workspaceErrors } from "../shared/errors";
-import { assetVisibilitySchema } from "../shared/schema";
-import { assetListResultSchema, assetSchema } from "./dto";
 import {
   ASSET_BUFFERED_MAX_BYTES,
   assetIdInputSchema,
   assetListInputSchema,
+  assetListResultSchema,
+  assetSchema,
   assetUpdateInputSchema,
-} from "./schema";
+} from "@openengage/core/assets";
+import { assetVisibilitySchema } from "@openengage/core/shared";
+
+import { authedErrors, workspaceErrors } from "../shared/errors";
 
 const notFound = {
   ASSET_NOT_FOUND: { status: 404, message: "アセットが見つかりません" },

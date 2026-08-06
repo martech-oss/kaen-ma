@@ -1,7 +1,8 @@
-import { contract } from "@openengage/orpc";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { OpenAPILink } from "@orpc/openapi-client/fetch";
+
+import { contract } from "@openengage/orpc";
 
 /**
  * The SDK is generated from the same oRPC contract that serves /api/rpc and
@@ -31,18 +32,18 @@ export { isDefinedError, ORPCError, safe } from "@orpc/client";
 
 // Contract value/type re-exports so SDK consumers need only this package.
 export { contract } from "@openengage/orpc";
+export type { AssetSummary } from "@openengage/core/assets";
+export type { AutomationRow } from "@openengage/core/automations";
 export type {
-  AssetSummary,
-  AutomationRow,
   ContactListInput,
   ContactListResult,
+  ContactDataJob,
   ContactSummary,
   ContactTimelineEvent,
-  DataJob,
-  Dashboard,
-  DeadLetterRow,
-  ProjectRow,
-  SegmentRow,
-  SubscriptionTopicRow,
-  WebhookEndpointRow,
-} from "@openengage/orpc";
+} from "@openengage/core/contacts";
+export type { Dashboard } from "@openengage/core/reports";
+export type { DeadLetterRow } from "@openengage/core/platform";
+export type { SegmentRow } from "@openengage/core/segments";
+export type { SubscriptionTopicRow } from "@openengage/core/consent";
+export type { WebhookEndpointRow } from "@openengage/orpc";
+export type { ProjectRow } from "@openengage/orpc";

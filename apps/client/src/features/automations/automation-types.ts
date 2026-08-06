@@ -1,4 +1,4 @@
-import type { AutomationDraft, AutomationRow } from "@openengage/orpc";
+import type { AutomationDraft, AutomationRow } from "@openengage/core/automations";
 
 export type { AutomationDraft, AutomationRow };
 

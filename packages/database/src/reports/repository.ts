@@ -2,7 +2,6 @@ import { sql, type SQL } from "drizzle-orm";
 
 import { user } from "../auth/schema";
 import { automationEnrollments, automations } from "../automations/schema";
-import { broadcasts } from "../broadcasts/schema";
 import { createDatabase, type DatabaseSource, type OpenEngageDatabase } from "../client";
 import { contactEvents, contacts, contactTags, tags } from "../contacts/schema";
 import { dealStages, dealTasks, deals } from "../deals/schema";
@@ -434,10 +433,9 @@ export class ReportsRepository {
       `,
       sql`
         SELECT
-          COALESCE(${broadcasts.id}, ${automations.id}, ${emailTemplates.id}, 'other') AS source_id,
-          COALESCE(${broadcasts.name}, ${automations.name}, ${emailTemplates.name}, 'その他のメール') AS source_name,
+          COALESCE(${automations.id}, ${emailTemplates.id}, 'other') AS source_id,
+          COALESCE(${automations.name}, ${emailTemplates.name}, 'その他のメール') AS source_name,
           CASE
-            WHEN ${broadcasts.id} IS NOT NULL THEN 'broadcast'
             WHEN ${automations.id} IS NOT NULL THEN 'automation'
             ELSE 'transactional'
           END AS source_type,
@@ -452,8 +450,6 @@ export class ReportsRepository {
         FROM ${deliveries}
         LEFT JOIN ${deliveryEvents}
           ON ${deliveryEvents.workspaceId} = ${deliveries.workspaceId} AND ${deliveryEvents.deliveryId} = ${deliveries.id}
-        LEFT JOIN ${broadcasts}
-          ON ${broadcasts.workspaceId} = ${deliveries.workspaceId} AND ${broadcasts.id} = ${deliveries.broadcastId}
         LEFT JOIN ${automationEnrollments}
           ON ${automationEnrollments.workspaceId} = ${deliveries.workspaceId} AND ${automationEnrollments.id} = ${deliveries.enrollmentId}
         LEFT JOIN ${automations}
@@ -550,7 +546,7 @@ export class ReportsRepository {
     };
   }
 
-  /** Feeds the `operations.dashboard` procedure - 4 independent queries run concurrently. */
+  /** Feeds the `dashboard.get` procedure - 4 independent queries run concurrently. */
   public async dashboardSummary(workspaceId: string): Promise<DashboardSummaryData> {
     const [contactRows, automationRows, deliveryRows, eventRows] = await this.runBatch(
       sql`

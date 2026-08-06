@@ -47,3 +47,10 @@ export const previewSegmentProcedure = authed.segments.preview.handler(
     return previewSegment(context.database, context.workspace, input.filter);
   },
 );
+
+export const segmentProcedures = {
+  list: listSegmentsProcedure,
+  create: createSegmentProcedure,
+  refresh: refreshSegmentProcedure,
+  preview: previewSegmentProcedure,
+};

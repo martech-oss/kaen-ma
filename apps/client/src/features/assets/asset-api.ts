@@ -1,13 +1,8 @@
-import {
-  type Asset,
-  type AssetKind,
-  type AssetListInput,
-  type AssetSummary,
-  type AssetVisibility,
-} from "@openengage/orpc";
 import { keepPreviousData } from "@tanstack/react-query";
 
-import { orpcQuery } from "@/lib/orpc";
+import { orpc, orpcQuery } from "@/lib/orpc";
+import { type Asset, type AssetListInput, type AssetSummary } from "@openengage/core/assets";
+import type { AssetKind, AssetVisibility } from "@openengage/core/shared";
 
 export type { Asset, AssetKind, AssetSummary, AssetVisibility };
 
@@ -82,6 +77,10 @@ export function assetsQueryOptions(search: AssetSearch, cursor?: string) {
 
 export function assetQueryOptions(id: string) {
   return orpcQuery.assets.get.queryOptions({ input: { id } });
+}
+
+export function loadAsset(id: string): Promise<Asset> {
+  return orpc.assets.get({ id });
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { AutomationNode } from "@openengage/orpc";
+import type { AutomationNode } from "./automations/schema.js";
 
 type DelayNode = Extract<AutomationNode, { type: "delay" }>;
 

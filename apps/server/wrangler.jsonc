@@ -33,12 +33,12 @@
   ],
   "queues": {
     "producers": [
-      { "binding": "CAMPAIGN_QUEUE", "queue": "openengage-campaign" },
+      { "binding": "JOBS_QUEUE", "queue": "openengage-jobs" },
       { "binding": "DELIVERY_QUEUE", "queue": "openengage-delivery" },
     ],
     "consumers": [
       {
-        "queue": "openengage-campaign",
+        "queue": "openengage-jobs",
         "max_batch_size": 50,
         "max_batch_timeout": 5,
         "max_retries": 5,

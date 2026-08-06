@@ -1,30 +1,17 @@
 export * from "./contract";
-export * from "./agents/schema";
 export * from "./shared/errors";
-export * from "./shared/schema";
 export * from "./assets/contract";
-export * from "./assets/schema";
-export * from "./assets/dto";
 export * from "./automations/contract";
-export * from "./automations/schema";
 export * from "./consent/contract";
 export * from "./contacts/contract";
-export * from "./contacts/schema";
-export * from "./contacts/contact-schema";
-export * from "./contacts/resource-schema";
 export * from "./contacts/resource-contract";
 export * from "./contacts/company-contract";
-export * from "./contacts/company-schema";
-export * from "./contacts/company-dto";
-export * from "./deals/schema";
-export * from "./messaging/schema";
 export * from "./operations/contract";
 export * from "./projects/contract";
-export * from "./reports/schema";
 export * from "./segments/contract";
-export * from "./segments/schema";
-export * from "./segments/fields";
-export * from "./web/schema";
-export * from "./web/content";
 export * from "./workspaces/contract";
-export * from "./workspaces/schema";
+
+// Compatibility surface while the application migrates to domain-specific
+// @openengage/core imports. API consumers should import domain types from the
+// SDK rather than this internal contract package.
+export * from "@openengage/core";

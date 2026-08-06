@@ -1,5 +1,4 @@
 export * from "./automations/repository";
-export * from "./broadcasts/repository";
 export * from "./consent/repository";
 export * from "./contacts/company-repository";
 export * from "./contacts/data-job-repository";
@@ -16,3 +15,5 @@ export * from "./segments/repository";
 export * from "./web/repository";
 export * from "./workspaces/repository";
 export * from "./shared/uuid";
+export * from "./shared/json-codec";
+export * from "./shared/database-utils";

@@ -5,12 +5,13 @@ import { type ReactNode, useState } from "react";
 import { ErrorAlert as ErrorNotice } from "@/components/app-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { assignCompanyContact, removeCompanyContact } from "@/features/companies/company-api";
 import { type CompanyOption, type SegmentOption } from "@/features/contacts/contact-api";
 import { useFormSubmission } from "@/hooks/use-form-submission";
-import { orpc, orpcQuery } from "@/lib/orpc";
+import { orpcQuery } from "@/lib/orpc";
+import type { ContactProfile } from "@openengage/core/contacts";
 
 import { ControlledSelect, Section } from "./contact-bits";
-import { type ContactProfile } from "./contact-drawer";
 
 export function RelationEditor({
   title,
@@ -109,8 +110,8 @@ export function CompanyEditor({
   async function addCompany() {
     if (!selectedId) return;
     await run(async () => {
-      await orpc.companies.assignContact({
-        id: selectedId,
+      await assignCompanyContact({
+        companyId: selectedId,
         contactId,
         isPrimary: companies.length === 0,
       });
@@ -122,7 +123,7 @@ export function CompanyEditor({
 
   async function removeCompany(companyId: string) {
     await run(async () => {
-      await orpc.companies.removeContact({ id: companyId, contactId });
+      await removeCompanyContact(companyId, contactId);
       await invalidateCompany(companyId);
       await onChanged();
     });

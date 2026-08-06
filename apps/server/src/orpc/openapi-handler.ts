@@ -1,4 +1,3 @@
-import { contract } from "@openengage/orpc";
 import { OpenAPIGenerator } from "@orpc/openapi";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { onError } from "@orpc/server";
@@ -7,6 +6,8 @@ import {
   ZodToJsonSchemaConverter,
 } from "@orpc/zod/zod4";
 import { createMiddleware } from "hono/factory";
+
+import { contract } from "@openengage/orpc";
 
 import type { AppEnvironment } from "../env";
 import { logError } from "../observability";

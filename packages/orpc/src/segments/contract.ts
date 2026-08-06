@@ -1,26 +1,14 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { contactSchema } from "../contacts/contact-schema";
+import { contactSchema } from "@openengage/core/contacts";
+import { segmentFilterSchema, segmentRowSchema } from "@openengage/core/segments";
+
 import { workspaceErrors } from "../shared/errors";
-import { segmentFilterSchema } from "./schema";
 
 const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
 } as const;
-
-export const segmentRowSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  slug: z.string(),
-  kind: z.enum(["static", "dynamic"]),
-  filterAst: segmentFilterSchema.nullable(),
-  memberCount: z.number().int().nonnegative(),
-  evaluatedAt: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type SegmentRow = z.infer<typeof segmentRowSchema>;
 
 export const segmentsContract = {
   list: oc

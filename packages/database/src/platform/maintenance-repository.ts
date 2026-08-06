@@ -1,7 +1,8 @@
 import { and, asc, eq, isNull, lt, ne, sql } from "drizzle-orm";
 
 import { createDatabase, type DatabaseSource } from "../client";
-import { contactEvents, contacts, scoreEvents } from "../contacts/schema";
+import { contactEvents, contacts } from "../contacts/schema";
+import { scoreEvents } from "../contacts/score-schema";
 import { deliveryEvents } from "../messaging/schema";
 import { dailyMetrics } from "../reports/schema";
 import { idempotencyKeys } from "./schema";

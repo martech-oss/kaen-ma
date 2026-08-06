@@ -3,7 +3,7 @@ import { check, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 
 /**
  * A CHECK constraint whose allowed values come from a shared array (usually
- * the same array backing a `@openengage/orpc` zod enum), so the DB constraint
+ * the same array backing a `@openengage/core` zod enum), so the DB constraint
  * and the API-layer validation can never drift out of sync.
  *
  * The values are embedded as SQL string literals via `sql.raw`, not bound

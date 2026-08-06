@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.1.9",
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

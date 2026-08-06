@@ -1,6 +1,6 @@
-import type { AutomationDefinition } from "@openengage/orpc";
 import { describe, expect, it } from "vitest";
 
+import type { AutomationDefinition } from "./automations/schema.js";
 import {
   canTransitionJob,
   compileSegmentFilter,

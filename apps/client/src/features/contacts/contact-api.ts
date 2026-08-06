@@ -1,13 +1,17 @@
-import type { ContactListInput } from "@openengage/orpc";
-import type {
-  CompanyOption,
-  ContactOptions,
-  SegmentOption,
-  Tag as TagOption,
-} from "@openengage/orpc";
 import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import { orpc, orpcQuery } from "@/lib/orpc";
+import type {
+  CompanyOption,
+  ContactBulkAction,
+  ContactListInput,
+  ContactOptions,
+  ContactProfile,
+  ContactScoreAdjust,
+  ContactUpdate,
+  SegmentOption,
+  Tag as TagOption,
+} from "@openengage/core/contacts";
 
 export type { CompanyOption, ContactOptions, SegmentOption, TagOption };
 
@@ -111,7 +115,66 @@ export function contactOptionsQueryOptions() {
 }
 
 export async function loadContactOptions(signal?: AbortSignal): Promise<ContactOptions> {
-  return orpc.contactResources.options(undefined, signal ? { signal } : undefined);
+  return orpc.contacts.options(undefined, signal ? { signal } : undefined);
+}
+
+export function loadContactProfile(contactId: string): Promise<ContactProfile> {
+  return orpc.contacts.profile({ contactId });
+}
+
+export function archiveContact(contactId: string) {
+  return orpc.contacts.archive({ id: contactId });
+}
+
+export function restoreContact(contactId: string) {
+  return orpc.contacts.restore({ id: contactId });
+}
+
+export function updateContact(contactId: string, input: ContactUpdate) {
+  return orpc.contacts.update({ id: contactId, ...input });
+}
+
+export function adjustContactScore(contactId: string, input: ContactScoreAdjust) {
+  return orpc.contacts.adjustScore({ contactId, ...input });
+}
+
+export function assignContactTag(contactId: string, resourceId: string) {
+  return orpc.contacts.assignTag({ contactId, resourceId });
+}
+
+export function removeContactTag(contactId: string, resourceId: string) {
+  return orpc.contacts.removeTag({ contactId, resourceId });
+}
+
+export function addContactToSegment(contactId: string, resourceId: string) {
+  return orpc.contacts.addToSegment({ contactId, resourceId });
+}
+
+export function removeContactFromSegment(contactId: string, resourceId: string) {
+  return orpc.contacts.removeFromSegment({ contactId, resourceId });
+}
+
+export function bulkUpdateContacts(input: ContactBulkAction) {
+  return orpc.contacts.bulkUpdate(input);
+}
+
+export async function assignInitialContactRelations(input: {
+  contactId: string;
+  tagId?: string;
+  segmentId?: string;
+  companyId?: string;
+}): Promise<void> {
+  await Promise.all([
+    input.tagId ? assignContactTag(input.contactId, input.tagId) : Promise.resolve(),
+    input.segmentId ? addContactToSegment(input.contactId, input.segmentId) : Promise.resolve(),
+    input.companyId
+      ? orpc.companies.assignContact({
+          id: input.companyId,
+          contactId: input.contactId,
+          isPrimary: true,
+        })
+      : Promise.resolve(),
+  ]);
 }
 
 function optionalNumber(value: string): number | undefined {

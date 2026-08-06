@@ -1,23 +1,20 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
+import {
+  contactCreateSchema,
+  contactListInputSchema,
+  contactListResultSchema,
+  contactSchema,
+  contactTimelineEventSchema,
+  contactUpdateSchema,
+} from "@openengage/core/contacts";
+
 import { workspaceErrors } from "../shared/errors";
-import { contactCreateSchema, contactSchema, contactUpdateSchema } from "./contact-schema";
-import { contactListInputSchema, contactListResultSchema } from "./schema";
 
 const contactNotFound = {
   CONTACT_NOT_FOUND: { status: 404, message: "連絡先が見つかりません" },
 } as const;
-
-export const contactTimelineEventSchema = z.object({
-  id: z.string(),
-  type: z.string(),
-  resourceType: z.string().nullable(),
-  resourceId: z.string().nullable(),
-  properties: z.record(z.string(), z.unknown()),
-  occurredAt: z.string(),
-});
-export type ContactTimelineEvent = z.infer<typeof contactTimelineEventSchema>;
 
 export const contactsContract = {
   list: oc
@@ -81,7 +78,7 @@ export const contactsContract = {
     .input(contactUpdateSchema.extend({ id: z.string().min(1) }))
     .output(contactSchema),
   archive: oc
-    .route({ method: "DELETE", path: "/contacts/{id}" })
+    .route({ method: "POST", path: "/contacts/{id}/archive" })
     .errors({
       ...workspaceErrors,
       FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },

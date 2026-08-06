@@ -1,9 +1,10 @@
+import type { SubscriptionTopicRow } from "@openengage/core/consent";
 import {
   ConsentRepository,
   type OpenEngageDatabase,
   type TopicCreateOutcome,
 } from "@openengage/database";
-import type { SubscriptionTopicRow, WorkspaceContext } from "@openengage/orpc";
+import type { WorkspaceContext } from "@openengage/orpc";
 
 export type { TopicCreateOutcome } from "@openengage/database";
 

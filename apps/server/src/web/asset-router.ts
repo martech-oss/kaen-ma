@@ -140,3 +140,14 @@ export const deleteAssetProcedure = authed.assets.delete.handler(
     return { deleted: true as const };
   },
 );
+
+export const assetProcedures = {
+  list: listAssetsProcedure,
+  get: getAssetProcedure,
+  upload: uploadAssetProcedure,
+  download: downloadAssetProcedure,
+  update: updateAssetProcedure,
+  archive: archiveAssetProcedure,
+  restore: restoreAssetProcedure,
+  delete: deleteAssetProcedure,
+};

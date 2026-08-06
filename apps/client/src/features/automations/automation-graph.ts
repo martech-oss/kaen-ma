@@ -1,9 +1,10 @@
+import { type Edge } from "@xyflow/react";
+
 import {
   type AutomationDefinition,
   type AutomationEdge,
   type AutomationNode,
 } from "@openengage/orpc";
-import { type Edge } from "@xyflow/react";
 
 import { type EmailTemplateOption } from "./automation-types";
 

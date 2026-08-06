@@ -1,9 +1,10 @@
-import { contactEvents, contacts, createDatabase } from "@openengage/database";
-import { contract } from "@openengage/orpc";
 import type { ContractRouterClient } from "@orpc/contract";
 import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+
+import { contactEvents, contacts, createDatabase } from "@openengage/database";
+import { contract } from "@openengage/orpc";
 
 import { enrollInactiveContacts } from "../src/automations/enrollment";
 import { seedWorkspaceClient } from "./factory";

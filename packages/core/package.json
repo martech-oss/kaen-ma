@@ -4,17 +4,30 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./agents": "./src/agents/schema.ts",
+    "./assets": "./src/assets/index.ts",
+    "./automations": "./src/automations/index.ts",
+    "./consent": "./src/consent/index.ts",
+    "./contacts": "./src/contacts/index.ts",
+    "./deals": "./src/deals/schema.ts",
+    "./messaging": "./src/messaging/schema.ts",
+    "./platform": "./src/platform/index.ts",
+    "./reports": "./src/reports/schema.ts",
+    "./segments": "./src/segments/index.ts",
+    "./shared": "./src/shared/schema.ts",
+    "./web": "./src/web/index.ts",
+    "./workspaces": "./src/workspaces/schema.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@openengage/orpc": "workspace:*"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "typescript": "^7.0.2",
-    "vitest": "^4.0.17"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

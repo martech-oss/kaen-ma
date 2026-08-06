@@ -1,7 +1,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
 
-import { workspaceErrors } from "../shared/errors";
 import {
   dealCreateSchema,
   dealDetailDataSchema,
@@ -12,7 +11,9 @@ import {
   dealTaskSchema,
   dealTaskUpdateSchema,
   dealUpdateSchema,
-} from "./schema";
+} from "@openengage/core/deals";
+
+import { workspaceErrors } from "../shared/errors";
 
 const forbidden = {
   FORBIDDEN: { status: 403, message: "この操作を行う権限がありません" },
@@ -33,7 +34,7 @@ const base = { ...workspaceErrors, ...forbidden } as const;
 
 export const dealsContract = {
   options: oc
-    .route({ method: "GET", path: "/deal-options" })
+    .route({ method: "GET", path: "/deals/options" })
     .errors(workspaceErrors)
     .output(dealOptionsSchema),
   list: oc

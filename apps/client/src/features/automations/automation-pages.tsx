@@ -1,25 +1,6 @@
-import {
-  type AutomationDefinition,
-  type AutomationEdge,
-  type AutomationNode,
-  type AutomationRow,
-} from "@openengage/orpc";
 import { useMutation, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  applyEdgeChanges,
-  applyNodeChanges,
-  Background,
-  type Connection,
-  Controls,
-  type Edge,
-  type EdgeChange,
-  MiniMap,
-  type Node,
-  type NodeChange,
-  Panel,
-  ReactFlow,
-} from "@xyflow/react";
+import { Background, Controls, MiniMap, Panel, ReactFlow } from "@xyflow/react";
 import {
   Clock3,
   GitBranch,
@@ -31,7 +12,7 @@ import {
   Save,
   Send,
 } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -61,19 +42,14 @@ import {
 import { formatDateTime } from "@/lib/format";
 import { orpcQuery } from "@/lib/orpc";
 import { cn } from "@/lib/utils";
+import type { AutomationRow } from "@openengage/core/automations";
 
-import { automationNodeTypes, nodeHandles, StepButton } from "./automation-flow-node";
-import {
-  connectionBranches,
-  isBranch,
-  toAutomationEdge,
-  withAutomationConnection,
-} from "./automation-graph";
-import { emailNode } from "./automation-graph";
-import { branchLabel, triggerLabel } from "./automation-labels";
+import { automationNodeTypes, StepButton } from "./automation-flow-node";
+import { triggerLabel } from "./automation-labels";
 import { NodeSettings } from "./automation-node-settings";
 import { createPresetAutomation, type PresetId, presets } from "./automation-presets";
 import { type AutomationDraft, type AutomationOptions } from "./automation-types";
+import { useAutomationBuilder } from "./use-automation-builder";
 
 export type {
   AutomationOptions,
@@ -285,180 +261,21 @@ export function AutomationBuilder({
   const saveDraft = useMutation(orpcQuery.automations.saveDraft.mutationOptions());
   const publishDraft = useMutation(orpcQuery.automations.publish.mutationOptions());
   const setAutomationStatus = useMutation(orpcQuery.automations.setStatus.mutationOptions());
-  const [definition, setDefinition] = useState<AutomationDefinition>(initialDraft.graph);
+  const builder = useAutomationBuilder(initialDraft.graph);
+  const { definition, selectedNode, flowNodes, flowEdges } = builder;
   const [status, setStatus] = useState(initialDraft.status);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
-    initialDraft.graph.nodes[0]?.id ?? null,
-  );
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
-  const selectedNode = definition.nodes.find((node) => node.id === selectedNodeId) ?? null;
-
-  const flowNodes: Node[] = useMemo(
-    () =>
-      definition.nodes.map((node) => ({
-        id: node.id,
-        position: node.position,
-        type: "automation",
-        initialWidth: 180,
-        initialHeight: node.type === "decision" || node.type === "condition" ? 82 : 70,
-        handles: nodeHandles(node),
-        selected: node.id === selectedNodeId,
-        data: { node },
-      })),
-    [definition.nodes, selectedNodeId],
-  );
-  const flowEdges: Edge[] = useMemo(
-    () =>
-      definition.edges.map((edge) => {
-        const label = branchLabel(edge.branch);
-        return {
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          ...(edge.branch === "next" ? {} : { sourceHandle: edge.branch }),
-          ...(label ? { label } : {}),
-          data: { branch: edge.branch },
-        };
-      }),
-    [definition.edges],
-  );
-
-  const onNodesChange = useCallback(
-    (changes: NodeChange[]) => {
-      const changed = applyNodeChanges(changes, flowNodes);
-      setDefinition((current) => ({
-        ...current,
-        nodes: current.nodes.map((node) => {
-          const flow = changed.find((item) => item.id === node.id);
-          return flow ? { ...node, position: flow.position } : node;
-        }),
-      }));
-    },
-    [flowNodes],
-  );
-  const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      const changed = applyEdgeChanges(changes, flowEdges);
-      setDefinition((current) => ({
-        ...current,
-        edges: changed.map(toAutomationEdge),
-      }));
-    },
-    [flowEdges],
-  );
-  const onConnect = useCallback(
-    (connection: Connection) => {
-      if (!connection.source || !connection.target) return;
-      const branch = isBranch(connection.sourceHandle) ? connection.sourceHandle : "next";
-      const next = withAutomationConnection(
-        definition,
-        connection.source,
-        connection.target,
-        branch,
-      );
-      if (!next) {
-        toast.error("循環する接続は作成できません");
-        return;
-      }
-      setDefinition(next);
-      toast.success("ノードを接続しました");
-    },
-    [definition],
-  );
-
-  function updateNode(nodeId: string, update: (node: AutomationNode) => AutomationNode): void {
-    setDefinition((current) => ({
-      ...current,
-      nodes: current.nodes.map((node) => (node.id === nodeId ? update(node) : node)),
-    }));
-  }
 
   function addNode(kind: "email" | "delay" | "decision" | "condition"): void {
-    const id = crypto.randomUUID();
-    const position = { x: 360, y: 120 + definition.nodes.length * 70 };
-    let node: AutomationNode;
-    if (kind === "email") {
-      const template = options.templates[0];
-      if (!template) {
-        toast.error("先にメールテンプレートを作成してください");
-        return;
-      }
-      node = emailNode(id, position, template);
-    } else if (kind === "delay") {
-      node = {
-        id,
-        type: "delay",
-        position,
-        config: { mode: "relative", minutes: 1_440 },
-      };
-    } else if (kind === "decision") {
-      node = {
-        id,
-        type: "decision",
-        position,
-        config: { event: "opened", withinMinutes: 1_440 },
-      };
-    } else {
-      node = {
-        id,
-        type: "condition",
-        position,
-        config: { field: "stage", operator: "eq", value: "customer" },
-      };
-    }
-    const freeBranch = selectedNode
-      ? connectionBranches(selectedNode).find(
-          ([branch]) =>
-            !definition.edges.some(
-              (edge) => edge.source === selectedNode.id && edge.branch === branch,
-            ),
-        )?.[0]
-      : undefined;
-    setDefinition({
-      ...definition,
-      nodes: [...definition.nodes, node],
-      edges:
-        selectedNode && freeBranch
-          ? [
-              ...definition.edges,
-              {
-                id: crypto.randomUUID(),
-                source: selectedNode.id,
-                target: node.id,
-                branch: freeBranch,
-              },
-            ]
-          : definition.edges,
-    });
-    setSelectedNodeId(id);
-    toast.success(freeBranch ? "ステップを追加して接続しました" : "ステップを追加しました");
-  }
-
-  function setConnection(
-    sourceId: string,
-    branch: AutomationEdge["branch"],
-    targetId: string,
-  ): void {
-    const next = withAutomationConnection(definition, sourceId, targetId || null, branch);
-    if (!next) {
-      toast.error("循環する接続は作成できません");
+    const result = builder.addNode(kind, options);
+    if (result === "template_missing") {
+      toast.error("先にメールテンプレートを作成してください");
       return;
     }
-    setDefinition(next);
-    toast.success(targetId ? "接続先を更新しました" : "接続を解除しました");
-  }
-
-  function deleteSelectedNode(): void {
-    if (!selectedNode || selectedNode.type === "source") return;
-    setDefinition((current) => ({
-      ...current,
-      nodes: current.nodes.filter((node) => node.id !== selectedNode.id),
-      edges: current.edges.filter(
-        (edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id,
-      ),
-    }));
-    setSelectedNodeId(null);
+    toast.success(
+      result === "connected" ? "ステップを追加して接続しました" : "ステップを追加しました",
+    );
   }
 
   async function save(publish = false): Promise<void> {
@@ -508,7 +325,7 @@ export function AutomationBuilder({
             className="h-auto border-0 px-0 text-xl font-semibold shadow-none focus-visible:ring-0"
             value={definition.name}
             onChange={(event) =>
-              setDefinition((current) => ({ ...current, name: event.target.value }))
+              builder.replaceDefinition({ ...definition, name: event.target.value })
             }
           />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -556,11 +373,14 @@ export function AutomationBuilder({
           nodes={flowNodes}
           edges={flowEdges}
           nodeTypes={automationNodeTypes}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-          onPaneClick={() => setSelectedNodeId(null)}
+          onNodesChange={builder.onNodesChange}
+          onEdgesChange={builder.onEdgesChange}
+          onConnect={(connection) => {
+            if (builder.connect(connection)) toast.success("ノードを接続しました");
+            else toast.error("循環する接続は作成できません");
+          }}
+          onNodeClick={(_, node) => builder.selectNode(node.id)}
+          onPaneClick={() => builder.selectNode(null)}
           fitView
           deleteKeyCode={null}
         >
@@ -580,10 +400,16 @@ export function AutomationBuilder({
             edges={definition.edges}
             options={options}
             onUpdate={(update) => {
-              if (selectedNode) updateNode(selectedNode.id, update);
+              if (selectedNode) builder.updateNode(selectedNode.id, update);
             }}
-            onConnectionChange={setConnection}
-            onDelete={deleteSelectedNode}
+            onConnectionChange={(sourceId, branch, targetId) => {
+              if (!builder.setConnection(sourceId, branch, targetId)) {
+                toast.error("循環する接続は作成できません");
+                return;
+              }
+              toast.success(targetId ? "接続先を更新しました" : "接続を解除しました");
+            }}
+            onDelete={builder.deleteSelectedNode}
           />
         </div>
       </div>
